@@ -1,3 +1,9 @@
+注意：本文档为 Android 端（xinliu_android/1memos）设计导出与参考资料。
+Windows 桌面端（xinliu_desktop）当前只面向 Windows，相关需求/范围/里程碑以根目录 `PLAN.md` 为唯一主规格。
+若本文档内容与 `PLAN.md` 发生差异，以 `PLAN.md` 为准（桌面端实现以 `PLAN.md` 为准）。
+本文档保留用于：理解 Android 端现状、不变量、迁移对照与术语来源。
+阅读时请将“Android 端现状/建议”与“桌面端主规格”区分开。
+
 # xinliu 桌面端（Electron）前置：Android 端现状设计文档（1memos）
 
 最后更新：2026-02-24

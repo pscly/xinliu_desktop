@@ -1,267 +1,787 @@
-功能相关: 需要有windows 的托盘常驻， (甚至需要支持 全局快捷键快速打开app(用户自己设置))，每次点击关闭，默认是退出到托盘，而非关闭软件，关闭软件需要是在托盘里面右键才是退出
+# Windows 桌面端主规格（PLAN.md）
 
+本文档是本仓库唯一“可直接指导实现”的 Windows 桌面端主规格。
 
-“做一个无边框的 Electron 应用，背景要用 CSS Backdrop Filter 做毛玻璃特效。布局采用三栏式，左侧导航栏要做成深色木纹质感。核心交互要支持拖拽 (Drag & Drop) 整理笔记。加一个全局快捷键呼出的极简输入框。整体 UI 风格复刻安卓端的国漫风，但要利用大屏幕做更复杂的多宝阁网格展示。”
+- MUST: 只承诺 Windows 10/11 桌面端。
+- MUST: 桌面端不是手机端放大版, 默认键鼠与宽屏工作流。
+- MUST: Triptych 三栏式是主交互, Folder/Collections 树是结构层权威入口。
+- MUST: 后端边界固定为混合模式: Flow 负责 Auth/Todo/Collections/Sync, Notes 直连 Memos。
 
-用户可以在设置中选择 数据存储目录，以及可以更改目录，更改后需要笔记软件自动迁移一遍数据然后提醒用户重启软件
+为了避免规格分裂, 本文档的口径优先级如下:
 
-开发完毕后，需要使用github 自动 cicd 发布exe，(以及软件后续可以自己自动检测更新，这个也需要实现)
+1) `apidocs/api.zh-CN.md` 与 `apidocs/collections.zh-CN.md` (接口字段与同步合同)
+2) 本文档 `PLAN.md` (桌面端主规格)
+3) `.sisyphus/drafts/plan-sections/*` (仅作为编排来源, 不再作为最终口径)
 
-# plan1
+## 0. 已确认决策与护栏（不变量）
 
----
+### 0.1 Windows-only 与窗口形态
 
-**建议使用 React 18 + TypeScript，而不是 Vue。**
+- MUST: Windows-only。
+- MUST: 主窗口默认无边框 frameless, 去掉原生标题栏。
+- MUST: 点击关闭按钮默认隐藏到托盘, 不退出进程。
+- MUST: 真正退出只能通过托盘右键菜单 `退出`。
 
-虽然 Vue 3 上手快、代码整洁，但在这个特定项目上，**React 有两个压倒性的生态优势**：
+### 0.2 系统能力与设置
 
-*. **Framer Motion (动画库)** ：国漫风需要大量的物理级回弹动画、复杂的“展开卷轴”、“水墨晕开”等编排动画。Framer Motion 是目前前端界最强、最易用的声明式动画库，Vue 生态里没有能与之完全匹敌的替代品。
-*. **dnd-kit (拖拽库)** ：你的核心玩法是“把笔记拖进多宝阁（锦盒）”，这涉及到跨列表、自由网格的复杂拖拽。@dnd-kit (React 独占) 提供了最完美的无头 (Headless) 拖拽架构，性能和定制化极高。
+- MUST: 托盘常驻, 托盘菜单覆盖关键路径。
+- MUST: 全局快捷键可配置, 且必须处理注册失败(返回 false)的可见退路。
+- MUST: 设置里可更改数据存储目录(Storage Root), 自动迁移数据, 迁移完成提示重启。
 
-基于 **Electron + React + TypeScript**，我为你准备了这份可以直接发给前端团队的\*\*《桌面端架构与开发方案》\*\*。
+### 0.3 发布与更新
 
----
+- MUST: GitHub Actions 发布 Windows installer/exe, 目标为 NSIS。
+- MUST: 应用内自动检测更新, 更新过程不阻断编辑。
 
-## Memos 国漫风桌面端 (Electron) 架构与开发方案
+### 0.4 混合后端边界(硬写死)
 
-## 1. 技术栈选型 (Tech Stack)
+- MUST: Flow 负责 Auth、Todo、Collections、Sync。
+- MUST: Notes 直连 Memos。
+- MUST: Flow 与 Memos 的 Base URL、同步状态、错误提示分离。
 
-- **脚手架工具**: electron-vite (目前最完美的 Electron + Vite 构建工具，开箱即用，内置双进程热更新)。
-- **前端框架**: React 18 + TypeScript。
-- **状态管理**: **Zustand**。轻量且强大，非常适合处理 Memos(内容) 和 Xinliuend(结构) 这种需要频繁派生和合并的数据源。不要用 Redux（太重）。
-- **路由**: React Router v6 或 TanStack Router。
-- **样式方案**: **Tailwind CSS** (用于快速布局) + **CSS Modules / SCSS** (用于编写复杂的传统水墨滤镜和特效)。
-- **动画核心**: **Framer Motion**。
-- **拖拽交互**:  **@dnd-kit/core** 与 @dnd-kit/sortable。
-- **本地数据库**: **better-sqlite3** (运行在 Electron 主进程中)。不要用浏览器的 IndexedDB，桌面端直接用 SQLite 性能最好，且能与 Android 端 Room 数据库的表结构保持高度一致。
+### 0.5 Flow 同步合同硬约束
 
----
+- MUST: `client_updated_at_ms` 对同一条记录单调递增。
+- MUST: tombstone 软删除使用 `deleted_at`。
+- MUST: 增量拉取使用 `sync/pull` cursor。
+- MUST: 变更上送使用 `sync/push`, 结果以 `applied`/`rejected` 为准。
+- MUST: 冲突证据来自 `server_snapshot` 或 `rejected[].server`。
+- MUST: Collections 同步资源名为 `collection_item`。
+- MUST: Collections pull changes key 为 `collection_items`。
 
-## 2. 核心架构设计 (Main vs. Renderer)
+### 0.6 Memos 标识符与编码
 
-Electron 分为主进程 (Main) 和渲染进程 (Renderer)。为了安全和性能，必须使用 ContextBridge 进行通信。
+- MUST: `memoName`/`name` 可能形如 `memos/123`(包含 `/`)。
+- MUST: 任意把 `memoName` 放进路由、URL path、文件名、KV key 的地方都必须遵循 encode/decode 规则, 禁止当路径片段。
 
-### A. 主进程 (Main Process - Node.js)
+### 0.7 自定义协议安全边界
 
-主进程是 App 的“大脑”，负责：
+- MUST: 自定义协议 `memo-res://` 只允许读取白名单目录。
+- MUST: 防穿越, 拒绝 symlink 与 Windows reparse point。
+- MUST: MIME 白名单, 高风险类型强制下载。
 
-*. **数据库读写 (SQLite)** ：直接连接本地 .db 文件。
-*. **网络请求 (Axios)** ：后台拉取 Memos 和 Xinliuend 的数据并存入 SQLite。(注意：由于桌面端没有跨域限制，网络请求其实也可以放渲染进程，但放在主进程更容易做后台静默同步)。
-*. **全局快捷键 (GlobalShortcut)** ：注册 Alt+Space，用于呼出“极速灵感”悬浮窗。
-*. **系统托盘 (Tray)** ：国漫风图标托盘。
+## 1.1 概述
 
-### B. 桥接层 (Preload.ts)
+### 1.1.1 背景与定位
 
-对外暴露安全的方法给 React 使用：
+本项目的桌面端是离线优先的个人知识与结构管理工具:
 
-### C. 渲染进程 (Renderer Process - React)
+- Notes(正文与附件)以 Memos 为内容权威源, 客户端直连。
+- 结构与任务(文件夹树/引用/待办)以 Flow Backend 为合同源, 客户端以本地 SQLite 为权威读写, 再通过同步协议最终一致。
 
-纯粹的 UI 层。通过调用 window.api.xxx 获取数据并渲染。
+### 1.1.2 目标(Goals)
 
----
+- MUST: 冷启动优先展示本地首屏, 不等待网络。
+- MUST: 断网可用: 新建/编辑/删除/拖拽整理均可先落本地, 联网后自动同步。
+- MUST: 桌面化能力完整: 托盘常驻、关闭到托盘、全局快捷键快捕、右键菜单、拖拽整理。
+- MUST: 冲突可见、可恢复、不可丢用户文本。
 
-## 3. UI 布局与界面设计 (The Triptych Layout)
+### 1.1.3 非目标(Non-Goals)
 
-放弃传统的单一窗口，采用  **“三栏式书案布局”** ，最大限度利用宽屏优势进行“收纳操作”。
+- MUST NOT: 承诺 macOS/Linux 兼容与打包。
+- MUST NOT: renderer 直接获得 Node、SQLite、任意文件路径读写权限。
+- MUST NOT: 把 Notes 全量迁移到 Flow 作为一期目标。
 
-### 第一栏：导航侧边栏 (The Sidebar - "笔架")
+### 1.1.4 平台与范围约束
 
-- **视觉**: 极窄 (约 64px) 或固定 200px。深色亚克力材质 (backdrop-filter: blur(10px))。
-- **功能**: 切换视图（时间线、多宝阁、设置）。
+- MUST: 本文档只描述 Windows 行为与验收。
+- SHOULD: UI 视觉可参考旧草案的“毛玻璃材质 + 国风质感”方向, 但不得以视觉为由破坏性能与安全约束。
 
-### 第二栏：待整理队列 (The Inbox - "案头卷轴")
+### 1.1.5 技术栈建议(迁入旧草案, 仅作为 SHOULD)
 
-- **视觉**: 宽约 350px，米色宣纸底色，边缘带有一点阴影。
-- **功能**: 这里永远显示 **Memos 的纯时间线**（或者是尚未放入任何盒子的笔记）。
-- **交互**: 这里的卡片可以被抓起（Drag）。
+- SHOULD: Electron + React + TypeScript。
+- SHOULD: 状态管理 Zustand。
+- SHOULD: 拖拽 dnd-kit。
+- SHOULD: 本地数据库 SQLite + better-sqlite3(主进程)。
+- SHOULD: 动画 Framer Motion(用于复杂编排, 不作为合同)。
 
-### 第三栏：多宝阁/工作区 (The Workspace - "多宝阁")
+## 1.2 信息架构与导航(IA/导航)
 
-- **视觉**: 占据剩余所有屏幕宽度。纯净留白。
-- **功能**:
+### 1.2.1 Triptych 三栏布局基线
 
-  - **视图 A (详情)** : 点击第二栏的笔记，这里显示 Markdown 渲染的详情。
-  - **视图 B (收纳)** : 这里显示**树形文件夹 (锦盒)** 。网格布局。
-- **终极交互 (核心玩法)** ：用户可以用鼠标从“第二栏 (Inbox)”抓起一条笔记，直接拖拽跨越到“第三栏 (Workspace)”，精准地扔进某个“锦盒”里。**这种双屏对照的拖拽整理，是桌面端效率碾压手机端的精髓。**
+Triptych 三栏在所有主视图中保持一致:
 
----
+- 左栏: Folder/Collections 树 + 全局入口(收件箱、回收站、Todo、设置、冲突、同步状态摘要)。
+- 中栏: 当前上下文列表(时间线/收件箱/搜索结果/某 Folder 下列表/回收站列表)。
+- 右栏: 详情/编辑/分享导出/冲突对比/工作区网格。
 
-## 4. 重点功能的前端实现方案
+降级规则:
 
-### 4.1 "锦盒"拖拽收纳 (Drag & Drop)
+- SHOULD: 窗口宽度不足时可降级为双栏(左栏抽屉 + 中右合并), 但不改变核心信息架构。
 
-- **工具**: 使用 @dnd-kit/core。
-- **实现逻辑**:
+### 1.2.2 Folder 树 IA(主前提)
 
-  *. 将第二栏的笔记设为 Draggable。
-  *. 将第三栏的“锦盒”设为 Droppable。
-  *. **动画**: 拖拽时，被拖拽的卡片缩小 20%，并带有一个**红色的拖影**（模拟墨迹）。
-  *. **事件**: onDragEnd 时，获取 active.id (笔记ID) 和 over.id (锦盒ID)，调用 window.api.moveItem()，然后触发 Zustand 状态更新，UI 瞬间将笔记从左侧列表移除。
+- MUST: Folder 树是结构层权威视图。
+- MUST: 节点是 `folder` 与 `note_ref` 混排模型, 支持无限层级。
+- SHOULD: Root 固定入口:
+  - `收件箱(Inbox)`
+  - `回收站`
 
-### 4.2 Framer Motion "开箱"动画
+### 1.2.3 导航模型(主视图集合)
 
-- 当双击一个“锦盒”进入下一级时，不要生硬地跳转路由。
-- **实现**:
+- MUST: 收件箱/时间线(Notes)
+- MUST: Folder/Collections(结构)
+- MUST: Todo
+- MUST: 设置
+- MUST: 冲突(聚合入口, 不要求全屏页)
 
-  视觉效果：点击盒子，盒子仿佛向镜头方向“放大”并溶解，下一级的内容像水墨一样从屏幕中央浮现。
+### 1.2.4 拖拽与多选约束(迁入旧草案, 强制)
 
-### 4.3 全局快捷键“灵感悬浮窗” (Quick Capture)
+- MUST: 禁止把父文件夹移动到其子孙节点下, 防止形成环。
+- SHOULD: 悬停展开(Hover to Open) 800ms 自动展开 Folder。
+- SHOULD: 边缘滚动(Edge scrolling) 允许拖入长列表与深层树。
 
-- **功能**: 无论在什么软件里工作，按 全局快捷键(用户可以自定义) 快速记笔记。
-- **Electron 实现**:
+### 1.2.5 关键用户旅程(UX Flows, Triptych 一等公民)
 
-  *. 主进程创建一个 transparent: true, frame: false, alwaysOnTop: true 的隐藏小窗口。
-  *. 监听 globalShortcut，按下按键时 window.show() 并在中央弹起。
-  *. 前端 React 渲染一个带有毛笔光标的极简输入框。按下 Enter 后，发送 IPC 消息给主进程保存，窗口再次 hide()。
+以下流程必须覆盖入口、操作、状态反馈、异常分支。
 
----
+1) 快速捕捉(快捕窗)
 
-## 5. 前端项目目录结构推荐
+- 入口: 全局快捷键(可配置) + 托盘菜单 `快速捕捉` + 应用内按钮(兜底)。
+- 操作: Enter 保存并隐藏回托盘, Esc 取消隐藏。
+- 反馈: `已保存到本地` 与 `同步中/失败` 的细粒度状态。
+- 异常: 快捷键注册失败必须在设置中可见并引导改键, 托盘入口仍可用。
 
+2) 全局搜索
 
-```text
-electron-app/
-├── main/                 # Node.js 主进程代码
-│   ├── database/         # SQLite 封装 (CRUD, 表结构)
-│   ├── ipc/              # 处理来自前端的调用 (IPC Handlers)
-│   └── index.ts          # 窗口创建、快捷键注册
-├── preload/              # 桥接脚本
-│   └── index.ts          # 暴露 window.api
-└── renderer/             # React 前端代码
-    ├── src/
-    │   ├── assets/       # 纹理图片 (宣纸、印章、毛笔 SVG)
-    │   ├── components/   # UI 组件库
-    │   │   ├── box/      # 锦盒相关组件 (Droppable)
-    │   │   ├── memo/     # 笔记卡片相关组件 (Draggable)
-    │   │   └── shared/   # 按钮、下拉框 (国风样式封装)
-    │   ├── store/        # Zustand 状态管理 (合流 Memos 和 Xinliu)
-    │   ├── hooks/        # 自定义 Hooks (如 useSync, useDragLogic)
-    │   ├── views/        # 页面视图 (TriptychLayout, ZenMode)
-    │   ├── App.tsx
-    │   └── main.tsx
-    ├── tailwind.config.js # 配置中国传统色和特殊阴影
-    └── vite.config.ts
+- 入口: 主窗口搜索框 + 全局快捷键(打开主窗并聚焦搜索框)。
+- 操作: 中栏展示结果, 右栏展示详情并支持 `定位到 Folder`。
+- 异常: 索引不可用需提示重建并降级, 不阻断使用。
+
+3) 拖拽整理
+
+- 源: 中栏列表项。
+- 目标: 左栏 Folder 树节点, 以及右栏工作区网格(如该视图存在)。
+- 必须: 禁止拖入子孙, hover 800ms 展开, edge scrolling。
+- 反馈: 乐观更新, 且可短时 `撤销`。
+
+4) 删除与恢复
+
+- 删除默认软删除, 进入回收站。
+- 回收站内允许恢复与彻底删除。
+- 彻底删除必须二次确认。
+
+5) 分享与导出
+
+- 右栏提供 `分享/导出` 面板。
+- 导出路径必须走系统保存对话框授权。
+- 失败必须提供复制文本兜底。
+
+6) 冲突处理
+
+- Flow: `rejected`/`server_snapshot` 可查看, 提供保守恢复与高级强制覆盖。
+- Memos: 生成冲突副本保留本地文本, 原记录回滚为服务端版本。
+
+## 1.3 窗口与系统集成(Windows)
+
+本章是 Windows-only 的可验收规格。所有系统能力必须由 main 进程裁决, renderer 只能通过 preload 暴露的用例级 API 触发。
+
+### 1.3.1 无边框窗口(frameless)与可拖拽区域
+
+- MUST: 主窗口 `frame: false`。
+- MUST: 明确划分 drag 与 no-drag 区域。
+- MUST: drag 区域内的按钮、输入框、可拖拽卡片必须 no-drag。
+
+### 1.3.2 托盘常驻与关闭语义
+
+- MUST: 托盘由 main 创建并持有强引用, 防止被 GC 回收。
+- MUST: Windows 托盘图标资源使用 `.ico`。
+- MUST: Win11 存在托盘溢出区, 不承诺图标永远可见, 关键能力必须有应用内入口兜底。
+- MUST: 点击关闭按钮默认隐藏到托盘。
+- MUST: 唯一退出路径为托盘菜单 `退出`。
+- MUST: 首次点击关闭必须提示一次说明, 设置里可改关闭行为。
+
+托盘菜单最小集合:
+
+- MUST: 显示主窗口/隐藏主窗口(动态切换)
+- MUST: 快速捕捉
+- MUST: 立即同步: 笔记(Memos)
+- MUST: 立即同步: 结构与待办(Flow)
+- MUST: 打开设置
+- MUST: 退出
+
+退出清理:
+
+- MUST: 退出时注销所有全局快捷键。
+- MUST: 退出时停止后台同步与定时器。
+- MUST: 退出时安全关闭 SQLite 连接与文件句柄。
+
+### 1.3.3 全局快捷键(GlobalShortcut)
+
+- MUST: 仅由 main 注册与管理。
+- MUST: 仅在 app ready 后注册。
+- MUST: 注册失败以返回值 false 判定, 必须在设置页显式提示并引导改键。
+- MUST: 设置页支持修改/禁用/恢复默认。
+- MUST: 应用退出(will-quit)必须注销所有全局快捷键。
+
+### 1.3.4 数据目录选择与迁移(Storage Root)
+
+- MUST: 设置页提供“数据存储目录”与“更改目录”。
+- MUST: 更改目录后自动迁移至少包含:
+  - SQLite DB
+  - SQLite WAL/SHM(如存在)
+  - attachments-cache
+  - logs
+- MUST: 迁移失败可回滚, 旧目录仍可用。
+- MUST: 迁移完成提示重启, 并提供立即重启入口。
+
+### 1.3.5 右键菜单
+
+- MUST: 自定义右键菜单至少覆盖:
+  - 中栏条目: 打开、移动到、删除、导出
+  - 左栏 Folder: 新建子项、重命名、移动、删除
+
+### 1.3.6 关键时序(mermaid)
+
+```mermaid
+sequenceDiagram
+  participant U as 用户
+  participant OS as Windows
+  participant M as Main(主进程)
+  participant W as 快捕窗(Quick Capture)
+  participant T as 托盘(Tray)
+
+  U->>OS: 按下全局快捷键
+  OS-->>M: globalShortcut 回调触发
+  M->>W: 显示/聚焦快捕窗
+  U->>W: 输入内容并保存
+  W-->>M: IPC: saveQuickCapture()
+  M->>W: hide()
+  M->>T: 回到托盘常驻状态
 ```
 
----
+## 1.4 后端与网络边界(混合后端)
 
-## 6. 给开发人员的“避坑指南”
+### 1.4.1 责任划分(必须写死)
 
-*. **无边框窗口的拖动**：
-   既然去掉了原生的标题栏，必须在你的顶部导航栏（或者空白处）添加 CSS：-webkit-app-region: drag;，否则用户无法拖动窗口。注意内部的按钮必须加上 -webkit-app-region: no-drag; 否则无法点击。
-*. **右键菜单 (Context Menu)** ：
-   桌面端必须要有右键菜单（比如右键笔记：染色、移动、删除）。不要用浏览器自带的右键菜单。在 React 中封装一个自定义的绝对定位弹窗，或者使用 Electron原生的 Menu.buildFromTemplate()。
-*. **大图与性能**：
-   瀑布流里如果有大量图片，Electron 渲染器也会卡顿。务必在 React 中实现**图片懒加载 (Lazy Loading)**  和**虚拟列表 (Virtualization，如 @tanstack/react-virtual)** ，尤其是处理成百上千条 Memos 时。
-*. **离线支持**：
-   由于我们使用了主进程的 SQLite，无论断网与否，读取的都是本地 DB。写入操作先写本地 DB，再通过队列向 Memos 和 Xinliuend 发送请求。做到真正的“离线秒开”。
+| 领域 | 权威源 | 客户端链路 | 备注 |
+|---|---|---|---|
+| Auth | Flow Backend | Flow | 登录返回 token + server_url(默认 Memos Base) |
+| Todo | Flow Backend | Flow | 在线接口 + sync/pull, sync/push 离线一致 |
+| Collections | Flow Backend | Flow | sync 资源为 collection_item |
+| Sync | Flow Backend | Flow | applied/rejected 与 cursor 合同 |
+| Notes | Memos | 直连 Memos | memoName/name 可能为 memos/123 |
 
-# plan1 补充1
+### 1.4.2 Base URL 与标准化
 
-### 缺陷与重构 1：前端状态与 SQLite 的通讯瓶颈 (IPC 灾难)
+- Flow Base URL 默认 `https://xl.pscly.cc`。
+- MUST: Flow 与 Memos Base URL 都要标准化: 去尾部 `/` 并确保 scheme。
+- SHOULD: Memos Base URL 默认来自登录返回 `server_url`, 允许用户覆盖。
 
- **🤔 原方案缺陷：** 
-如果 React (渲染进程) 每次渲染列表都要通过 ipcRenderer.invoke 去问主进程的 SQLite 要数据，当你有几千条笔记时，这种跨进程通信 (IPC) 会导致极其严重的**卡顿和拖拽掉帧**。
+### 1.4.3 鉴权与请求头
 
- **💡 完善设计：CQRS (命令查询职责分离) + 乐观更新**
-不要让前端傻等后端！必须采用\*\*“乐观更新 (Optimistic UI)”\*\*策略。
+- MUST: Flow 调用使用 `Authorization: Bearer <token>`。
+- MUST: Memos 调用同样使用 `Authorization: Bearer <token>`。
+- MUST: token 不写入日志, 不在 UI 明文展示。
+- SHOULD: 每个请求携带 `X-Request-Id`。
+- SHOULD: Flow 请求携带设备头用于排障与设备识别:
+  - `X-Flow-Device-Id: <stable-device-id>`
+  - `X-Flow-Device-Name: <human-readable-device-name>`
+- MUST: token 持久化使用 Windows Credential Vault 或 DPAPI 等安全存储, 不落明文文件/SQLite。
 
-- **读取 (Query)** ：应用启动时，主进程将第一屏需要的数据（树形结构 + 第一页 Memos）一次性发给 React 的 Zustand Store。前端所有的拖拽、筛选都在**内存**中完成，极其丝滑。
-- **写入 (Command)** ：当用户把笔记 A 拖入锦盒 B 时：
+## 1.5 数据模型(本地 + 远端)
 
-  *. **前端**瞬间修改 Zustand 状态，UI 立刻呈现“已放入盒子”的效果（没有任何延迟）。
-  *. **前端**异步发送 ipcRenderer.send('move-item', payload) 给主进程。
-  *. **主进程**慢慢去写 SQLite，然后推入后台同步队列。
-  *. (异常处理) 如果主进程写入失败（极少发生），再通过 IPC 通知前端回滚 UI，并提示“归档失败”。
+### 1.5.1 本地持久化总览(SQLite)
 
----
+- MUST: 本地 SQLite 是离线权威源。
+- MUST: SQLite 连接只在 main 进程, renderer 禁直连。
+- MUST: 写入必须事务化: 业务表写入 + outbox_mutations(如需要) 同一事务提交。
 
-### 缺陷与重构 2：离线图片与资源的“真·桌面化”
+### 1.5.2 Storage Root 目录布局(必须可迁移)
 
- **🤔 原方案缺陷：** 
-网页版 Memos 每次刷新都会重新去服务器拉取图片（即使有浏览器缓存，体验也不够 Native）。作为桌面端，如果是离线状态，难道笔记里的图片就全裂开吗？
+所有路径保存为相对 `<root>` 的 relpath, 迁移仅切换根目录。
 
- **💡 完善设计：自定义协议 (Custom Protocol) + 本地存储**
-我们要让应用把图片真正“下载”到电脑硬盘里。
+- `<root>/db/` (SQLite 主库 + WAL/SHM)
+- `<root>/attachments/` (用户原件, 不参与缓存 GC)
+- `<root>/attachments-cache/` (缓存, 受配额与 LRU/GC)
+- `<root>/logs/` (脱敏日志)
+- `<root>/tmp/` (原子写临时目录)
+- `<root>/exports/` (导出文件)
 
-- **主进程拦截**：在 Electron 主进程注册一个自定义协议，比如 memo-res://。
-- **资源同步机制**：
-  *. 后台拉取 Memos 数据时，解析出图片 URL。
-  *. 主进程使用 Node.js 的 fs 模块，把图片静默下载到笔记的数据存储目录下 
-- **前端渲染**：
-  前端拿到的数据把真实的 URL 替换为 memo-res://\<资源ID\>.jpg。
-- **好处**：当你在高铁上（完全断网）打开电脑，所有笔记的图片瞬间加载，这才是真正的“离线第一 (Offline-First)”体验！
+### 1.5.3 核心表与关键字段(最小完整集)
 
----
+- MUST: `outbox_mutations` 作为离线写入队列, 字段至少包含:
+  - `resource`, `op`, `entity_id`, `client_updated_at_ms`, `status`, `attempt`, `next_retry_at_ms`
+- MUST: `sync_state` 持久化 Flow cursor。
+- SHOULD: `jobs` 持久化后台任务去重与恢复。
+- SHOULD: 搜索使用 FTS5, 避免 IPC 查询风暴。
+- MUST: Flow 侧至少落库并支持 tombstone `deleted_at`: `todo_lists`, `todo_items`, `todo_occurrences`, `collection_items`, `user_settings`, `notes`。
+- MUST: Memos 侧至少落库: `memos`(含 `server_memo_id` 与 `server_memo_name`), `memo_attachments`(含 `local_relpath` 与 `cache_relpath`)。
 
-### 缺陷与重构 3：“多宝阁”网格拖拽的逻辑死角
+### 1.5.4 Notes(Memos) 的标识符约束
 
- **🤔 原方案缺陷：** 
-只说了用 @dnd-kit，但真实场景下，拖拽的逻辑非常复杂。如果你把一个父文件夹拖进了它的子文件夹里怎么办？如果是多选拖拽怎么办？
+- MUST: Memo 的 `memoName`/`name` 可能为 `memos/123`。
+- MUST NOT: 把 `memoName` 当作文件名、路径片段、或路由的原始 segment。
 
- **💡 完善设计：深入拖拽交互细节 (Drag & Drop Deep Dive)**
+#### 1.5.4.1 encode/decode 规则(必须明确)
 
-前端开发人员需要处理以下边界条件和微交互：
+目标: `memoName` 在存储与导航中必须 round-trip。
 
-*. **无限嵌套防死循环**：在执行移动操作前，前端必须递归检查目标文件夹是否是当前被拖拽文件夹的“子孙节点”。如果是，光标变成 🚫，禁止放下。
-*. **悬停展开 (Hover to Open)** ：
+- MUST: 任何把 `memoName` 放进路由参数的地方必须 encode, 页面入口必须 decode。
+- MUST: 任何把 `memoName` 作为本地 key 的地方必须使用稳定编码, 禁止直接当文件名。
 
-- 痛点：我想把一楼的笔记，放到三楼的格子里。但我现在看不到三楼。
-- 细节：当你拖着笔记，悬停在某个闭合的“锦盒”上方超过 **800毫秒**，该锦盒自动“开箱”展开下一级。这就是高级桌面软件的标志性体验。
-  *. **拖拽克隆 (Drag Overlay)** ：
-- 拖拽时，原本的位置要保留一个半透明的“残影”（表示原来在哪）。
-- 鼠标指针下方要显示一个缩小版的“笔记卡片”或“玉牌”随鼠标移动。
-  *. **边缘滚动 (Edge Scrolling)** ：
-- 拖拽到屏幕边缘时，外层容器必须能自动滚动，否则无法把列表顶部的笔记拖到底部的盒子里。(@dnd-kit 支持配置这一特性，务必开启)。
+推荐口径(实现可等价, 但必须满足语义):
 
----
+- 路由与 URL 参数:
+  - encode: `encodeURIComponent(memoName)`
+  - decode: `decodeURIComponent(encoded)`
+- 本地 key(建议 base64url):
+  - encode: `base64url(utf8(memoName))`
+  - decode: `utf8(base64url_decode(key))`
 
-### 缺陷与重构 4：国漫风的 CSS 落地细节 (拒绝廉价感)
+### 1.5.5 Collections(结构层) 的同步资源名
 
- **🤔 原方案缺陷：** 
-“宣纸”、“墨迹”、“开箱”，这些词汇对设计师好懂，但前端工程师往往会用几个丑陋的 box-shadow 草草了事，导致做出来像个网页游戏。
+- MUST: 结构层实体为 `collection_item`。
+- MUST: pull changes key 为 `collection_items`。
+- MUST: `collection_item.item_type` 仅允许 `folder` 与 `note_ref`。
 
- **💡 完善设计：前端 CSS/动画技术规格**
+### 1.5.6 附件与离线资源(本地缓存合同)
 
-你需要要求前端使用以下具体的技术来实现国风特效：
+目标: renderer 永远不拿到真实磁盘路径, 附件离线可预览且可回收。
 
-*. **宣纸质感 (Paper Texture)** ：
+- MUST: 附件引用分三类, 互不混用:
+  - 本地原件: `local_relpath`(位于 `<root>/attachments/`, 不参与缓存 GC)
+  - 缓存文件: `cache_relpath`(位于 `<root>/attachments-cache/`, 受配额与 LRU/GC)
+  - 远端引用: 仅用于再下载, 禁止当文件名或路径片段
+- MUST: 自定义协议是唯一预览入口: `memo-res://<cacheKey>`。
+- MUST: `cacheKey` 是不透明标识, 禁止直接塞入任意 relpath。
+- MUST: `memo-res://` 协议层只做读取路由, 不允许协议层偷偷触发网络下载。
+- SHOULD: 缓存配额字段 `attachmentCacheMaxMb`, 超限按 LRU 驱逐, 不阻断编辑。
 
-- **不要**直接用一张大图片做背景（拉伸会糊，且占用内存）。
-- **要**使用 SVG Noise (噪点) + CSS 混合模式。
-- CSS 示例：
-  *. **水墨晕开动画 (Ink Ripple)** ：
-- 点击“记录”按钮时，抛弃 Material Design 的圆形波纹。
-- 使用 CSS Mask 或 Framer Motion 结合 SVG Path 动画，播放一个不规则的边缘扩散动画。
-  *. **字体加载优化 (Typography)** ：
-- 桌面端一大优势是可以内嵌字体。将“鸿雷板书”或“悠然小楷”转为 .woff2 格式放在本地。
-- 细节：只在标题、锦盒名称、印章处使用书法字体。正文**绝对不要**用书法字体（看久了眼睛会瞎），正文请使用系统默认的无衬线体（Windows 的微软雅黑/苹方），但把 line-height 设置为 1.8，增加字间距，营造“古籍排版”的呼吸感。
+## 1.6 同步与冲突(Sync + LWW)
 
----
+本章包含两条主干: Flow Sync 与 Memos Sync。两者的状态与错误不得混用。
 
-### 补充细节 5：离线与双后端的“同步冲突”终极解法
+### 1.6.1 Flow Sync: 模型与协议边界
 
-这是整个系统最容易崩溃的地方。手机端、桌面端、离线操作，数据怎么合并？
+#### 1.6.1.1 outbox 生成规则
 
-**核心策略：基于时间戳的版本控制 (Timestamp-based Sync)**
+- MUST: 任意改变本地可见状态的写操作, 必须同一事务写入业务表与 outbox。
+- MUST: delete 操作必须生成 `op="delete"` 的 outbox 条目, 不能因为本地已 tombstone 就跳过。
 
-在 Xinliuend (中转后端) 和两端的本地 SQLite 中，每条结构数据必须包含 updated\_at。
+#### 1.6.1.2 `client_updated_at_ms` 单调递增
 
-- **场景**：你在电脑上离线把笔记 A 放进了“做饭”盒子。在手机上把笔记 A 放进了“健身”盒子。
-- **同步机制**：
-  *. 两端联网时，拉取 Xinliuend 的最新数据。
-  *. 比对本地 SQLite 和云端的 updated\_at。
-  *. **最后写入者赢 (Last Write Wins)** 。如果是手机端后操作的，电脑端同步后，UI 会自动把笔记 A 从“做饭”跳到“健身”。
-    *. 然后被覆盖的直接加一个 _xxxx-xx-xx xx:xx:xx 被覆盖 /n 作为笔记开头备份, 方便用户后续自己判断是否删除之类
-- **删除引用 (软删除)** ：绝对不要使用 DELETE FROM。任何删除操作都是将字段标记为 is\_deleted \= true，并更新 updated\_at。这样同步时，其他端才知道这个东西被删了，而不是以为自己少拉了数据。
+- MUST: 对同一实体 id, 新写入取 `max(now_ms, last_ms + 1)`。
+- MUST: 自动写入(例如 backfill)也必须 bump。
 
----
+#### 1.6.1.3 sync/push
 
-### 总结：一份完整的架构验收清单
+- MUST: `sync/push` 的成功标准是逐条处理 `applied` 与 `rejected`, 不能以 HTTP 200 判断。
+- SHOULD: 推送批量大小建议 50 至 200, 默认 100。
+- MUST: 429 `rate_limited` 必须遵守 `Retry-After` 并暂停本轮剩余 push, 防止雪崩。
+- SHOULD: 网络错误与 5xx 采用指数退避 + 抖动, 且重试上限有限。
+- MUST: 401 `unauthorized` 视为不可自动恢复, 停止自动重试并引导重新登录。
+- MUST: `rejected` 分类:
+  - `reason="conflict"`: 保存 `rejected[].server`, 标记冲突待处理。
+  - 语义校验类: 标记不可自动重试, 暴露到 UI。
+  - 未知 reason: 保守可重试, 记录日志。
 
-当你把项目交给开发人员时，可以把这份清单作为**核心验收标准**：
-**进程隔离**：渲染进程中是否没有直接使用 Node 核心模块 (fs, sqlite3)？是否全通过 preload.ts 桥接？
-**秒开体验**：应用冷启动时，是否能在 500ms 内看到本地缓存的 UI，而不是白屏等待网络请求？
-**拖拽性能**：用鼠标快速拖拽笔记时，是否有掉帧？如果放入几千条笔记是否依然流畅（是否使用了虚拟列表 Virtual List）？
-**断网测试**：拔掉网线，能否正常新建文件夹？拖拽归档？插上网线后，后台是否自动静默推送到 Xinliuend？
-**视觉质感**：背景的宣纸质感是否随窗口缩放而平铺不拉伸？点击按钮的水墨特效是否自然？
+#### 1.6.1.4 sync/pull
+
+- MUST: `sync/pull` 使用 cursor 增量拉取。
+- MUST: apply changes 成功落库后才能推进 cursor 到 next_cursor。
+- MUST: 响应 `has_more=true` 时必须循环拉取并 apply, 直到 `has_more=false` 为止, 禁止只拉取一页就结束。
+- MUST: 循环拉取时 cursor 必须严格使用上一轮响应的 `next_cursor` 作为下一次请求参数; 任一轮 apply 落库失败必须停止并保持旧 cursor 不变。
+- MUST: `deleted_at != null` 的对象按 tombstone 应用。
+- MUST: 对未知 `changes` key 容错, 忽略并记录日志。
+
+#### 1.6.1.5 Collections 合同漂移容错原则
+
+已知漂移: 某些文档枚举未列出 `collection_item`, 但 Collections 合同明确支持。
+
+- MUST: 以 Collections 合同为准, push 允许 `resource="collection_item"`。
+- MUST: pull 显式处理 `changes.collection_items`。
+- SHOULD: 若后端出现别名 key(大小写或下划线差异), 客户端可做兼容映射, 但必须记录日志事件用于排障。
+
+### 1.6.2 Memos Sync: 状态机与冲突副本
+
+- MUST: 本地编辑优先, 回拉永远不覆盖本地未同步编辑。
+- MUST: 冲突时生成冲突副本保留本地文本, 原记录回滚为服务端版本。
+- MUST: memo 同步状态机至少包含:
+  - `LOCAL_ONLY`, `DIRTY`, `SYNCING`, `SYNCED`, `FAILED`
+- SHOULD: 附件同步顺序: 先上传附件拿到远端引用, 再绑定到 memo, 避免引用错乱。
+
+### 1.6.3 Backfill 联动(Collections 引用回填)
+
+当 memo 同步成功获得服务端标识后, 必须回填结构层引用:
+
+- 触发: memo 写回 `server_memo_id` 或 `server_memo_name`(例如 `memos/123`)。
+- 动作: 更新对应 `collection_item` 的 `ref_id`, 并 bump `client_updated_at_ms`。
+- MUST: 回填写入必须进入 Flow outbox, 以便后续 `sync/push`。
+
+### 1.6.4 Mermaid: 核心数据流(至少 3 段)
+
+```mermaid
+flowchart LR
+  UI[UI 写入本地表] --> TX[(同一事务\n业务表 + outbox_mutations)]
+  TX --> OB[outbox: flow/PENDING]
+  OB --> PUSH[POST /api/v1/sync/push\nmutations[]]
+  PUSH -->|applied[]| A[标记 APPLIED / 删除 outbox]
+  PUSH -->|rejected[]| R[标记 REJECTED_*\n保存 server 快照]
+  A --> PULL[GET /api/v1/sync/pull\ncursor -> next_cursor]
+  R --> PULL
+  PULL --> APPLY[apply changes\nupsert + tombstone]
+  APPLY --> UI2[UI 订阅本地 SQLite]
+```
+
+```mermaid
+flowchart TD
+  E[本地编辑 memo] --> S1[syncStatus=DIRTY]
+  S1 --> J[后台 Memos Sync Job]
+  J --> C{有 server_memo_id?}
+  C -- 否 --> CR[create memo]
+  C -- 是 --> UP[update memo]
+  CR --> AT[upload attachments]
+  UP --> AT
+  AT --> OK[成功: SYNCED\n写回 server_memo_id/server_memo_name]
+  AT --> FA[失败: FAILED\n记录 lastError + 退避重试]
+  OK --> PL[pull 轻量刷新/全量]
+  PL --> MG{本地是 DIRTY/SYNCING?}
+  MG -- 是 --> PR[保护本地不覆盖\n仅更新对照字段]
+  MG -- 否 --> RS[直接 upsert 服务端版本]
+  PR --> CF[检测冲突 -> 生成冲突副本]
+  CF --> UI[UI 展示冲突副本 + 原记录回滚为服务端]
+  RS --> UI
+```
+
+```mermaid
+sequenceDiagram
+  participant MS as Memos Sync
+  participant DB as SQLite
+  participant BF as Backfill Worker
+  participant OB as Flow Outbox
+  participant FS as Flow Sync
+
+  MS->>DB: 写回 memo.server_memo_id/server_memo_name (memos/123)
+  DB-->>BF: 发现 collection_items.ref_local_uuid == memo.local_uuid 且 ref_id 为空
+  BF->>DB: 更新 collection_items.ref_id + bump client_updated_at_ms
+  BF->>OB: 写入 outbox_mutations (resource=collection_item, op=upsert)
+  FS->>OB: 读取 PENDING
+  FS->>FS: POST /api/v1/sync/push
+```
+
+## 1.7 安全模型(Electron)
+
+### 1.7.1 Electron 安全基线
+
+- MUST: `contextIsolation: true`。
+- MUST: `nodeIntegration: false`。
+- MUST: `webSecurity: true`。
+- MUST: `allowRunningInsecureContent: false`。
+- MUST: renderer 不直接接触 SQLite/文件系统写入/系统凭据库。
+- MUST: preload 只暴露用例级 API, 禁止暴露通用 ipcRenderer。
+- MUST: 禁止任意导航, 对 `will-navigate` 默认 `preventDefault()`。
+- MUST: 拦截 `window.open`, 默认 deny, 仅允许受控外链打开策略。
+
+### 1.7.2 IPC 白名单与参数校验
+
+- MUST: IPC 命名空间静态可枚举, main 侧逐一 handle, 禁止通配。
+- MUST: 每个 IPC 参数校验与限流, 防 DoS。
+- MUST: 返回统一错误结构, 禁止把内部异常堆栈与绝对路径透传给 renderer。
+
+### 1.7.3 路径权限门
+
+- MUST: 导出路径只能来自系统保存对话框授权。
+- MUST: 导入路径只能来自系统打开对话框授权(或等价的二次确认)。
+- MUST NOT: renderer 通过 IPC 传入任意绝对路径让 main 读写。
+
+### 1.7.4 自定义协议 `memo-res://` 安全边界(强制)
+
+- MUST: 白名单目录仅 `<root>/attachments-cache/` 与 `<root>/attachments/`。
+- MUST: 防穿越: 拒绝任何分隔符与编码绕过。
+- MUST: 拒绝 symlink 与 Windows reparse point。
+- MUST: MIME 白名单。
+- MUST: 高风险可执行类型强制下载(`Content-Disposition: attachment`), 禁止内联预览。
+
+## 1.8 错误处理与可观测性
+
+### 1.8.1 错误分类(统一口径)
+
+- 网络/离线
+- 鉴权与权限(401/403)
+- 并发冲突(409 或 sync rejected conflict)
+- 限流(429 + Retry-After)
+- 超限(413 payload_too_large)
+- 上游错误(502 upstream_error)
+- 本地 I/O(磁盘满、DB 损坏、不可写)
+
+### 1.8.2 冲突证据必须可见
+
+- MUST: 在线 409 冲突读取并持久化 `server_snapshot`。
+- MUST: 同步冲突读取并持久化 `rejected[].server`。
+- MUST: UI 至少提供:
+  - 查看快照
+  - 应用服务端版本(保守模式默认)
+  - 保留本地副本
+  - 强制覆盖(高级, 二次确认)
+
+### 1.8.3 request id 与日志
+
+- MUST: 所有请求发送 `X-Request-Id`。
+- MUST: 诊断面板支持复制 request_id。
+- MUST: 日志存放在 `<root>/logs/`, 且脱敏, 禁止包含 token、Authorization、绝对路径。
+
+### 1.8.4 后端错误合同(ErrorResponse)最小形状
+
+- MUST: 非 2xx 优先解析 JSON 的 `error`, `message`, `request_id`, `details`。
+- MUST: 409 冲突时 `details.server_snapshot` 作为恢复证据。
+
+示例:
+
+```json
+{
+  "error": "conflict",
+  "message": "conflict",
+  "request_id": "...",
+  "details": {
+    "server_snapshot": {"id": "..."}
+  }
+}
+```
+
+### 1.8.5 413 payload_too_large 处理策略
+
+- MUST: 检测到 HTTP 413 或 ErrorResponse `error=="payload_too_large"` 时, 立即停止自动重试(不可盲重试), 并在 UI 明确提示“请求体过大/超出上限”。
+- MUST: 诊断面板与日志必须记录 `request_id` 与 `error` code(例如 `payload_too_large`), 但 MUST NOT 记录 token、Authorization、文件名、绝对路径。
+- MUST: 附件上传场景触发 413/payload_too_large 时, 必须提供用户可行动作:
+  - 压缩/降低分辨率后重试
+  - 改用外链(仅保存链接)
+  - 仅保存文本/去除附件后保存
+  - 打开设置/帮助查看当前附件或请求体上限(如后端提供)
+- SHOULD: Flow `sync/push` 场景触发 payload_too_large(请求体过大)时, 客户端允许自动降低 batch size、拆分 mutations 分批推送; 但 MUST: 不得丢失本地变更, 拆分仅改变传输批次不改变语义。
+
+## 1.9 性能预算
+
+### 1.9.1 首屏与列表
+
+- SHOULD: 冷启动到 Triptych 可交互 p95 <= 1200ms。
+- MUST: 大列表使用虚拟列表, 禁止一次性渲染全量。
+
+### 1.9.2 IPC 查询风暴防线(迁入旧草案, 强制)
+
+- MUST: 禁止 renderer 先拿 id 列表再逐条 IPC 拉详情。
+- MUST: 列表/搜索 IPC 必须一次返回一页窗口 + 必要字段。
+- SHOULD: 采用 CQRS 分离读写, 配合乐观更新提升拖拽与移动体验。
+
+### 1.9.3 拖拽性能约束
+
+- SHOULD: drag overlay 出现 p95 <= 16ms。
+- SHOULD: hover 800ms 展开后渲染 p95 <= 120ms。
+
+### 1.9.4 同步与附件的后台资源边界
+
+- SHOULD: 同步后台平均 CPU% <= 15%, 峰值 <= 35%(短时)。
+- SHOULD: 附件预览首帧(缓存命中) p95 <= 200ms。
+
+## 1.10 安装与更新
+
+### 1.10.1 发布形态
+
+- MUST: GitHub Actions 在 Windows runner 构建并发布。
+- MUST: 产物以 NSIS 安装包为主。
+- MUST: Windows 自动更新使用 NSIS 目标的更新链路, 不采用不受支持的更新目标。
+- MUST: Release 附带 SHA-256 校验文件。
+- MUST: 密钥与签名材料不入库, 仅通过 CI secrets 注入。
+- MUST: `appId` 必须稳定(用于 Windows 通知归属与更新提示一致性), 变更需要作为破坏性变更评审。
+
+### 1.10.2 应用内自动检测更新
+
+- MUST: 启动后进行一次轻量检查, 且设置页可手动检查。
+- MUST: 下载在后台进行, 不抢焦点、不阻断编辑。
+- MUST: 下载完成后由用户触发安装更新, 支持延后。
+- MUST: 校验失败或安装失败时保持当前版本可用, 并提供重试与打开 Releases 的退路。
+
+## 1.11 验收清单(可复制执行)
+
+以下清单用于对最终 `PLAN.md` 做自动化 PASS/FAIL 核对。注意: 本清单本身也必须满足“文档不可出现悬空占位词”的要求, 因此相关检测模式在脚本中运行时拼接生成。
+
+### 1.11.1 章节覆盖检查(结构完整性)
+
+PASS 判定: 下列关键词在 `PLAN.md` 中至少命中 1 行。
+
+```bash
+set -euo pipefail
+
+PLAN_FILE="PLAN.md"
+
+required_sections=(
+  "目标" "非目标"
+  "信息架构" "IA" "导航"
+  "窗口" "系统集成"
+  "数据模型" "SQLite"
+  "同步" "冲突"
+  "Electron" "安全"
+  "错误处理"
+  "性能预算"
+  "安装" "更新"
+  "验收" "清单"
+)
+
+missing=0
+for kw in "${required_sections[@]}"; do
+  if ! rg -n --fixed-strings "$kw" "$PLAN_FILE" >/dev/null; then
+    echo "[FAIL] 缺少章节/关键词: $kw"
+    missing=$((missing + 1))
+  else
+    echo "[PASS] $kw"
+  fi
+done
+
+test "$missing" -eq 0
+echo "[PASS] 章节覆盖检查: missing=$missing"
+```
+
+### 1.11.2 Flow 合同关键字检查
+
+PASS 判定: 关键字全部出现, 且在文档中被解释。
+
+必查关键字:
+
+- `client_updated_at_ms`
+- `deleted_at`
+- `sync/pull`
+- `sync/push`
+- `applied`
+- `rejected`
+- `server_snapshot`
+- `collection_item`
+
+```bash
+set -euo pipefail
+
+PLAN_FILE="PLAN.md"
+
+flow_contract_keywords=(
+  "client_updated_at_ms"
+  "deleted_at"
+  "sync/pull"
+  "sync/push"
+  "applied"
+  "rejected"
+  "server_snapshot"
+  "collection_item"
+)
+
+missing=0
+for kw in "${flow_contract_keywords[@]}"; do
+  hits=$(rg -n --fixed-strings "$kw" "$PLAN_FILE" | wc -l | tr -d ' ')
+  if [ "$hits" -lt 1 ]; then
+    echo "[FAIL] Flow 合同关键字缺失: $kw"
+    missing=$((missing + 1))
+  else
+    echo "[PASS] $kw (hits=$hits)"
+  fi
+done
+
+test "$missing" -eq 0
+echo "[PASS] Flow 合同关键字检查: missing=$missing"
+```
+
+### 1.11.3 Memos 关键字检查(Notes 直连 + ID 编码约束)
+
+PASS 判定: `memos/`、`memoName`、`encode`、`decode` 都可检索到。
+
+```bash
+set -euo pipefail
+
+PLAN_FILE="PLAN.md"
+
+memos_keywords=("memos/" "memoName")
+missing=0
+for kw in "${memos_keywords[@]}"; do
+  hits=$(rg -n --fixed-strings "$kw" "$PLAN_FILE" | wc -l | tr -d ' ')
+  if [ "$hits" -lt 1 ]; then
+    echo "[FAIL] Memos 关键字缺失: $kw"
+    missing=$((missing + 1))
+  else
+    echo "[PASS] $kw (hits=$hits)"
+  fi
+done
+
+enc_hits=$(rg -n "\\bencode\\b" "$PLAN_FILE" | wc -l | tr -d ' ')
+dec_hits=$(rg -n "\\bdecode\\b" "$PLAN_FILE" | wc -l | tr -d ' ')
+if [ "$enc_hits" -lt 1 ] || [ "$dec_hits" -lt 1 ]; then
+  echo "[FAIL] encode/decode 约束不完整: encode=$enc_hits decode=$dec_hits"
+  missing=$((missing + 1))
+else
+  echo "[PASS] encode/decode (encode=$enc_hits decode=$dec_hits)"
+fi
+
+test "$missing" -eq 0
+echo "[PASS] Memos 关键字检查: missing=$missing"
+```
+
+### 1.11.4 Mermaid 段落数量检查
+
+PASS 判定: `PLAN.md` 中 `mermaid` 代码块数量 >= 3。
+
+```bash
+set -euo pipefail
+
+PLAN_FILE="PLAN.md"
+
+mermaid_blocks=$(rg -n "^```mermaid$" "$PLAN_FILE" | wc -l | tr -d ' ')
+echo "mermaid_blocks=$mermaid_blocks"
+test "$mermaid_blocks" -ge 3
+echo "[PASS] Mermaid 段落数量检查(>=3)"
+```
+
+### 1.11.5 悬空占位词清零检查
+
+PASS 判定: `PLAN.md` 中不出现常见占位词(用于防止遗留悬空口径)。为避免验收文本自身触发命中, 该正则在运行时拼接生成。
+
+```bash
+set -euo pipefail
+
+PLAN_FILE="PLAN.md"
+
+pattern=$(printf "%s%s%s|%s%s|%s%s" "T" "B" "D" "待" "定" "未" "决")
+hits=$(rg -n "$pattern" "$PLAN_FILE" | wc -l | tr -d ' ')
+echo "placeholder_hits=$hits"
+test "$hits" -eq 0
+echo "[PASS] 占位词清零检查(0 行命中)"
+```
+
+### 1.11.6 一键总判定
+
+```bash
+set -euo pipefail
+
+PLAN_FILE="PLAN.md"
+fail=0
+
+required_sections=(
+  "目标" "非目标" "信息架构" "导航" "窗口" "系统集成" "数据模型" "SQLite"
+  "同步" "冲突" "Electron" "安全" "错误处理" "性能预算" "安装" "更新" "验收" "清单"
+)
+for kw in "${required_sections[@]}"; do
+  rg -n --fixed-strings "$kw" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+done
+
+flow_contract_keywords=(
+  "client_updated_at_ms" "deleted_at" "sync/pull" "sync/push"
+  "applied" "rejected" "server_snapshot" "collection_item"
+)
+for kw in "${flow_contract_keywords[@]}"; do
+  rg -n --fixed-strings "$kw" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+done
+
+rg -n --fixed-strings "memos/" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+rg -n --fixed-strings "memoName" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+rg -n "\\bencode\\b" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+rg -n "\\bdecode\\b" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+
+mermaid_blocks=$(rg -n "^```mermaid$" "$PLAN_FILE" | wc -l | tr -d ' ')
+test "$mermaid_blocks" -ge 3 || fail=$((fail + 1))
+
+pattern=$(printf "%s%s%s|%s%s|%s%s" "T" "B" "D" "待" "定" "未" "决")
+hits=$(rg -n "$pattern" "$PLAN_FILE" | wc -l | tr -d ' ')
+test "$hits" -eq 0 || fail=$((fail + 1))
+
+if [ "$fail" -eq 0 ]; then
+  echo "VERDICT: PASS"
+else
+  echo "VERDICT: FAIL (fail_checks=$fail)"
+  exit 1
+fi
+```
