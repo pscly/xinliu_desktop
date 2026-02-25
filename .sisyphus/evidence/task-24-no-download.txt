@@ -1,0 +1,26 @@
+Now using node v20.20.0 (npm v10.8.2)
+## rg -n "fetch\(|axios\(|ky\(" src/main -S
+src/main/net/httpClient.ts:232:        const res = await options.fetch(url.toString(), {
+
+## rg -n "memo-res" src/main -S
+src/main/protocol/memoResProtocol.ts:6:export const MEMO_RES_SCHEME = 'memo-res' as const;
+src/main/protocol/memoResProtocol.test.ts:13:  return fs.mkdtempSync(path.join(os.tmpdir(), 'xinliu-memo-res-'));
+src/main/protocol/memoResProtocol.test.ts:22:  it('成功：白名单目录文件可读取（memo-res://<cacheKey>）', async () => {
+src/main/protocol/memoResProtocol.test.ts:36:    const res = await handler('memo-res://att_abc');
+src/main/protocol/memoResProtocol.test.ts:45:  it('成功：支持 memo-res:///cacheKey（pathname 形态）', async () => {
+src/main/protocol/memoResProtocol.test.ts:58:    const res = await handler('memo-res:///att_abc');
+src/main/protocol/memoResProtocol.test.ts:73:      'memo-res://../x',
+src/main/protocol/memoResProtocol.test.ts:74:      'memo-res://a/b',
+src/main/protocol/memoResProtocol.test.ts:75:      'memo-res:///a/b',
+src/main/protocol/memoResProtocol.test.ts:76:      'memo-res://a%2Fb',
+src/main/protocol/memoResProtocol.test.ts:77:      'memo-res://a%b',
+src/main/protocol/memoResProtocol.test.ts:78:      'memo-res://a\\b',
+src/main/protocol/memoResProtocol.test.ts:99:    const res = await handler('memo-res://att_abc');
+src/main/protocol/memoResProtocol.test.ts:138:    const res = await handler('memo-res://att_abc');
+src/main/protocol/memoResProtocol.test.ts:172:    const png = await handler('memo-res://k_png');
+src/main/protocol/memoResProtocol.test.ts:177:    const exe = await handler('memo-res://k_exe');
+src/main/protocol/memoResProtocol.test.ts:181:    const bin = await handler('memo-res://k_bin');
+
+## rg -n "fetch\(|axios\(|ky\(" src/main/protocol -S
+
+（预期无输出：本任务的 memo-res 协议处理器位于 src/main/protocol/，不应包含任何网络请求；上方 src/main/net/httpClient.ts 的 fetch 属于通用 HTTP client，与 memo-res 协议无关。）

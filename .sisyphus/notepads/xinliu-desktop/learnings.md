@@ -158,3 +158,7 @@
 - 保存逻辑先抽注入点：将“持久化”封成 `saveQuickCapture(content)` 依赖注入，当前可以 no-op，后续再对接 Notes/SQLite，并把真实副作用集中到 main 侧实现。
 
 - [2026-02-26] Task 22（renderer 设置页 Storage Root）：进入设置页时在 `openSettingsRoute()` 内同时刷新 `shortcuts` 与 `storageRoot` 状态（`Promise.all`）；当 `window.xinliu?.storageRoot` 不存在时在 `settings-storage-root` 区块内用 calloutWarn 给出可解释提示并禁用“更改目录”；当 `chooseAndMigrate()` 返回 `kind:'migrated'` 时展示 `data-testid="settings-restart-required"` 与“立即重启”（调用 `restartNow()`）。
+
+- [2026-02-26] Task 24（memo-res:// 协议 URL 解析坑）：同一个 scheme 在不同调用栈/构造方式下可能出现 `memo-res://<cacheKey>`（cacheKey 在 hostname）或 `memo-res:///cacheKey`（cacheKey 在 pathname）两种形态；实现解析时要同时兼容，并且在 hostname 形态下拒绝任何额外 path 段，避免把路径片段当作 key。
+
+- [2026-02-26] Task 24（拒绝 symlink/junction 的实用实现）：不要用 `realpath` 事后比对；更稳的是对“从 root 到目标路径”的每一段做 `lstat`，只要链路中任何一段 `isSymbolicLink()` 就拒绝（Windows junction/reparse point 通常也会命中）。测试在 Windows 上若无法创建 symlink，可用 `junction` 或对注入的 `lstat` 做 stub 回退，确保逻辑被覆盖。

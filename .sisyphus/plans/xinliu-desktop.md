@@ -1592,7 +1592,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-23-no-path.txt
   ```
 
-- [ ] 24. `memo-res://` 协议处理器（白名单目录 + 防穿越 + MIME 白名单）
+- [x] 24. `memo-res://` 协议处理器（白名单目录 + 防穿越 + MIME 白名单）
 
   **What to do**:
   - 在 main 注册自定义协议 `memo-res://<cacheKey>`，作为 renderer 预览附件的唯一入口。

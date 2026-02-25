@@ -1,0 +1,21 @@
+Now using node v20.20.0 (npm v10.8.2)
+
+> xinliu-desktop@0.0.0 test
+> vitest run --reporter verbose src/main/protocol/memoResProtocol.test.ts
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /root/1codes/xinliu_desktop
+
+ ✓ src/main/protocol/memoResProtocol.test.ts > src/main/protocol/memoResProtocol > 成功：白名单目录文件可读取（memo-res://<cacheKey>）
+ ✓ src/main/protocol/memoResProtocol.test.ts > src/main/protocol/memoResProtocol > 成功：支持 memo-res:///cacheKey（pathname 形态）
+ ✓ src/main/protocol/memoResProtocol.test.ts > src/main/protocol/memoResProtocol > 拒绝：cacheKey 不透明约束（含 /、..、% 等）必须 400
+ ✓ src/main/protocol/memoResProtocol.test.ts > src/main/protocol/memoResProtocol > 拒绝：非白名单目录 relpath 必须 403
+ ✓ src/main/protocol/memoResProtocol.test.ts > src/main/protocol/memoResProtocol > 拒绝：路径链路出现 symlink/junction 必须 403（创建失败则用 lstat stub 回退）
+ ✓ src/main/protocol/memoResProtocol.test.ts > src/main/protocol/memoResProtocol > MIME/Disposition：png 内联；exe/未知扩展强制 attachment
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  07:40:53
+   Duration  410ms (transform 80ms, setup 0ms, collect 83ms, tests 21ms, environment 0ms, prepare 99ms)
+

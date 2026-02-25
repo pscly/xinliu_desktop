@@ -8,10 +8,13 @@ import {
   ipcMain,
   Menu,
   Notification,
+  protocol,
   shell,
   Tray,
 } from 'electron';
 import type { WebContents } from 'electron';
+
+import Database from 'better-sqlite3';
 
 import { IPC_EVENTS } from '../shared/ipc';
 import { registerIpcHandlers } from './ipc';
@@ -34,6 +37,8 @@ import {
   writeStorageRootConfig,
 } from './storageRoot/storageRootConfig';
 import { migrateStorageRoot } from './storageRoot/migrateStorageRoot';
+import { installMemoResProtocol } from './protocol/memoResProtocol';
+import { resolveMainDbFileAbsPath } from './db/paths';
 
 const closeToTray = createCloseToTrayController();
 
@@ -104,7 +109,7 @@ function toggleMainWindow(): void {
   win.focus();
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const indexHtmlPath = path.join(__dirname, '../renderer/index.html');
   const preloadPath = path.join(__dirname, '../preload/index.js');
 
@@ -131,6 +136,65 @@ app.whenReady().then(() => {
     rm: (p: string, options: { recursive: boolean; force: boolean }) => fs.rm(p, options),
     unlink: (p: string) => fs.unlink(p),
   };
+
+  const userDataDirAbsPath = app.getPath('userData');
+  const storageRootStatus = await readStorageRootStatus({
+    userDataDirAbsPath,
+    fs: storageRootConfigFs,
+  });
+
+  installMemoResProtocol(protocol, {
+    storageRootAbsPath: storageRootStatus.storageRootAbsPath,
+    resolveCacheKey: async (cacheKey) => {
+      const dbFileAbsPath = resolveMainDbFileAbsPath(storageRootStatus.storageRootAbsPath);
+
+      try {
+        await fs.stat(dbFileAbsPath);
+      } catch {
+        return null;
+      }
+
+      let db: Database.Database | null = null;
+      try {
+        db = new Database(dbFileAbsPath, {
+          readonly: true,
+          fileMustExist: true,
+        });
+
+        const row = db
+          .prepare(
+            `
+              SELECT cache_relpath, local_relpath
+              FROM memo_attachments
+              WHERE cache_key = ?
+              LIMIT 1
+            `
+          )
+          .get(cacheKey) as { cache_relpath?: string | null; local_relpath?: string | null } | undefined;
+
+        const cacheRelpath = typeof row?.cache_relpath === 'string' ? row.cache_relpath.trim() : '';
+        if (cacheRelpath.length > 0) {
+          return cacheRelpath;
+        }
+
+        const localRelpath = typeof row?.local_relpath === 'string' ? row.local_relpath.trim() : '';
+        if (localRelpath.length > 0) {
+          return localRelpath;
+        }
+
+        return null;
+      } catch {
+        return null;
+      } finally {
+        try {
+          db?.close();
+        } catch {
+        }
+      }
+    },
+    readFile: (absPath) => fs.readFile(absPath),
+    lstat: (absPath) => fs.lstat(absPath),
+  });
 
   const quickCaptureWindowManager = createQuickCaptureWindowManager({
     preloadPath,
