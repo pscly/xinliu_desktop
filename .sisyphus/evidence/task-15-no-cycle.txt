@@ -1,0 +1,21 @@
+Task 15：Collections 防环约束（禁止把父 folder 移动到其子孙节点下）
+
+合同来源：
+- PLAN.md：禁止形成环。
+- apidocs/collections.zh-CN.md：move 接口会返回 cannot move folder under its descendant；客户端必须在本地同样防御。
+
+实现说明：
+- 防环校验实现：src/main/collections/collectionsRepo.ts
+  - patchCollectionItem 修改 parent_id 前：
+    - parent 必须存在且是未删除 folder
+    - 使用递归 CTE 沿 parent 链向上查祖先，若命中自身 id 则拒绝
+
+单测覆盖：src/main/collections/collectionsRepo.test.ts
+- 构造 A(root) -> B(child) -> note_ref(grandchild)
+- 尝试把 A.parent_id 设为 B（把父移到子孙）必须失败
+
+验证输出：
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+Test Files  16 passed (16)
+Tests       41 passed (41)

@@ -1,0 +1,19 @@
+Task 15：Collections 本地读写服务（写入生成 outbox）
+
+合同来源：
+- PLAN.md：Collections 写入必须写本地 SQLite，并同一事务写 outbox_mutations（resource=collection_item），禁止 UI 直写远端。
+- apidocs/collections.zh-CN.md：sync 资源名固定为 collection_item；upsert mutation data 形状（item_type/parent_id/name/color/sort_order/ref_type/ref_id）。
+
+实现说明：
+- 新增 Collections 本地服务：src/main/collections/collectionsRepo.ts
+  - createFolder/createNoteRef/patchCollectionItem/deleteCollectionItem/restoreCollectionItem
+  - 所有写入统一使用 withImmediateTransaction，写 collection_items + enqueueFlowOutboxMutation（resource=collection_item）。
+
+单测覆盖：src/main/collections/collectionsRepo.test.ts
+- 创建 folder：断言 outbox 插入 1 条，resource=collection_item、op=upsert，data_json.item_type=folder。
+
+验证输出：
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+Test Files  16 passed (16)
+Tests       41 passed (41)
