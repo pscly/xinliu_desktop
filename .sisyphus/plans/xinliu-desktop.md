@@ -2220,7 +2220,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-15-outbox.txt
   ```
 
-- [ ] 10. Sync/设置相关表 Schema（outbox/sync_state/jobs/user_settings）
+- [x] 10. Sync/设置相关表 Schema（outbox/sync_state/jobs/user_settings）
 
   **What to do**:
   - 在迁移中创建离线同步必备表：
@@ -2269,7 +2269,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-10-no-token-sqlite.txt
   ```
 
-- [ ] 11. 鉴权凭据与设备标识（keytar + 设备头 + 脱敏）
+- [x] 11. 鉴权凭据与设备标识（keytar + 设备头 + 脱敏）
 
   **What to do**:
   - 实现 token 的安全持久化：优先 keytar（Windows Credential Vault）。
@@ -2367,7 +2367,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-12-request-id.txt
   ```
 
-- [ ] 7. Storage Root 目录布局与路径约束（relpath/可迁移基础）
+- [x] 7. Storage Root 目录布局与路径约束（relpath/可迁移基础）
 
   **What to do**:
   - 实现“Storage Root 目录布局”的纯函数与工具：所有持久化路径以 `<root>` 的 relpath 表达。
@@ -2412,7 +2412,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-07-layout.txt
   ```
 
-- [ ] 8. SQLite 连接与迁移引擎（main-only + WAL + 事务封装）
+- [x] 8. SQLite 连接与迁移引擎（main-only + WAL + 事务封装）
 
   **What to do**:
   - 在 main 进程实现 SQLite 连接管理（better-sqlite3）：
@@ -2461,7 +2461,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-08-no-sqlite-renderer.txt
   ```
 
-- [ ] 9. Flow 领域表 Schema（Todo + Collections + tombstone）
+- [x] 9. Flow 领域表 Schema（Todo + Collections + tombstone）
 
   **What to do**:
   - 在迁移中创建 Flow 必备表：`todo_lists`、`todo_items`、`todo_occurrences`、`collection_items`。
