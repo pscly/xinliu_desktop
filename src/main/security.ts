@@ -70,6 +70,17 @@ export function installNavigationGuards(
   webContents: NavigationGuardsWebContents,
   deps: NavigationGuardsDependencies
 ): void {
+  const openExternalSafely = (url: string) => {
+    try {
+      const result = deps.openExternal(url);
+      void Promise.resolve(result).catch((error) => {
+        deps.logger?.warn?.('打开外链失败', { url, error: String(error) });
+      });
+    } catch (error) {
+      deps.logger?.warn?.('打开外链失败', { url, error: String(error) });
+    }
+  };
+
   webContents.on('will-navigate', (event, url) => {
     if (isAllowedNavigationUrl(url)) {
       return;
@@ -78,10 +89,7 @@ export function installNavigationGuards(
     event.preventDefault();
 
     if (shouldOpenInExternalBrowser(url)) {
-      try {
-        void deps.openExternal(url);
-      } catch {
-      }
+      openExternalSafely(url);
     } else {
       deps.logger?.warn?.('拦截非白名单导航', { url });
     }
@@ -89,10 +97,7 @@ export function installNavigationGuards(
 
   webContents.setWindowOpenHandler(({ url }) => {
     if (shouldOpenInExternalBrowser(url)) {
-      try {
-        void deps.openExternal(url);
-      } catch {
-      }
+      openExternalSafely(url);
     }
 
     return { action: 'deny' };
