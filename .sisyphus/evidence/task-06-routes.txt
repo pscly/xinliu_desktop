@@ -1,0 +1,12 @@
+# Task 06 - 路由骨架（Routes）证据
+
+## rg -n "Notes|Todo|设置|冲突|Collections" src/renderer -S
+src/renderer/App.test.tsx:29:    expect(screen.getAllByText('设置').length).toBeGreaterThan(0);
+src/renderer/App.test.tsx:31:    expect(screen.getAllByText('冲突').length).toBeGreaterThan(0);
+src/renderer/App.tsx:12:  { key: 'notes', label: 'Notes', hint: '你的笔记与正文视图' },
+src/renderer/App.tsx:13:  { key: 'collections', label: 'Collections', hint: '收藏夹与聚合视图' },
+src/renderer/App.tsx:14:  { key: 'todo', label: 'Todo', hint: '任务与日程（RRULE/occurrences）' },
+src/renderer/App.tsx:15:  { key: 'settings', label: '设置', hint: '账户、同步、外观与快捷键' },
+src/renderer/App.tsx:16:  { key: 'conflicts', label: '冲突', hint: '同步冲突的对比与裁决' },
+src/renderer/App.tsx:223:                这里将承载核心页面内容：列表、编辑器、时间线、或设置表单。
+src/renderer/App.tsx:234:                <div className="contentCardBody">按路由逐个落地 Notes/Collections/Todo/设置/冲突页面。</div>

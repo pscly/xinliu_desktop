@@ -1,0 +1,38 @@
+# Task 06 - Frameless 主窗口 UI 壳（Shell）证据
+
+## 1) rg -n "data-testid=\"titlebar-" src/renderer -S
+src/renderer/App.tsx:102:          data-testid="titlebar-minimize"
+src/renderer/App.tsx:111:          data-testid="titlebar-maximize"
+src/renderer/App.tsx:120:          data-testid="titlebar-close"
+
+## 2) rg -n "-webkit-app-region" src/renderer -S
+说明：pattern 以 "-" 开头时，rg 会把它当成参数；为得到等价匹配输出，使用安全写法：
+  rg -n -S -- "-webkit-app-region" src/renderer
+
+src/renderer/styles.css:49:  -webkit-app-region: drag;
+src/renderer/styles.css:101:  -webkit-app-region: no-drag;
+
+## 3) npm run test
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> xinliu-desktop@0.0.0 test
+> vitest run
+
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.
+
+ RUN  v2.1.9 /root/1codes/xinliu_desktop
+
+ ✓ src/main/security.test.ts (4 tests) 10ms
+ ✓ src/main/ipc.test.ts (2 tests) 6ms
+ ✓ src/shared/number.test.ts (2 tests) 5ms
+stderr | src/renderer/App.test.tsx > <App /> > 可以在不依赖 Electron 的情况下渲染
+[titlebar] window.xinliu.window.minimize 不可用
+[titlebar] window.xinliu.window.toggleMaximize 不可用
+[titlebar] window.xinliu.window.close 不可用
+
+ ✓ src/renderer/App.test.tsx (1 test) 92ms
+
+ Test Files  4 passed (4)
+      Tests  9 passed (9)
+   Start at  13:12:55
+   Duration  1.45s (transform 175ms, setup 0ms, collect 339ms, tests 112ms, environment 2.11s, prepare 420ms)
