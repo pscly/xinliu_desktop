@@ -34,3 +34,19 @@
 ## [2026-02-25 11:40] - 避免 Electron 安装脚本导致的 npm install/ci 网络波动
 
 - 若遇到 Electron 二进制下载（postinstall）因网络波动失败（例如 `socket hang up`），可以先用 `npm install --ignore-scripts` 在不执行安装脚本的情况下把依赖装齐（含 TypeScript types），确保 `npm run typecheck` 等纯编译步骤可跑通；后续在网络稳定时再单独执行带脚本的安装/重装。
+
+## [2026-02-25] - 代码规范 + Vitest 测试基建（TDD）
+
+- ESLint 使用 v9（Flat Config），配置文件为根目录 `eslint.config.mjs`；不要再使用 `.eslintrc.*` / `.eslintignore`（ESLint v9 默认不读取且会报错/警告）。
+- lint 脚本建议传目录而非 glob：`eslint src vite.config.ts`，避免 ESLint v9 CLI 对 glob pattern 的“未匹配即报错”行为导致 CI 失败。
+- Prettier 通过 `.prettierrc.json` 独立管理格式；通过 `eslint-config-prettier` 关闭 ESLint 中与 Prettier 冲突的格式化规则。
+- Vitest 需要与 Vite 主版本对齐；本仓库 Vite 为 v5，因此将 Vitest 固定到 `vitest@2.1.9`，避免 Vitest(v4+) 引入 Vite v7 造成类型重复（LSP/TS 报 plugin 类型不兼容）。
+- renderer 组件测试使用 jsdom；若用 Node 环境会出现 `ReferenceError: document is not defined`。
+- `npm` 可能输出 `.npmrc` 中 `electron_mirror` unknown config 警告；当前不影响 `lint/test/typecheck` 通过，但未来 npm 大版本可能需要迁移/清理该字段。
+
+## [2026-02-25 12:21] - GitHub Actions CI（windows-latest）基础配置
+
+- 固定 `runs-on: windows-latest`，Node 版本使用 `actions/setup-node@v4` 的 `node-version: 20`，并启用 `cache: npm`。
+- 任务顺序：`npm ci` → `npm run lint` → `npm run test` → `npm run typecheck` → `npm run build`，日志可直接定位到具体 step。
+- 工件上传：用 `actions/upload-artifact@v4` 上传 `.sisyphus/evidence/` 与 `dist/`，并设置 `if-no-files-found: ignore`，确保目录不存在时不会导致 CI 失败。
+- Electron 镜像：优先依赖仓库 `.npmrc` 的 `electron_mirror` 配置；CI 侧无需额外注入环境变量（npm 可能仍会输出 unknown config 警告，但不影响安装/构建）。
