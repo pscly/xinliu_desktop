@@ -1,0 +1,6 @@
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- --reporter verbose src/main/memos/memosClient.test.ts
+
+> xinliu-desktop@0.0.0 test
+> vitest run --reporter verbose src/main/memos/memosClient.test.ts
+
+✓ src/main/memos/memosClient.test.ts > src/main/memos/memosClient > UpdateMemo/UpdateAttachment 缺 updateMask 时应失败（可解释错误）
