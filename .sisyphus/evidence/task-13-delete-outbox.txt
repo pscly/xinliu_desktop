@@ -1,0 +1,19 @@
+Task 13：Outbox 写入工具与 client_updated_at_ms 单调递增（delete 仍生成 outbox）
+
+合同来源：
+- PLAN.md：delete 即使本地已 tombstone，也必须生成 op="delete" 的 outbox 条目。
+- apidocs/api.zh-CN.md：sync/push op=delete 时服务端不会读取 data。
+
+实现说明：
+- outbox 入队：src/main/sync/outbox.ts
+  - enqueueFlowOutboxMutation(db, { resource, op, entityId, clientUpdatedAtMs, data? })
+  - op=delete 未提供 data 时写入 data_json="{}"（满足 outbox_mutations.data_json NOT NULL）
+- 单测覆盖：src/main/sync/outbox.test.ts
+  - 先插入已 tombstone 的 todo_lists 记录，再 enqueue op=delete；断言 outbox 记录存在且 op=delete。
+  - 同一事务回滚：业务表写入 + outbox 入队在 withImmediateTransaction 内抛错后应一起回滚。
+
+验证输出：
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+Test Files  14 passed (14)
+Tests       36 passed (36)

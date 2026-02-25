@@ -1,0 +1,18 @@
+Task 13：Outbox 写入工具与 client_updated_at_ms 单调递增（bump）
+
+合同来源：
+- PLAN.md：写操作必须同一事务写业务表 + outbox；client_updated_at_ms 必须对同一实体单调递增（max(now_ms, last_ms + 1)）。
+- apidocs/api.zh-CN.md：sync/push mutations[].client_updated_at_ms 作为 LWW 并发控制依据。
+
+实现说明：
+- bump 规则实现：src/main/sync/outbox.ts
+  - bumpClientUpdatedAtMs({ lastMs, nowMs }) => max(nowMs, lastMs + 1)
+- 单测覆盖：src/main/sync/outbox.test.ts
+  - last=1000, now=900 -> 1001（now_ms 回退场景）
+  - last=1000, now=2000 -> 2000
+
+验证输出：
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+Test Files  14 passed (14)
+Tests       36 passed (36)
