@@ -75,3 +75,7 @@
 - Pull apply 必须直写业务表，不能走 TodoRepo/CollectionsRepo（否则会 enqueue outbox 破坏 outbox 语义）。
 - LWW 推荐用 SQLite 原生条件 upsert：`ON CONFLICT DO UPDATE ... WHERE excluded.client_updated_at_ms >= table.client_updated_at_ms`，保证 incoming older 不覆盖本地 newer。
 - Collections 漂移兼容：显式处理 `changes.collection_items`（对齐 `apidocs/collections.zh-CN.md` 的 key/resource 命名）。
+
+- [2026-02-25] memoName 编码落地：
+  - 放进路由/URL 参数：用 `encodeURIComponent` / `decodeURIComponent`（确保 `memos/123` 中的 `/` 被编码为 `%2F`，可 round-trip）。
+  - 放进本地 KV key：用 base64url(utf8)，输出必须不含 `+`、`/`、`=`；解码时根据长度 `% 4` 补齐 `=` padding。
