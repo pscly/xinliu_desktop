@@ -1,0 +1,10 @@
+命令：
+
+bash -lc "source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- -t '托盘 Exit' --reporter verbose"
+
+输出摘录（PASS）：
+
+✓ src/main/tray/trayManager.test.ts > src/main/tray/trayManager > 托盘 Exit：触发后必须执行所有 cleanup hooks
+
+Test Files  1 passed | 27 skipped (28)
+Tests       1 passed | 79 skipped (80)

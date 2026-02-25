@@ -95,6 +95,11 @@
 - [2026-02-25] 401 unauthorized 的稳定判定模式：`status===401 || errorResponse.error==='unauthorized'`；建议在“用例层/状态机”集中处理并切到 `reauthRequired`，UI/IPC 只读状态。
 - [2026-02-25] 若出现 better-sqlite3 的 Node ABI 不匹配（`NODE_MODULE_VERSION`），可通过 `npm rebuild better-sqlite3` 修复；Linux 环境需要先安装编译工具链（例如 `build-essential`）。
 
+- [2026-02-26] Task 19（托盘常驻）：main 进程必须持有 Tray 的强引用（例如 module-level 变量），否则可能被 GC 回收导致托盘消失或点击无响应。
+- [2026-02-26] Task 19（关闭语义）：推荐把“是否允许真正退出”的状态抽成可测试 controller（`requestExit()`），窗口 `close` 时若未 requestExit 则统一 `preventDefault + hide()`，避免用户误以为应用已退出。
+- [2026-02-26] Task 19（首次关闭提示）：提示逻辑应由 controller 维护“仅一次”状态（进程生命周期内），并通过注入回调触发（Notification/Tray balloon/message box），保证单测不依赖 Electron runtime。
+- [2026-02-26] Node 20 约束仍有效：`better-sqlite3` 属于 native addon，跑 `npm test/typecheck/build` 建议统一 `nvm use 20.20.0`，避免 NODE_MODULE_VERSION 不匹配。
+
 ## [2026-02-25] - Memos API Client（Task 34）约定
 
 - API base path 固定为 `/api/v1`。在复用 `createHttpClient` 的情况下，推荐将实例 `baseUrl` 传入为“纯实例地址”（例如 `https://memos.example.com`），并在每个请求的 `pathname` 上显式带上 `/api/v1/...`（对齐现有 `FlowClient` 的写法）。
@@ -139,3 +144,5 @@
 - refresh/merge 的本地编辑保护：当本地 memo 处于 `DIRTY`/`SYNCING` 时，合并逻辑不得覆盖本地 `content/visibility`；只允许回填不破坏编辑的元数据（例如 `server_memo_name/server_memo_id`）。
 - 单测保持离线确定性：`memosClient` 全量 mock（`vi.fn()`），并通过依赖注入 `loadAttachmentContentBase64`（测试里用 stub）替代真实文件 IO；用调用序列断言 `CreateAttachment` 发生在 `SetMemoAttachments` 之前。
 - 环境提示：DB 相关测试依赖 `better-sqlite3` 原生模块，统一在 Node 20 下运行（例：`source ~/.nvm/nvm.sh && nvm use 20.20.0`）。
+
+- [2026-02-26] ESLint(no-explicit-any)：在 Vitest 测试里解析 `errorResponse.details` 时，避免 `as any`，改用 `unknown` + 类型守卫（例如先断言 `details.server_snapshot.id` 为 string）来保持断言可读性与类型安全。验证：`source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm run lint` / `npm test`。

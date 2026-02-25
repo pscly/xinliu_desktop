@@ -1,0 +1,10 @@
+命令：
+
+bash -lc "source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- -t '窗口 close 事件' --reporter verbose"
+
+输出摘录（PASS）：
+
+✓ src/main/tray/trayManager.test.ts > src/main/tray/trayManager > 窗口 close 事件：默认 preventDefault + hide（不退出）
+
+Test Files  1 passed | 27 skipped (28)
+Tests       1 passed | 79 skipped (80)

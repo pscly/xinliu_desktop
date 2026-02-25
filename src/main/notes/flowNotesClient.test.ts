@@ -15,6 +15,19 @@ function makeSleepSpy() {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasServerSnapshotId(
+  details: unknown,
+): details is { server_snapshot: { id: string } } {
+  if (!isRecord(details)) return false;
+  const serverSnapshot = details.server_snapshot;
+  if (!isRecord(serverSnapshot)) return false;
+  return typeof serverSnapshot.id === 'string';
+}
+
 describe('src/main/notes/flowNotesClient', () => {
   it('附件上传：应使用 multipart/form-data，且字段名为 file', async () => {
     const fetch: Parameters<typeof createFlowNotesClient>[0]['fetch'] = vi.fn(async (url, init) => {
@@ -138,8 +151,11 @@ describe('src/main/notes/flowNotesClient', () => {
     if (!res.ok) {
       expect(res.error.status).toBe(409);
       expect(res.error.message).toMatch(/^\[FlowNotes\]\s/);
-      const details = (res.error.errorResponse?.details ?? null) as any;
-      expect(details?.server_snapshot?.id).toBe('n-1');
+      const details = res.error.errorResponse?.details;
+      if (!hasServerSnapshotId(details)) {
+        throw new Error('预期 ErrorResponse.details.server_snapshot.id 为字符串');
+      }
+      expect(details.server_snapshot.id).toBe('n-1');
     }
   });
 });

@@ -224,7 +224,7 @@ Wave 5（E2E + 发布）
 | 5 | 49 | Sync 状态摘要 UI |
 | 5 | 50 | 版本号/tag/Release 约定 |
 
-- [ ] 1. 初始化工程骨架（Electron + Vite + React + TypeScript）
+- [x] 1. 初始化工程骨架（Electron + Vite + React + TypeScript）
 
   **What to do**:
   - 在仓库根目录创建可运行的 Electron 工程骨架（main/preload/renderer/shared 分层）。
@@ -362,7 +362,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-55-close-quit.txt
   ```
 
-- [ ] 51. Flow Notes（降级 provider）本地表 Schema + 使用边界（仅降级时可读写）
+- [x] 51. Flow Notes（降级 provider）本地表 Schema + 使用边界（仅降级时可读写）
 
   **What to do**:
   - 在 SQLite 迁移中创建 `notes` 表（Flow Notes 降级承载）：支持 tombstone `deleted_at`。
@@ -398,7 +398,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-51-boundary.txt
   ```
 
-- [ ] 52. Flow Notes API Client（/api/v1/notes*：CRUD + attachments + shares + revisions）
+- [x] 52. Flow Notes API Client（/api/v1/notes*：CRUD + attachments + shares + revisions）
 
   **What to do**:
   - 基于 `apidocs/openapi-v1.json` 的 `/api/v1/notes*` 端点生成类型与调用封装。
@@ -709,7 +709,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-47-nav.txt
   ```
 
-- [ ] 42. 登录/登出与账号状态（Flow Auth：token 获取、存储、失效处理）
+- [x] 42. 登录/登出与账号状态（Flow Auth：token 获取、存储、失效处理）
 
   **What to do**:
   - 实现登录流程（Flow）：调用 `/api/v1/auth/login` 或 `/api/v1/auth/register` 获取 token。
@@ -910,7 +910,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-41-nav.txt
   ```
 
-- [ ] 38. Memos Sync Job（create/update + 附件上传顺序 + 回拉合并保护本地）
+- [x] 38. Memos Sync Job（create/update + 附件上传顺序 + 回拉合并保护本地）
 
   **What to do**:
   - 实现后台同步任务（Memos）：
@@ -1003,7 +1003,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-39-ui.txt
   ```
 
-- [ ] 36. Notes（Memos）本地表 Schema + 同步状态机字段（LOCAL_ONLY/DIRTY/SYNCING/SYNCED/FAILED）
+- [x] 36. Notes（Memos）本地表 Schema + 同步状态机字段（LOCAL_ONLY/DIRTY/SYNCING/SYNCED/FAILED）
 
   **What to do**:
   - 在 SQLite 迁移中创建 Memos 侧必备表：
@@ -1101,7 +1101,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-37-offline.png
   ```
 
-- [ ] 34. Memos API Client（Notes 直连：分页/过滤/updateMask/附件端点）
+- [x] 34. Memos API Client（Notes 直连：分页/过滤/updateMask/附件端点）
 
   **What to do**:
   - 实现 Memos REST v1 client：Base URL = `memosBaseUrl` 标准化后 + `/api/v1`。
@@ -1152,7 +1152,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-34-pagination.txt
   ```
 
-- [ ] 35. Notes Router（provider 决策树 + 单次请求降级一次 + request_id 分离展示）
+- [x] 35. Notes Router（provider 决策树 + 单次请求降级一次 + request_id 分离展示）
 
   **What to do**:
   - 落地 `PLAN.md` 的 Notes 路由决策树：
@@ -1547,7 +1547,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-29-copy.txt
   ```
 
-- [ ] 23. `memoName` 编码规则落地（route encode/decode + key base64url）
+- [x] 23. `memoName` 编码规则落地（route encode/decode + key base64url）
 
   **What to do**:
   - 实现 `memoName` 的两套编码：
@@ -1734,7 +1734,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-26-ipc-actions.txt
   ```
 
-- [ ] 19. 托盘常驻 + 关闭语义 + 唯一退出路径（Tray Manager）
+- [x] 19. 托盘常驻 + 关闭语义 + 唯一退出路径（Tray Manager）
 
   **What to do**:
   - main 创建并持有 Tray 强引用；托盘图标使用 `.ico`。
@@ -1973,7 +1973,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-16-baseurl.txt
   ```
 
-- [ ] 17. Flow Sync Push 引擎（applied/rejected 判定 + 429/401/413 策略）
+- [x] 17. Flow Sync Push 引擎（applied/rejected 判定 + 429/401/413 策略）
 
   **What to do**:
   - 从 `outbox_mutations` 读取 PENDING，按 batch size（默认 100）组装 `sync/push` 请求。
@@ -2028,7 +2028,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-17-errors.txt
   ```
 
-- [ ] 18. Flow Sync Pull 引擎（cursor + has_more 循环 + apply 后推进）
+- [x] 18. Flow Sync Pull 引擎（cursor + has_more 循环 + apply 后推进）
 
   **What to do**:
   - 从 `sync_state` 读取 cursor，调用 `sync/pull` 增量拉取。
@@ -2506,7 +2506,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-09-collections-contract.txt
   ```
 
-- [ ] 4. Electron 安全基线（BrowserWindow/WebContents/导航拦截）
+- [x] 4. Electron 安全基线（BrowserWindow/WebContents/导航拦截）
 
   **What to do**:
   - 在 main 进程集中封装 BrowserWindow 的安全默认值（便于测试与审计）：
@@ -2559,7 +2559,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-04-navigation-guard.txt
   ```
 
-- [ ] 5. IPC 桥与 Preload 合同（白名单 + 参数校验 + 统一错误形状）
+- [x] 5. IPC 桥与 Preload 合同（白名单 + 参数校验 + 统一错误形状）
 
   **What to do**:
   - 定义“静态可枚举”的 IPC 命名空间（例如 `xinliu:*`），main 侧逐一 `handle`，禁止通配。
@@ -2608,7 +2608,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-05-ipc-validate.txt
   ```
 
-- [ ] 6. Frameless 主窗口 UI 壳（自定义标题栏 + Triptych 三栏布局 + 路由骨架）
+- [x] 6. Frameless 主窗口 UI 壳（自定义标题栏 + Triptych 三栏布局 + 路由骨架）
 
   **What to do**:
   - renderer 实现 Triptych 三栏布局骨架：左栏（导航 + 树占位）、中栏（列表占位）、右栏（详情/编辑占位）。
@@ -2661,7 +2661,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-06-routes.txt
   ```
 
-- [ ] 2. 建立代码规范 + TDD 测试基建（TypeScript/ESLint/Prettier/Vitest）
+- [x] 2. 建立代码规范 + TDD 测试基建（TypeScript/ESLint/Prettier/Vitest）
 
   **What to do**:
   - 增加 `lint`/`format`/`test`/`typecheck` 的标准脚本与配置。
@@ -2708,7 +2708,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-02-offline-tests.txt
   ```
 
-- [ ] 3. 建立 GitHub Actions CI（Windows runner：lint/test/build）
+- [x] 3. 建立 GitHub Actions CI（Windows runner：lint/test/build）
 
   **What to do**:
   - 增加 `.github/workflows/ci.yml`：在 Windows runner 上执行 `npm ci` + `lint` + `test` + `typecheck` + `build`。
