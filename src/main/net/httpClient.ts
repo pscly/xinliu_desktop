@@ -25,6 +25,7 @@ export interface HttpError {
   requestId: string;
   responseRequestIdHeader?: string | null;
   errorResponse?: ErrorResponse;
+  retryAfterSeconds?: number | null;
 }
 
 export type HttpResult<T> =
@@ -233,6 +234,9 @@ export function createHttpClient(options: HttpClientOptions): {
         const parsed = await readJsonOrNull(text);
         const errorResponse = coerceErrorResponse(parsed);
 
+        const retryAfterSeconds =
+          res.status === 429 ? parseRetryAfterSeconds(res.headers.get('Retry-After')) : null;
+
         const error: HttpError = {
           code: 'HTTP_ERROR',
           message: errorResponse?.message
@@ -242,6 +246,7 @@ export function createHttpClient(options: HttpClientOptions): {
           requestId,
           responseRequestIdHeader,
           errorResponse: errorResponse ?? undefined,
+          retryAfterSeconds,
         };
 
         if (attempt + 1 >= retry.maxAttempts || !isRetryableHttpStatus(res.status)) {
@@ -249,8 +254,10 @@ export function createHttpClient(options: HttpClientOptions): {
         }
 
         if (res.status === 429) {
-          const retryAfterS = parseRetryAfterSeconds(res.headers.get('Retry-After'));
-          const delayMs = retryAfterS !== null ? retryAfterS * 1000 : computeBackoffDelayMs(retry, attempt);
+          const delayMs =
+            retryAfterSeconds !== null
+              ? retryAfterSeconds * 1000
+              : computeBackoffDelayMs(retry, attempt);
           await options.sleepMs(delayMs);
           continue;
         }

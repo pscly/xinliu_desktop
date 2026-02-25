@@ -104,6 +104,32 @@ describe('src/main/net/httpClient', () => {
     expect(calls).toEqual([1000]);
   });
 
+  it('429 且 maxAttempts=1 时也应暴露 retryAfterSeconds', async () => {
+    const fetch = vi.fn(async () => ({
+      ok: false,
+      status: 429,
+      headers: { get: (n: string) => (n === 'Retry-After' ? '2' : null) },
+      text: async () => JSON.stringify({ error: 'rate_limited', message: 'too many requests' }),
+    }));
+
+    const { calls, sleepMs } = makeSleepSpy();
+    const client = createHttpClient({
+      baseUrl: 'https://xl.pscly.cc',
+      fetch,
+      sleepMs,
+      retry: { maxAttempts: 1 },
+    });
+
+    const res = await client.requestJson({ method: 'GET', pathname: '/api/v1/ping' });
+    expect(res.ok).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([]);
+    if (!res.ok) {
+      expect(res.error.status).toBe(429);
+      expect(res.error.retryAfterSeconds).toBe(2);
+    }
+  });
+
   it('5xx 应退避并重试（最多 maxAttempts）', async () => {
     const fetch = vi
       .fn()
