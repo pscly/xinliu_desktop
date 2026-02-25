@@ -1,0 +1,26 @@
+Task 7 relpath 校验证据（npm test 输出）:
+
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> xinliu-desktop@0.0.0 test
+> vitest run
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90m/root/1codes/xinliu_desktop[39m
+
+ [32m✓[39m src/main/security.test.ts [2m([22m[2m4 tests[22m[2m)[22m[90m 9[2mms[22m[39m
+ [32m✓[39m src/main/storageLayout.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 8[2mms[22m[39m
+ [32m✓[39m src/shared/number.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 4[2mms[22m[39m
+ [32m✓[39m src/main/ipc.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 5[2mms[22m[39m
+[90mstderr[2m | src/renderer/App.test.tsx[2m > [22m[2m<App />[2m > [22m[2m可以在不依赖 Electron 的情况下渲染
+[22m[39m[titlebar] window.xinliu.window.minimize 不可用
+[titlebar] window.xinliu.window.toggleMaximize 不可用
+[titlebar] window.xinliu.window.close 不可用
+
+ [32m✓[39m src/renderer/App.test.tsx [2m([22m[2m1 test[22m[2m)[22m[90m 81[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m14 passed[39m[22m[90m (14)[39m
+[2m   Start at [22m 13:27:14
+[2m   Duration [22m 1.34s[2m (transform 160ms, setup 0ms, collect 338ms, tests 108ms, environment 2.75s, prepare 448ms)[22m

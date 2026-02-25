@@ -1,0 +1,38 @@
+PLAN.md (Storage Root 目录布局相关条目, 行号来自 grep 输出):
+231:  - attachments-cache
+292:| Notes(附件) | 附件原件: 本地 Storage Root `attachments/`; 附件引用绑定到 Notes Router 选定 provider | 读从 `attachments/` 原件或 `attachments-cache/` 缓存; 若缺失则显式下载任务写入 cache(不得在协议层偷偷下载) | 写先把原件落 `attachments/`(原子写); 再仅向本次选定 provider 上传并绑定到该 provider 的 Notes(不得两边都绑) |
+403: ### 1.5.2 Storage Root 目录布局(必须可迁移)
+407: - `<root>/db/` (SQLite 主库 + WAL/SHM)
+408: - `<root>/attachments/` (用户原件, 不参与缓存 GC)
+409: - `<root>/attachments-cache/` (缓存, 受配额与 LRU/GC)
+410: - `<root>/logs/` (脱敏日志)
+411: - `<root>/tmp/` (原子写临时目录)
+412: - `<root>/exports/` (导出文件)
+459:  - 缓存文件: `cache_relpath`(位于 `<root>/attachments-cache/`, 受配额与 LRU/GC)
+605:- MUST: 白名单目录仅 `<root>/attachments-cache/` 与 `<root>/attachments/`。
+
+npm test (vitest run) 输出:
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> xinliu-desktop@0.0.0 test
+> vitest run
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90m/root/1codes/xinliu_desktop[39m
+
+ [32m✓[39m src/main/security.test.ts [2m([22m[2m4 tests[22m[2m)[22m[90m 9[2mms[22m[39m
+ [32m✓[39m src/main/storageLayout.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 8[2mms[22m[39m
+ [32m✓[39m src/shared/number.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 4[2mms[22m[39m
+ [32m✓[39m src/main/ipc.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 5[2mms[22m[39m
+[90mstderr[2m | src/renderer/App.test.tsx[2m > [22m[2m<App />[2m > [22m[2m可以在不依赖 Electron 的情况下渲染
+[22m[39m[titlebar] window.xinliu.window.minimize 不可用
+[titlebar] window.xinliu.window.toggleMaximize 不可用
+[titlebar] window.xinliu.window.close 不可用
+
+ [32m✓[39m src/renderer/App.test.tsx [2m([22m[2m1 test[22m[2m)[22m[90m 81[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m14 passed[39m[22m[90m (14)[39m
+[2m   Start at [22m 13:27:14
+[2m   Duration [22m 1.34s[2m (transform 160ms, setup 0ms, collect 338ms, tests 108ms, environment 2.75s, prepare 448ms)[22m
