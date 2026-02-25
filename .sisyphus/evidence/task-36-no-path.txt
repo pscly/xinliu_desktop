@@ -1,0 +1,26 @@
+## Task 36 - memoName/资源名不拼进本地文件路径 证据
+
+目标：证明 `server_memo_name`（例如 `memos/123`）只作为“服务端资源名”存在，未被用于 `path.join/resolve` 等本地路径拼接。
+
+### 运行命令
+
+```bash
+rg -n "server_memo_name" src
+rg -n "path\.(join|resolve)\([^\)]*(server_memo_name|serverMemoName|memoName)" src || true
+rg -n "memos/[0-9]+" src || true
+```
+
+### 输出（节选）
+
+```text
+src/main/db/migrations.ts:220:          server_memo_name TEXT NULL,
+src/main/db/migrations.ts:234:        CREATE UNIQUE INDEX IF NOT EXISTS uq_memos_server_memo_name
+src/main/db/migrations.ts:235:          ON memos(server_memo_name)
+src/main/db/migrations.ts:236:          WHERE server_memo_name IS NOT NULL;
+
+# （无输出）=> 未发现 path.join/resolve(...) 中拼接 server_memo_name/serverMemoName/memoName
+
+src/main/memos/memosClient.test.ts:31:        memoName: 'memos/123',
+src/shared/memoNameCodec.test.ts:12:    const memoName = 'memos/123';
+src/shared/memoNameCodec.test.ts:19:    const memoName = 'memos/123';
+```

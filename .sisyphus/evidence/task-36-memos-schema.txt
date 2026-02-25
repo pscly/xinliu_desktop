@@ -1,0 +1,23 @@
+## Task 36 - Notes(Memos) 本地表 Schema + 同步状态机字段 证据
+
+### 运行命令
+
+```bash
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+```
+
+### 关键输出（节选）
+
+```text
+ RUN  v2.1.9 <project-root>
+
+ ✓ src/main/db/memosSchema.test.ts (2 tests)
+
+ Test Files  23 passed (23)
+      Tests  64 passed (64)
+```
+
+### 关键断言点
+
+- 迁移后存在 `memos` 与 `memo_attachments` 表
+- `memos.sync_status` 写入非法值会触发 SQLite CHECK constraint 失败（受控值域）
