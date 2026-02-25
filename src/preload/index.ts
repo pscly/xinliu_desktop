@@ -1,7 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-import { EMPTY_PAYLOAD, IPC_CHANNELS } from '../shared/ipc';
-import type { IpcErrorCode, IpcResult, IpcVoid } from '../shared/ipc';
+import { EMPTY_PAYLOAD, IPC_CHANNELS, IPC_EVENTS } from '../shared/ipc';
+import type {
+  IpcErrorCode,
+  IpcResult,
+  IpcVoid,
+  ShortcutId,
+  ShortcutsResetOnePayload,
+  ShortcutsSetConfigPayload,
+  ShortcutsStatus,
+} from '../shared/ipc';
 
 function ipcError<T>(code: IpcErrorCode, message: string): IpcResult<T> {
   return { ok: false, error: { code, message } };
@@ -31,5 +39,27 @@ contextBridge.exposeInMainWorld('xinliu', {
       invokeIpc<IpcVoid>(IPC_CHANNELS.window.toggleMaximize, EMPTY_PAYLOAD),
     close: () => invokeIpc<IpcVoid>(IPC_CHANNELS.window.close, EMPTY_PAYLOAD),
     isMaximized: () => invokeIpc<boolean>(IPC_CHANNELS.window.isMaximized, EMPTY_PAYLOAD),
+  },
+  shortcuts: {
+    getStatus: () =>
+      invokeIpc<ShortcutsStatus>(IPC_CHANNELS.shortcuts.getStatus, EMPTY_PAYLOAD),
+    setConfig: (payload: ShortcutsSetConfigPayload) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.shortcuts.setConfig, payload),
+    resetAll: () => invokeIpc<IpcVoid>(IPC_CHANNELS.shortcuts.resetAll, EMPTY_PAYLOAD),
+    resetOne: (id: ShortcutId) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.shortcuts.resetOne, { id } satisfies ShortcutsResetOnePayload),
+    onFocusSearch: (listener: () => void) => {
+      const wrapped = () => {
+        try {
+          listener();
+        } catch (error) {
+          console.warn(`[shortcuts] focusSearch listener 异常：${String(error)}`);
+        }
+      };
+      ipcRenderer.on(IPC_EVENTS.shortcuts.focusSearch, wrapped);
+      return () => {
+        ipcRenderer.removeListener(IPC_EVENTS.shortcuts.focusSearch, wrapped);
+      };
+    },
   },
 });

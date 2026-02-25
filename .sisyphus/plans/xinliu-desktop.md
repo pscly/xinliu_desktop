@@ -1783,7 +1783,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-19-exit-cleanup.txt
   ```
 
-- [ ] 20. 全局快捷键管理 + 设置页配置（注册失败可见退路）
+- [x] 20. 全局快捷键管理 + 设置页配置（注册失败可见退路）
 
   **What to do**:
   - main 实现 globalShortcut 管理：仅 app ready 后注册；退出时注销。

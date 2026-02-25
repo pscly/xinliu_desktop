@@ -100,6 +100,9 @@
 - [2026-02-26] Task 19（首次关闭提示）：提示逻辑应由 controller 维护“仅一次”状态（进程生命周期内），并通过注入回调触发（Notification/Tray balloon/message box），保证单测不依赖 Electron runtime。
 - [2026-02-26] Node 20 约束仍有效：`better-sqlite3` 属于 native addon，跑 `npm test/typecheck/build` 建议统一 `nvm use 20.20.0`，避免 NODE_MODULE_VERSION 不匹配。
 
+- [2026-02-26] Task 20（全局快捷键）：必须为每条快捷键跟踪“上一次成功注册的 accelerator”，在用户修改 accelerator、禁用(enabled=false)、或把 accelerator 置空时，先注销旧 accelerator。否则会出现“旧快捷键残留仍可触发”的幽灵注册（globalShortcut 以 accelerator 作为 key，不会自动替你解绑旧值）。
+- [2026-02-26] Task 20（设置页可见性测试）：renderer(jsdom) 测试不引入 Electron runtime，做法是直接在测试中 stub `window.xinliu.shortcuts.getStatus()` 返回预置的 `ShortcutsStatus`（例如包含 `registrationState='failed'`），再渲染 `<App />` 并点击 `data-testid="nav-settings"` 切到设置页，断言 `data-testid="settings-shortcut-<id>-register-failed"` 存在，从而验证“注册失败可见退路”。
+
 ## [2026-02-25] - Memos API Client（Task 34）约定
 
 - API base path 固定为 `/api/v1`。在复用 `createHttpClient` 的情况下，推荐将实例 `baseUrl` 传入为“纯实例地址”（例如 `https://memos.example.com`），并在每个请求的 `pathname` 上显式带上 `/api/v1/...`（对齐现有 `FlowClient` 的写法）。

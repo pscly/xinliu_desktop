@@ -5,6 +5,10 @@ import type {
   IpcErrorCode,
   IpcResult,
   IpcVoid,
+  ShortcutId,
+  ShortcutsResetOnePayload,
+  ShortcutsSetConfigPayload,
+  ShortcutsStatus,
 } from '../shared/ipc';
 
 export interface IpcMainInvokeEventLike {
@@ -30,6 +34,12 @@ export interface BrowserWindowLike {
 
 export interface RegisterIpcHandlersDeps {
   getWindowForSender: (sender: unknown) => BrowserWindowLike | null;
+  shortcuts: {
+    getStatus: () => ShortcutsStatus;
+    setConfig: (payload: ShortcutsSetConfigPayload) => void;
+    resetAll: () => void;
+    resetOne: (id: ShortcutId) => void;
+  };
   now?: () => number;
 }
 
@@ -63,6 +73,51 @@ function validateEmptyPayload(payload: unknown): IpcResult<EmptyPayload> {
     return err('VALIDATION_ERROR', '参数不合法');
   }
   return ok(EMPTY_PAYLOAD);
+}
+
+function validateShortcutId(value: unknown): value is ShortcutId {
+  return value === 'openQuickCapture' || value === 'openMainAndFocusSearch';
+}
+
+function validateShortcutsSetConfigPayload(
+  payload: unknown
+): IpcResult<ShortcutsSetConfigPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const id = payload['id'];
+  const accelerator = payload['accelerator'];
+  const enabled = payload['enabled'];
+
+  if (!validateShortcutId(id)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (typeof accelerator !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (typeof enabled !== 'boolean') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const trimmed = accelerator.trim();
+  if (enabled && trimmed.length === 0) {
+    return err('VALIDATION_ERROR', '快捷键不能为空');
+  }
+
+  return ok({ id, accelerator: trimmed, enabled });
+}
+
+function validateShortcutsResetOnePayload(
+  payload: unknown
+): IpcResult<ShortcutsResetOnePayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const id = payload['id'];
+  if (!validateShortcutId(id)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ id });
 }
 
 function createRateLimiter(options: {
@@ -149,6 +204,32 @@ function makeWindowHandler<T>(options: {
   };
 }
 
+function makeHandler<T>(options: {
+  channel: IpcChannel;
+  deps: RegisterIpcHandlersDeps;
+  rateLimiter: { allow: (key: string) => boolean };
+  validate: (payload: unknown) => IpcResult<unknown>;
+  run: (validatedPayload: unknown) => T | Promise<T>;
+}): IpcMainHandler {
+  return async (_event, payload) => {
+    if (!options.rateLimiter.allow(options.channel)) {
+      return err('RATE_LIMITED', '操作过于频繁');
+    }
+
+    const validated = options.validate(payload);
+    if (!validated.ok) {
+      return validated;
+    }
+
+    try {
+      const value = await options.run(validated.value);
+      return ok(value);
+    } catch {
+      return err('INTERNAL_ERROR', '操作失败');
+    }
+  };
+}
+
 export function registerIpcHandlers(
   ipcMain: IpcMainLike,
   deps: RegisterIpcHandlersDeps
@@ -211,9 +292,65 @@ export function registerIpcHandlers(
       run: (win) => win.isMaximized(),
     })
   );
+
+  ipcMain.handle(
+    IPC_CHANNELS.shortcuts.getStatus,
+    makeHandler<ShortcutsStatus>({
+      channel: IPC_CHANNELS.shortcuts.getStatus,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: () => deps.shortcuts.getStatus(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.shortcuts.setConfig,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.shortcuts.setConfig,
+      deps,
+      rateLimiter,
+      validate: validateShortcutsSetConfigPayload,
+      run: (validatedPayload) => {
+        deps.shortcuts.setConfig(validatedPayload as ShortcutsSetConfigPayload);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.shortcuts.resetAll,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.shortcuts.resetAll,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: () => {
+        deps.shortcuts.resetAll();
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.shortcuts.resetOne,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.shortcuts.resetOne,
+      deps,
+      rateLimiter,
+      validate: validateShortcutsResetOnePayload,
+      run: (validatedPayload) => {
+        const v = validatedPayload as ShortcutsResetOnePayload;
+        deps.shortcuts.resetOne(v.id);
+        return null;
+      },
+    })
+  );
 }
 
 export const __test__ = {
   toIpcResult,
   validateEmptyPayload,
+  validateShortcutsSetConfigPayload,
+  validateShortcutsResetOnePayload,
 };

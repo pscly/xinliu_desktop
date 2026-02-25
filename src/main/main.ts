@@ -1,9 +1,23 @@
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain, Menu, Notification, shell, Tray } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  Notification,
+  shell,
+  Tray,
+} from 'electron';
 import type { WebContents } from 'electron';
 
+import { IPC_EVENTS } from '../shared/ipc';
 import { registerIpcHandlers } from './ipc';
 import { buildSecureBrowserWindowOptions, installNavigationGuards } from './security';
+import {
+  createShortcutsManager,
+  installShortcutsCleanupOnWillQuit,
+} from './shortcuts/shortcutManager';
 import {
   createCloseToTrayController,
   installTrayManager,
@@ -81,20 +95,60 @@ function toggleMainWindow(): void {
 }
 
 app.whenReady().then(() => {
-  registerIpcHandlers(ipcMain, {
-    getWindowForSender: (sender) =>
-      BrowserWindow.fromWebContents(sender as WebContents),
-  });
-
-  ensureMainWindow();
-
-  const exitCleanupHooks: CleanupHook[] = [];
-
   const onQuickCapture = () => {
     const win = ensureMainWindow();
     win.show();
     win.focus();
   };
+
+  const onOpenMainAndFocusSearch = () => {
+    const win = ensureMainWindow();
+    win.show();
+    win.focus();
+    try {
+      win.webContents.send(IPC_EVENTS.shortcuts.focusSearch);
+    } catch (error) {
+      console.warn('发送 focusSearch 事件失败', { error: String(error) });
+    }
+  };
+
+  const shortcutsManager = createShortcutsManager({
+    globalShortcut,
+    definitions: [
+      {
+        id: 'openQuickCapture',
+        title: '打开快捕窗',
+        description: '打开快速捕获入口（当前复用托盘“快速捕获”回调）',
+        defaultAccelerator: 'CommandOrControl+Shift+Q',
+        action: onQuickCapture,
+      },
+      {
+        id: 'openMainAndFocusSearch',
+        title: '打开主窗并聚焦搜索框',
+        description: '显示主窗口并将焦点移动到搜索输入框',
+        defaultAccelerator: 'CommandOrControl+K',
+        action: onOpenMainAndFocusSearch,
+      },
+    ],
+  });
+
+  shortcutsManager.registerAll();
+  installShortcutsCleanupOnWillQuit(app, shortcutsManager);
+
+  registerIpcHandlers(ipcMain, {
+    getWindowForSender: (sender) =>
+      BrowserWindow.fromWebContents(sender as WebContents),
+    shortcuts: {
+      getStatus: () => shortcutsManager.getStatus(),
+      setConfig: (payload) => shortcutsManager.setConfig(payload),
+      resetAll: () => shortcutsManager.resetAll(),
+      resetOne: (id) => shortcutsManager.resetOne(id),
+    },
+  });
+
+  ensureMainWindow();
+
+  const exitCleanupHooks: CleanupHook[] = [];
 
   const onSyncNowMemos = async () => undefined;
   const onSyncNowFlow = async () => undefined;

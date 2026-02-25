@@ -1,6 +1,12 @@
 /// <reference types="vite/client" />
 
-import type { IpcResult, IpcVoid } from '../shared/ipc';
+import type {
+  IpcResult,
+  IpcVoid,
+  ShortcutId,
+  ShortcutsSetConfigPayload,
+  ShortcutsStatus,
+} from '../shared/ipc';
 
 declare global {
   interface Window {
@@ -15,6 +21,13 @@ declare global {
         toggleMaximize: () => Promise<IpcResult<IpcVoid>>;
         close: () => Promise<IpcResult<IpcVoid>>;
         isMaximized: () => Promise<IpcResult<boolean>>;
+      };
+      shortcuts: {
+        getStatus: () => Promise<IpcResult<ShortcutsStatus>>;
+        setConfig: (payload: ShortcutsSetConfigPayload) => Promise<IpcResult<IpcVoid>>;
+        resetAll: () => Promise<IpcResult<IpcVoid>>;
+        resetOne: (id: ShortcutId) => Promise<IpcResult<IpcVoid>>;
+        onFocusSearch: (listener: () => void) => () => void;
       };
     };
   }

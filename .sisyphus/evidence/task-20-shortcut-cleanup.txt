@@ -1,0 +1,8 @@
+命令：
+
+bash -lc "source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- -t \"will-quit 注销\""
+
+PASS 摘录：
+
+Test Files  1 passed | 28 skipped (29)
+     Tests  1 passed | 83 skipped (84)

@@ -27,11 +27,17 @@ describe('src/main/ipc', () => {
 
     registerIpcHandlers(ipcMain, {
       getWindowForSender: () => createFakeWindow(),
+      shortcuts: {
+        getStatus: () => ({ entries: [] }),
+        setConfig: () => {},
+        resetAll: () => {},
+        resetOne: () => {},
+      },
       now: () => 0,
     });
 
     const registered = Array.from(handlers.keys()).sort();
-    const expected = Object.values(IPC_CHANNELS.window).sort();
+    const expected = [...Object.values(IPC_CHANNELS.window), ...Object.values(IPC_CHANNELS.shortcuts)].sort();
     expect(registered).toEqual(expected);
 
     expect(registered.some((c) => c.includes('*'))).toBe(false);
@@ -48,6 +54,12 @@ describe('src/main/ipc', () => {
 
     registerIpcHandlers(ipcMain, {
       getWindowForSender: () => createFakeWindow(),
+      shortcuts: {
+        getStatus: () => ({ entries: [] }),
+        setConfig: () => {},
+        resetAll: () => {},
+        resetOne: () => {},
+      },
       now: () => 0,
     });
 

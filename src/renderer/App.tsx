@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+
+import type { ShortcutId, ShortcutStatusEntry, ShortcutsStatus } from '../shared/ipc';
 
 type RouteKey = 'notes' | 'collections' | 'todo' | 'settings' | 'conflicts';
 
@@ -17,9 +19,14 @@ const ROUTES: RouteMeta[] = [
 ];
 
 type XinliuWindowApi = NonNullable<Window['xinliu']>['window'];
+type XinliuShortcutsApi = NonNullable<Window['xinliu']>['shortcuts'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
   return window.xinliu?.window;
+}
+
+function getXinliuShortcutsApi(): XinliuShortcutsApi | undefined {
+  return window.xinliu?.shortcuts;
 }
 
 async function safeCallWindowAction(action: 'minimize' | 'toggleMaximize' | 'close') {
@@ -152,9 +159,293 @@ function NavItem({
   );
 }
 
+function ShortcutStatusBadge({ entry }: { entry: ShortcutStatusEntry }) {
+  const text =
+    entry.registrationState === 'registered'
+      ? '已注册'
+      : entry.registrationState === 'failed'
+        ? '注册失败'
+        : '未注册';
+  const cls =
+    entry.registrationState === 'registered'
+      ? 'badge badgeOk'
+      : entry.registrationState === 'failed'
+        ? 'badge badgeBad'
+        : 'badge';
+
+  return (
+    <span
+      className={cls}
+      data-testid={`settings-shortcut-${entry.id}-status`}
+    >
+      {text}
+    </span>
+  );
+}
+
+function SettingsShortcutsSection(props: {
+  status: ShortcutsStatus | null;
+  error: string | null;
+  draft: Record<string, { accelerator: string; enabled: boolean }>;
+  onUpdateDraft: (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => void;
+  onSaveOne: (id: ShortcutId) => void;
+  onResetOne: (id: ShortcutId) => void;
+  onResetAll: () => void;
+}) {
+  return (
+    <section className="settingsSection" data-testid="settings-shortcuts">
+      <div className="settingsSectionHeader">
+        <div>
+          <div className="settingsSectionTitle">快捷键</div>
+          <div className="settingsSectionSub">全局快捷键仅由 main 进程注册；此处用于配置与回退</div>
+        </div>
+        <button type="button" className="btn" onClick={() => props.onResetAll()}>
+          恢复默认
+        </button>
+      </div>
+
+      {props.error ? <div className="callout calloutWarn">{props.error}</div> : null}
+
+      <div className="settingsList">
+        {(props.status?.entries ?? []).map((entry) => {
+          const current = props.draft[entry.id] ?? { accelerator: entry.accelerator, enabled: entry.enabled };
+
+          return (
+            <div
+              key={entry.id}
+              className="settingsRow"
+              data-testid={`settings-shortcut-${entry.id}`}
+            >
+              <div className="settingsRowMain">
+                <div className="settingsRowTitle">
+                  {entry.title} <ShortcutStatusBadge entry={entry} />
+                </div>
+                <div className="settingsRowSub">{entry.description}</div>
+
+                {entry.registrationState === 'failed' ? (
+                  <div
+                    className="callout calloutBad"
+                    data-testid={`settings-shortcut-${entry.id}-register-failed`}
+                  >
+                    {entry.registrationMessage ?? '注册失败'}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="settingsRowControls">
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={current.enabled}
+                    onChange={(e) => props.onUpdateDraft(entry.id, { enabled: e.target.checked })}
+                  />
+                  <span>启用</span>
+                </label>
+
+                <input
+                  className="textInput"
+                  value={current.accelerator}
+                  placeholder={entry.accelerator}
+                  onChange={(e) => props.onUpdateDraft(entry.id, { accelerator: e.target.value })}
+                  aria-label={`${entry.title} 快捷键`}
+                />
+
+                <div className="btnRow">
+                  <button type="button" className="btn" onClick={() => props.onSaveOne(entry.id)}>
+                    保存
+                  </button>
+                  <button type="button" className="btn btnGhost" onClick={() => props.onResetOne(entry.id)}>
+                    默认
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SettingsContent(props: {
+  shortcutsStatus: ShortcutsStatus | null;
+  shortcutsError: string | null;
+  shortcutsDraft: Record<string, { accelerator: string; enabled: boolean }>;
+  onUpdateDraft: (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => void;
+  onSaveOne: (id: ShortcutId) => void;
+  onResetOne: (id: ShortcutId) => void;
+  onResetAll: () => void;
+}) {
+  return (
+    <div className="contentPlaceholder">
+      <div className="contentHero">
+        <div className="contentHeroTitle">设置</div>
+        <div className="contentHeroSub">账户、同步、外观与系统集成能力的配置入口</div>
+      </div>
+
+      <div className="settingsStack">
+        <SettingsShortcutsSection
+          status={props.shortcutsStatus}
+          error={props.shortcutsError}
+          draft={props.shortcutsDraft}
+          onUpdateDraft={props.onUpdateDraft}
+          onSaveOne={props.onSaveOne}
+          onResetOne={props.onResetOne}
+          onResetAll={props.onResetAll}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DefaultRoutePlaceholder({ routeMeta }: { routeMeta: RouteMeta }) {
+  return (
+    <div className="contentPlaceholder">
+      <div className="contentHero">
+        <div className="contentHeroTitle">{routeMeta.label} 入口占位</div>
+        <div className="contentHeroSub">
+          这里将承载核心页面内容：列表、编辑器、时间线、或设置表单。
+        </div>
+      </div>
+
+      <div className="contentGrid">
+        <div className="contentCard">
+          <div className="contentCardTitle">状态</div>
+          <div className="contentCardBody">UI 壳已就绪：标题栏 + 三栏布局 + 路由骨架</div>
+        </div>
+        <div className="contentCard">
+          <div className="contentCardTitle">下一步</div>
+          <div className="contentCardBody">按路由逐个落地 Notes/Collections/Todo/设置/冲突页面。</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GlobalSearchBox() {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const api = getXinliuShortcutsApi();
+    const off = api?.onFocusSearch?.(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return () => {
+      off?.();
+    };
+  }, []);
+
+  return (
+    <div className="rightCard" data-testid="global-search">
+      <div className="rightCardTitle">搜索</div>
+      <div className="rightCardBody">
+        <input
+          ref={inputRef}
+          className="textInput"
+          data-testid="global-search-input"
+          placeholder="搜索（占位，后续接入 FTS5）"
+        />
+        <div className="fine">提示：可通过全局快捷键打开主窗并聚焦此输入框。</div>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [route, setRoute] = useState<RouteKey>('notes');
   const routeMeta = useMemo(() => ROUTES.find((r) => r.key === route)!, [route]);
+
+  const [shortcutsStatus, setShortcutsStatus] = useState<ShortcutsStatus | null>(null);
+  const [shortcutsError, setShortcutsError] = useState<string | null>(null);
+  const [shortcutsDraft, setShortcutsDraft] = useState<
+    Record<string, { accelerator: string; enabled: boolean }>
+  >({});
+
+  const refreshShortcuts = async () => {
+    const api = getXinliuShortcutsApi();
+    if (!api) {
+      setShortcutsStatus(null);
+      setShortcutsError('快捷键 API 不可用（preload 未注入）');
+      return;
+    }
+
+    const res = await api.getStatus();
+    if (!res.ok) {
+      setShortcutsStatus(null);
+      setShortcutsError(`${res.error.message}（${res.error.code}）`);
+      return;
+    }
+
+    setShortcutsError(null);
+    setShortcutsStatus(res.value);
+
+    const next: Record<string, { accelerator: string; enabled: boolean }> = {};
+    for (const entry of res.value.entries) {
+      next[entry.id] = { accelerator: entry.accelerator, enabled: entry.enabled };
+    }
+    setShortcutsDraft(next);
+  };
+
+  const updateDraft = (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => {
+    setShortcutsDraft((prev) => {
+      const current = prev[id] ?? { accelerator: '', enabled: true };
+      return { ...prev, [id]: { ...current, ...patch } };
+    });
+  };
+
+  const saveOne = async (id: ShortcutId) => {
+    const api = getXinliuShortcutsApi();
+    if (!api) {
+      return;
+    }
+    const current = shortcutsDraft[id];
+    if (!current) {
+      return;
+    }
+
+    const res = await api.setConfig({
+      id,
+      accelerator: current.accelerator,
+      enabled: current.enabled,
+    });
+    if (!res.ok) {
+      setShortcutsError(`${res.error.message}（${res.error.code}）`);
+      return;
+    }
+    void refreshShortcuts();
+  };
+
+  const resetOne = async (id: ShortcutId) => {
+    const api = getXinliuShortcutsApi();
+    if (!api) {
+      return;
+    }
+    const res = await api.resetOne(id);
+    if (!res.ok) {
+      setShortcutsError(`${res.error.message}（${res.error.code}）`);
+      return;
+    }
+    void refreshShortcuts();
+  };
+
+  const resetAll = async () => {
+    const api = getXinliuShortcutsApi();
+    if (!api) {
+      return;
+    }
+    const res = await api.resetAll();
+    if (!res.ok) {
+      setShortcutsError(`${res.error.message}（${res.error.code}）`);
+      return;
+    }
+    void refreshShortcuts();
+  };
+
+  const openSettingsRoute = () => {
+    setRoute('settings');
+    void refreshShortcuts();
+  };
 
   return (
     <div className="app">
@@ -191,7 +482,7 @@ export function App() {
               active={route === 'settings'}
               meta={ROUTES[3]}
               testId="nav-settings"
-              onClick={() => setRoute('settings')}
+              onClick={() => openSettingsRoute()}
             />
             <NavItem
               active={route === 'conflicts'}
@@ -216,25 +507,19 @@ export function App() {
             <div className="paneSub">{routeMeta.hint}</div>
           </div>
 
-          <div className="contentPlaceholder">
-            <div className="contentHero">
-              <div className="contentHeroTitle">{routeMeta.label} 入口占位</div>
-              <div className="contentHeroSub">
-                这里将承载核心页面内容：列表、编辑器、时间线、或设置表单。
-              </div>
-            </div>
-
-            <div className="contentGrid">
-              <div className="contentCard">
-                <div className="contentCardTitle">状态</div>
-                <div className="contentCardBody">UI 壳已就绪：标题栏 + 三栏布局 + 路由骨架</div>
-              </div>
-              <div className="contentCard">
-                <div className="contentCardTitle">下一步</div>
-                <div className="contentCardBody">按路由逐个落地 Notes/Collections/Todo/设置/冲突页面。</div>
-              </div>
-            </div>
-          </div>
+          {route === 'settings' ? (
+            <SettingsContent
+              shortcutsStatus={shortcutsStatus}
+              shortcutsError={shortcutsError}
+              shortcutsDraft={shortcutsDraft}
+              onUpdateDraft={updateDraft}
+              onSaveOne={(id) => void saveOne(id)}
+              onResetOne={(id) => void resetOne(id)}
+              onResetAll={() => void resetAll()}
+            />
+          ) : (
+            <DefaultRoutePlaceholder routeMeta={routeMeta} />
+          )}
         </section>
 
         <aside className="pane paneRight" data-testid="triptych-right" aria-label="右栏">
@@ -244,17 +529,7 @@ export function App() {
           </div>
 
           <div className="rightStack">
-            <div className="rightCard">
-              <div className="rightCardTitle">快速入口</div>
-              <div className="rightCardBody">
-                <div className="chipRow">
-                  <span className="chip">搜索</span>
-                  <span className="chip">过滤</span>
-                  <span className="chip">同步</span>
-                </div>
-                <div className="fine">占位：后续会接入真实命令与状态。</div>
-              </div>
-            </div>
+            <GlobalSearchBox />
 
             <div className="rightCard">
               <div className="rightCardTitle">调试信息</div>
