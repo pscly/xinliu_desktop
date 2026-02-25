@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest';
+
+import { IPC_CHANNELS } from '../shared/ipc';
+import type { IpcResult } from '../shared/ipc';
+
+import { registerIpcHandlers } from './ipc';
+import type { BrowserWindowLike, IpcMainHandler, IpcMainLike } from './ipc';
+
+function createFakeWindow(): BrowserWindowLike {
+  return {
+    minimize: () => {},
+    isMaximized: () => false,
+    maximize: () => {},
+    unmaximize: () => {},
+    close: () => {},
+  };
+}
+
+describe('src/main/ipc', () => {
+  it('IPC 白名单可静态枚举（至少 1 正例 + 1 反例）', () => {
+    const handlers = new Map<string, IpcMainHandler>();
+    const ipcMain: IpcMainLike = {
+      handle: (channel, handler) => {
+        handlers.set(channel, handler);
+      },
+    };
+
+    registerIpcHandlers(ipcMain, {
+      getWindowForSender: () => createFakeWindow(),
+      now: () => 0,
+    });
+
+    const registered = Array.from(handlers.keys()).sort();
+    const expected = Object.values(IPC_CHANNELS.window).sort();
+    expect(registered).toEqual(expected);
+
+    expect(registered.some((c) => c.includes('*'))).toBe(false);
+    expect(handlers.has('xinliu:*')).toBe(false);
+  });
+
+  it('IPC 参数校验：空 payload 以外一律拒绝（示例）', async () => {
+    const handlers = new Map<string, IpcMainHandler>();
+    const ipcMain: IpcMainLike = {
+      handle: (channel, handler) => {
+        handlers.set(channel, handler);
+      },
+    };
+
+    registerIpcHandlers(ipcMain, {
+      getWindowForSender: () => createFakeWindow(),
+      now: () => 0,
+    });
+
+    const handler = handlers.get(IPC_CHANNELS.window.minimize);
+    expect(handler).toBeTypeOf('function');
+
+    const res = (await handler?.({ sender: {} }, { foo: 1 })) as IpcResult<unknown>;
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+});

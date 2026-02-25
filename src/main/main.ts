@@ -1,6 +1,8 @@
 import path from 'node:path';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import type { WebContents } from 'electron';
 
+import { registerIpcHandlers } from './ipc';
 import { buildSecureBrowserWindowOptions, installNavigationGuards } from './security';
 
 function createMainWindow(): BrowserWindow {
@@ -26,6 +28,11 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  registerIpcHandlers(ipcMain, {
+    getWindowForSender: (sender) =>
+      BrowserWindow.fromWebContents(sender as WebContents),
+  });
+
   createMainWindow();
 
   app.on('activate', () => {

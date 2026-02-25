@@ -1,0 +1,2 @@
+src/preload/index.ts:1:import { contextBridge, ipcRenderer } from 'electron';
+src/preload/index.ts:12:    const result = (await ipcRenderer.invoke(channel, payload)) as unknown;

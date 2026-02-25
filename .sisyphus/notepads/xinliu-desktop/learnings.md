@@ -58,3 +58,10 @@
 - 安全基线建议集中封装到 `src/main/security.ts`：
   - `buildSecureWebPreferences`：强制覆盖 MUST 值（`contextIsolation: true`、`nodeIntegration: false`、`webSecurity: true`、`allowRunningInsecureContent: false`），其余字段（如 `preload`）由调用方补充。
   - `installNavigationGuards(webContents, { openExternal })`：将 `openExternal` 作为依赖注入，便于用 stub webContents 在 Node 环境断言 `preventDefault()` 与 `window.open` deny 行为。
+
+## [2026-02-25] - IPC 白名单 + Preload 用例级 API 的可审计落地模式
+
+- IPC 通道名必须“静态可枚举”：统一放在 `src/shared/ipc.ts`，后续新增能力只允许在这里追加常量。
+- main 侧用 `registerIpcHandlers(ipcMain, deps)` 显式逐一 `ipcMain.handle(...)`，禁止通配；并通过依赖注入 `getWindowForSender`，避免在 Node/Vitest 测试里导入 electron runtime。
+- IPC handler 不应 `throw` 给 renderer：统一返回 `IpcResult`（`ok/value` 或 `ok:false/error{code,message}`），并避免把堆栈/绝对路径透传。
+- preload 侧封装 `invokeIpc`：捕获 `ipcRenderer.invoke` 的异常并返回 `IpcResult`，只暴露用例级 API（例如 `window.xinliu.window.minimize()`），不暴露通用 `ipcRenderer`。
