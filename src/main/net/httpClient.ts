@@ -46,7 +46,7 @@ export type FetchLike = (
   init?: {
     method?: string;
     headers?: Record<string, string>;
-    body?: string;
+    body?: unknown;
     signal?: AbortSignal;
   }
 ) => Promise<{
@@ -141,6 +141,14 @@ export function createHttpClient(options: HttpClientOptions): {
     jsonBody?: unknown;
     headers?: Record<string, string>;
   }) => Promise<HttpResult<T>>;
+  request: <T>(args: {
+    method: HttpMethod;
+    pathname: string;
+    query?: Record<string, string | number | boolean | null | undefined>;
+    body?: unknown;
+    jsonBody?: unknown;
+    headers?: Record<string, string>;
+  }) => Promise<HttpResult<T>>;
 } {
   const retry: RetryPolicy = {
     maxAttempts: options.retry?.maxAttempts ?? DEFAULT_RETRY.maxAttempts,
@@ -164,13 +172,23 @@ export function createHttpClient(options: HttpClientOptions): {
           responseRequestIdHeader: null,
         },
       }),
+      request: async () => ({
+        ok: false,
+        error: {
+          code: 'BAD_BASE_URL',
+          message,
+          requestId,
+          responseRequestIdHeader: null,
+        },
+      }),
     };
   }
 
-  async function requestJson<T>(args: {
+  async function request<T>(args: {
     method: HttpMethod;
     pathname: string;
     query?: Record<string, string | number | boolean | null | undefined>;
+    body?: unknown;
     jsonBody?: unknown;
     headers?: Record<string, string>;
   }): Promise<HttpResult<T>> {
@@ -200,12 +218,14 @@ export function createHttpClient(options: HttpClientOptions): {
         'X-Request-Id': requestId,
       };
 
-      let body: string | undefined;
+      let body: unknown;
       if (args.jsonBody !== undefined) {
         body = JSON.stringify(args.jsonBody);
         if (!('Content-Type' in headers)) {
           headers['Content-Type'] = 'application/json';
         }
+      } else if (args.body !== undefined) {
+        body = args.body;
       }
 
       try {
@@ -297,5 +317,21 @@ export function createHttpClient(options: HttpClientOptions): {
     };
   }
 
-  return { requestJson };
+  async function requestJson<T>(args: {
+    method: HttpMethod;
+    pathname: string;
+    query?: Record<string, string | number | boolean | null | undefined>;
+    jsonBody?: unknown;
+    headers?: Record<string, string>;
+  }): Promise<HttpResult<T>> {
+    return request<T>({
+      method: args.method,
+      pathname: args.pathname,
+      query: args.query,
+      jsonBody: args.jsonBody,
+      headers: args.headers,
+    });
+  }
+
+  return { requestJson, request };
 }

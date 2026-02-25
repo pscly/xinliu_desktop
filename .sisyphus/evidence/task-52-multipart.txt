@@ -1,0 +1,7 @@
+> npm test
+> vitest run
+
+✓ src/main/notes/flowNotesClient.test.ts (2 tests)
+
+Test Files  26 passed (26)
+Tests       72 passed (72)

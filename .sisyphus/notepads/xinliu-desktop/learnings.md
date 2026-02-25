@@ -116,3 +116,9 @@
 - DB 相关测试必须在 Node 环境跑（better-sqlite3）；Vitest 里用文件头 `// @vitest-environment node` 是必要指令（不是普通注释）。
 
 - [2026-02-25] 修正：Task 51 的 notes 表边界守卫应以“Notes Router 本次请求最终 provider”为准：只要最终 `provider==='flow_notes'` 即允许访问（包含 `kind='degraded'` fallback 与 `kind='single' && provider='flow_notes'`）；并据 `degradeReason/providerReason` 选择对应的 `provider_reason`。
+
+- [2026-02-25] Flow Notes 附件上传（multipart/form-data）：不要在客户端手动设置 `Content-Type`（boundary 需由 fetch/undici 生成）；为复用 request_id 与 ErrorResponse 解析，在 `createHttpClient` 上新增通用 `request` 用于透传 `FormData`。
+
+- [2026-02-25] FlowNotes 写入边界：所有写方法必须显式接收 Notes Router 的 per-request 决策（`NotesRoutedResult`），并在运行时要求最终 `provider==='flow_notes'`；这样可以同时兼容 `kind='degraded'` 与 `kind='single'`，且不会“伪装成 Memos”写入。
+- [2026-02-25] 409 conflict 的冲突中心素材：服务端快照放在 `ErrorResponse.details.server_snapshot`；httpClient 已把 `errorResponse.details` 原样透传到 `HttpError.errorResponse.details`，客户端侧无需额外解析器即可取到快照。
+- [2026-02-25] main-side TypeScript 默认不引入 DOM lib：在 httpClient 的 fetch 形状上用 `body?: unknown` 比 `BodyInit` 更稳（避免引入 DOM types）；具体用例里再传 `FormData/Blob` 即可。
