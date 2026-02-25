@@ -7,11 +7,19 @@
 - MUST: Triptych 三栏式是主交互, Folder/Collections 树是结构层权威入口。
 - MUST: 后端边界固定为混合模式: Flow 负责 Auth/Todo/Collections/Sync, Notes 直连 Memos。
 
-为了避免规格分裂, 本文档的口径优先级如下:
+为了避免规格分裂, 本文档的口径优先级如下(冲突时执行者不得自行选择):
 
-1) `apidocs/api.zh-CN.md` 与 `apidocs/collections.zh-CN.md` (接口字段与同步合同)
-2) 本文档 `PLAN.md` (桌面端主规格)
-3) `.sisyphus/drafts/plan-sections/*` (仅作为编排来源, 不再作为最终口径)
+1) `apidocs/*` (接口字段与同步合同), 其中更具体(more specific)、更新(newer)、更贴近主题(topical)的文档优先
+   - MUST: 若 `apidocs/api.zh-CN.md` 与专题合同冲突, 以专题合同为准(例如 Collections 以 `apidocs/collections.zh-CN.md` 为准)。
+   - MUST: 若同一主题同时存在字段级/实体级定义与高层概述, 以字段级/实体级定义为准。
+2) 本文档 `PLAN.md` (Windows 桌面端主规格, 在不改变后端合同的前提下补充 UI/流程/验收约束)
+3) `.sisyphus/drafts/plan-sections/*` (仅作为编排来源, 不作为最终口径)
+
+冲突对照表(用于执行时快速裁决, 不得自行发明第三种口径):
+
+| 冲突项 | 权威文档 | 理由 | 兼容策略 |
+|---|---|---|---|
+| `sync/*` 资源枚举是否包含 `collection_item` | `apidocs/collections.zh-CN.md` | 专题同步合同比汇总枚举更具体, 且直接约束 Collections 的资源命名与 pull changes key | 客户端允许 push `resource="collection_item"` 并处理 pull `changes.collection_items`, 同时对 `apidocs/api.zh-CN.md` 枚举缺口做容错, 禁止用该枚举做硬校验 |
 
 ## 0. 已确认决策与护栏（不变量）
 
@@ -256,11 +264,115 @@ sequenceDiagram
 
 | 领域 | 权威源 | 客户端链路 | 备注 |
 |---|---|---|---|
-| Auth | Flow Backend | Flow | 登录返回 token + server_url(默认 Memos Base) |
+| Auth | Flow Backend | Flow | 登录返回 token + server_url(默认 Memos Base); token 是否可用于直连 Memos 取决于配置/集成状态, 不得假设永远可用 |
 | Todo | Flow Backend | Flow | 在线接口 + sync/pull, sync/push 离线一致 |
 | Collections | Flow Backend | Flow | sync 资源为 collection_item |
 | Sync | Flow Backend | Flow | applied/rejected 与 cursor 合同 |
 | Notes | Memos | 直连 Memos | memoName/name 可能为 memos/123 |
+
+#### 1.4.1.1 Source-of-Truth（SoT）与“禁止隐式双写”护栏
+
+本节定义每个领域的 Source-of-Truth（SoT，事实来源/权威源）以及可执行的读写路径护栏，用于阻止实现者在混合后端下出现“看似更稳”的隐式双写。
+
+硬规则(必须遵守, 违反即数据一致性缺陷):
+
+- MUST: 每次用户操作(一次点击/一次保存/一次批量动作)对同一领域对象只允许选择一个最终写入落点(一个 SoT)。
+- MUST: 默认只写入一个 provider（Memos 或 Flow Notes）。Notes 的 provider 由 Notes 路由决策树裁决, 单次请求只允许一个最终落点。
+- MUST NOT: 禁止隐式双写(silent dual-write/dual-write)。不得在无用户显式意图与无可见证据的情况下, 同时写入 Memos 与 Flow Notes 的同一份 Notes 正文/附件引用。
+- MUST NOT: 禁止“写 A 成功后后台偷偷补写 B”或“写 A 失败后偷偷补写 B 并对用户伪装成 A 成功”的策略。
+- 允许的例外(必须可见且可审计):
+  - MUST: 显式迁移/修复动作(例如用户点击“迁移到 Memos/修复到 Flow Notes”)才允许发生跨 provider 的二次写入, 且 UI 必须展示来源/目标/数量/失败项与可复制 `request_id`。
+  - MUST: 跨领域联动(例如 Notes 获得服务端标识后回填 Collections 引用到 Flow outbox)不属于双写, 但写入仍必须遵守各自领域的 SoT 与写路径。
+
+Ownership Matrix（可执行规则: 领域 -> 权威源(SoT) -> 允许的读路径/写路径）:
+
+| 领域 | 权威源(SoT) | 允许读路径 | 允许写路径 |
+|---|---|---|---|
+| Notes(正文) | Notes Router 选定的 provider(默认 Memos; 降级时 Flow Notes) | 读优先本地 SQLite 镜像/缓存; 需要刷新时从本次选定 provider 拉取并回填 SQLite | 写必须先落本地 SQLite(草稿/待同步/回滚证据)并产生可追踪变更; 后台仅向本次选定 provider 写入一次作为最终落点 |
+| Notes(附件) | 附件原件: 本地 Storage Root `attachments/`; 附件引用绑定到 Notes Router 选定 provider | 读从 `attachments/` 原件或 `attachments-cache/` 缓存; 若缺失则显式下载任务写入 cache(不得在协议层偷偷下载) | 写先把原件落 `attachments/`(原子写); 再仅向本次选定 provider 上传并绑定到该 provider 的 Notes(不得两边都绑) |
+| Todo | 本地 SQLite(离线权威) + Flow Sync(最终一致) | UI 只读 SQLite; sync/pull 回填 SQLite 作为最新可见状态 | UI 写 SQLite + 同一事务写入 `outbox_mutations`; 仅通过 Flow sync/push 上送, 不直写远端状态表 |
+| Collections | 本地 SQLite(离线权威) + Flow Sync(最终一致) | UI 只读 SQLite; sync/pull 回填, Backfill 只读/回填引用 | UI 写 SQLite + 同一事务写入 `outbox_mutations(resource=collection_item, ...)`; 仅通过 Flow sync/push 上送 |
+| UserSettings | 本地设置存储(例如 SQLite `user_settings` 或等价持久化), 与 token/远端解耦 | renderer 通过 IPC 读取; main 进程从本地设置存储读取并返回 | renderer 通过 IPC 发起写入; main 进程写本地设置存储(不得把设置塞进 Flow/Memos 作为影子副本) |
+
+冲突策略(保守, 不静默覆盖用户文本):
+
+- MUST: 任意冲突(在线 409、同步 rejected conflict、并发写入)都必须保留本地副本与服务端快照证据, 不得静默覆盖或丢弃用户文本。
+- MUST: Notes 冲突采用“冲突副本”策略: 保留本地正文为冲突副本(含时间戳与 `request_id`), 原记录回滚为服务端版本; UI 必须可对比与一键复制。
+- MUST: 对于曾经降级写入 Flow Notes 的 Notes, 在 Memos 恢复可用后不得自动把同一内容迁移/补写到 Memos(避免隐式双写与语义漂移)。若需要统一落点, 只能走显式迁移动作。
+
+#### 1.4.1.2 Notes 路由决策树(混合 + 可降级 fallback / Decision Tree)
+
+目标: 默认不走 Flow Notes, Notes 以直连 Memos 为主链路; 只有在严格触发条件下, 单次请求可降级到 Flow Notes 作为可用性兜底。
+
+硬规则(可执行, 必须按顺序裁决):
+
+1) 配置校验(触发条件 -> 选择结果 -> 用户可见反馈)
+   - 触发条件: `memosBaseUrl` 缺失/空字符串, 或标准化后仍不合法(无法解析为 URL, 或 scheme 非 http/https)。
+   - 选择结果: MUST: 本次 Notes 请求走 Flow Notes(降级), 且 MUST NOT 继续尝试直连 Memos。
+   - 用户可见反馈:
+     - MUST: 设置页展示 `Notes Provider = Flow Notes(降级)` 并显示原因 `memos_base_url_invalid`。
+     - MUST: Notes 相关错误提示标注来源 `[FlowNotes]` 并展示可复制 `request_id`。
+
+2) 默认路径(主链路)
+   - 触发条件: 通过(1) 配置校验。
+   - 选择结果: MUST: 本次 Notes 请求先直连 Memos。
+   - 用户可见反馈:
+     - MUST: 设置页展示 `Notes Provider = Memos(直连)`。
+
+3) Memos 鉴权/权限失败降级
+   - 触发条件: 直连 Memos 返回 HTTP 401 或 403。
+   - 选择结果: MUST: 本次请求立即降级到 Flow Notes 重试一次(同一用户操作内不得双写; 仅选择其一作为最终落点)。
+   - 用户可见反馈:
+     - MUST: UI 必须明确提示“`[Memos] 401/403, Notes 已降级到 Flow Notes`”, 并提示用户可行动作: 重新登录/检查 token。
+     - MUST: 错误详情中同时区分来源 `[Memos]` 与 `[FlowNotes]`, 并展示可复制 `request_id`。
+
+4) Memos 网络不可达/超时降级
+   - 触发条件: 直连 Memos 发生网络层失败或超时(例如 DNS 失败、连接被拒绝、TLS 握手失败、无响应超时), 即请求在获得有效 HTTP 响应前失败。
+   - 选择结果: MUST: 本次请求降级到 Flow Notes 重试一次。
+   - 用户可见反馈:
+     - MUST: UI 必须明确提示“`[Memos] 网络不可达/超时, Notes 已降级到 Flow Notes`”。
+     - MUST: 错误详情标注来源并提供可复制 `request_id`。
+
+5) 非降级错误(避免掩盖真实故障)
+   - 触发条件: 直连 Memos 已返回有效 HTTP 响应, 且状态码不是 401/403(例如 400/404/409/429/5xx 等)。
+   - 选择结果: MUST: 不得自动降级到 Flow Notes(避免把 Memos 的真实错误掩盖为“可用性问题”), 直接向用户暴露该错误。
+   - 用户可见反馈:
+     - MUST: 错误提示标注来源 `[Memos]`, 并展示可复制 `request_id`。
+
+可观测性与 request_id 规则(Notes 专用, 硬写死):
+
+- MUST: Notes 的每次请求都生成 `request_id`(UUID 或等价随机标识)并随请求发送 `X-Request-Id`。
+- MUST: 若服务端错误体或响应头携带 `request_id`, UI 以服务端 `request_id` 为准; 否则展示客户端生成的 `request_id`。
+- MUST: 若一次用户操作内发生“直连 Memos 失败 -> 降级到 Flow Notes 重试”, UI/日志必须分别记录并展示两条 request_id, 且至少区分来源(Flow 与 Memos 的 request_id 不得混用; 允许展示为 `memos_request_id`/`flow_request_id` 或 `request_id + source`)。
+- MUST: 设置页在“后端/网络”区域展示当前 Notes Provider(直连/降级)、最近一次降级原因(若有)、最近一次 Notes 请求的 `request_id`(可复制)。
+
+补充: Notes 降级路径关键时序(用户操作内一次降级重试):
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant UI as UI(Notes 页面)
+  participant NR as Notes Router
+  participant M as Memos
+  participant F as Flow Notes
+  participant CB as Clipboard
+
+  Note over UI: 设置页展示 Notes Provider, 最近一次 request_id 可复制
+
+  UI->>NR: 用户触发 Notes 请求(加载/保存)
+  NR->>NR: 配置校验通过, 选择 provider=Memos(直连)
+  NR->>M: 请求 Memos, 发送 X-Request-Id=memos_request_id
+
+  M-->>NR: 失败(网络不可达/超时 或 401/403)
+  NR-->>UI: UI 提示 [Memos] 失败, Notes 已降级到 Flow Notes<br/>显示 Notes Provider=Memos(直连) 与 memos_request_id(可复制)
+  UI->>CB: 复制 memos_request_id(值来自 X-Request-Id)
+
+  NR->>NR: 触发降级, 本次用户操作仅重试一次
+  NR->>F: 重试 Flow Notes, 发送 X-Request-Id=flow_request_id
+  F-->>NR: 成功 + X-Request-Id=flow_request_id
+  NR-->>UI: UI 渲染成功<br/>显示 Notes Provider=Flow Notes(降级) 与 flow_request_id(可复制)
+  UI->>CB: 复制 flow_request_id(值来自 X-Request-Id)
+```
 
 ### 1.4.2 Base URL 与标准化
 
@@ -271,7 +383,8 @@ sequenceDiagram
 ### 1.4.3 鉴权与请求头
 
 - MUST: Flow 调用使用 `Authorization: Bearer <token>`。
-- MUST: Memos 调用同样使用 `Authorization: Bearer <token>`。
+- SHOULD: 直连 Memos 若需要鉴权, 可尝试使用 `Authorization: Bearer <token>`。
+- MUST: 不得假设 Flow token 永远可用于 Memos(其有效性取决于部署配置/集成状态; 参见 `apidocs/to_app_plan.md` 对“取决于配置”的说明), 直连失败由 Notes 路由决策树触发降级策略。
 - MUST: token 不写入日志, 不在 UI 明文展示。
 - SHOULD: 每个请求携带 `X-Request-Id`。
 - SHOULD: Flow 请求携带设备头用于排障与设备识别:
@@ -305,7 +418,9 @@ sequenceDiagram
 - MUST: `sync_state` 持久化 Flow cursor。
 - SHOULD: `jobs` 持久化后台任务去重与恢复。
 - SHOULD: 搜索使用 FTS5, 避免 IPC 查询风暴。
-- MUST: Flow 侧至少落库并支持 tombstone `deleted_at`: `todo_lists`, `todo_items`, `todo_occurrences`, `collection_items`, `user_settings`, `notes`。
+- MUST: Flow 侧至少落库并支持 tombstone `deleted_at`: `todo_lists`, `todo_items`, `todo_occurrences`, `collection_items`, `user_settings`。
+- MUST: `notes` 仅作为 Flow Notes provider 的降级承载(离线镜像/派生缓存): 仅当 Notes Router 单次请求选择 `Flow Notes(降级)` 时, 才允许读写与同步该表, 且必须支持 tombstone `deleted_at`。该表不代表 Flow 是 Notes 的权威源, 也不代表默认路径走 Flow。
+- MUST NOT: 任何实现者不得把 Flow `resource=note` 的 sync 当成默认路径或后台常驻同步, 除非降级触发且本次请求 provider 已裁决为 `Flow Notes(降级)`。
 - MUST: Memos 侧至少落库: `memos`(含 `server_memo_id` 与 `server_memo_name`), `memo_attachments`(含 `local_relpath` 与 `cache_relpath`)。
 
 ### 1.5.4 Notes(Memos) 的标识符约束
@@ -387,7 +502,7 @@ sequenceDiagram
 
 #### 1.6.1.5 Collections 合同漂移容错原则
 
-已知漂移: 某些文档枚举未列出 `collection_item`, 但 Collections 合同明确支持。
+已知漂移: `apidocs/api.zh-CN.md` 的 sync 资源枚举未列出 `collection_item`, 但 `apidocs/collections.zh-CN.md` 的 Collections 合同明确支持并以其为准。
 
 - MUST: 以 Collections 合同为准, push 允许 `resource="collection_item"`。
 - MUST: pull 显式处理 `changes.collection_items`。
@@ -720,13 +835,56 @@ set -euo pipefail
 
 PLAN_FILE="PLAN.md"
 
-mermaid_blocks=$(rg -n "^```mermaid$" "$PLAN_FILE" | wc -l | tr -d ' ')
+mermaid_blocks=$( (rg -n '^```mermaid$' "$PLAN_FILE" || true) | wc -l | tr -d ' ')
 echo "mermaid_blocks=$mermaid_blocks"
 test "$mermaid_blocks" -ge 3
 echo "[PASS] Mermaid 段落数量检查(>=3)"
 ```
 
-### 1.11.5 悬空占位词清零检查
+### 1.11.5 决策树唯一性/矛盾清零/漂移声明检查
+
+PASS 判定: `PLAN.md` 中以下 3 类约束都至少命中 1 行(用于确保 Notes 路由决策树、SoT 护栏与 Collections 漂移声明均被明确写入验收口径)。
+
+```bash
+set -euo pipefail
+
+PLAN_FILE="PLAN.md"
+
+missing=0
+
+decision_tree_pattern='(决策树|fallback|降级)'
+sot_pattern='(禁止.*双写|Source-of-Truth|事实来源|权威源)'
+drift_keyword='collection_item'
+
+decision_tree_hits=$( (rg -n "$decision_tree_pattern" "$PLAN_FILE" || true) | wc -l | tr -d ' ')
+if [ "$decision_tree_hits" -lt 1 ]; then
+  echo "[FAIL] Notes 决策树/降级口径缺失: pattern=$decision_tree_pattern"
+  missing=$((missing + 1))
+else
+  echo "[PASS] Notes 决策树/降级口径 (hits=$decision_tree_hits)"
+fi
+
+sot_hits=$( (rg -n "$sot_pattern" "$PLAN_FILE" || true) | wc -l | tr -d ' ')
+if [ "$sot_hits" -lt 1 ]; then
+  echo "[FAIL] SoT/禁止隐式双写护栏缺失: pattern=$sot_pattern"
+  missing=$((missing + 1))
+else
+  echo "[PASS] SoT/禁止隐式双写护栏 (hits=$sot_hits)"
+fi
+
+drift_hits=$( (rg -n --fixed-strings "$drift_keyword" "$PLAN_FILE" || true) | wc -l | tr -d ' ')
+if [ "$drift_hits" -lt 1 ]; then
+  echo "[FAIL] Collections 漂移声明/资源名缺失: $drift_keyword"
+  missing=$((missing + 1))
+else
+  echo "[PASS] Collections 漂移声明/资源名 $drift_keyword (hits=$drift_hits)"
+fi
+
+test "$missing" -eq 0
+echo "[PASS] 决策树/SoT/漂移声明检查: missing=$missing"
+```
+
+### 1.11.6 悬空占位词清零检查
 
 PASS 判定: `PLAN.md` 中不出现常见占位词(用于防止遗留悬空口径)。为避免验收文本自身触发命中, 该正则在运行时拼接生成。
 
@@ -736,13 +894,13 @@ set -euo pipefail
 PLAN_FILE="PLAN.md"
 
 pattern=$(printf "%s%s%s|%s%s|%s%s" "T" "B" "D" "待" "定" "未" "决")
-hits=$(rg -n "$pattern" "$PLAN_FILE" | wc -l | tr -d ' ')
+hits=$( (rg -n "$pattern" "$PLAN_FILE" || true) | wc -l | tr -d ' ')
 echo "placeholder_hits=$hits"
 test "$hits" -eq 0
 echo "[PASS] 占位词清零检查(0 行命中)"
 ```
 
-### 1.11.6 一键总判定
+### 1.11.7 一键总判定
 
 ```bash
 set -euo pipefail
@@ -771,11 +929,15 @@ rg -n --fixed-strings "memoName" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
 rg -n "\\bencode\\b" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
 rg -n "\\bdecode\\b" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
 
-mermaid_blocks=$(rg -n "^```mermaid$" "$PLAN_FILE" | wc -l | tr -d ' ')
+rg -n "(决策树|fallback|降级)" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+rg -n "(禁止.*双写|Source-of-Truth|事实来源|权威源)" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+rg -n --fixed-strings "collection_item" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+
+mermaid_blocks=$( (rg -n '^```mermaid$' "$PLAN_FILE" || true) | wc -l | tr -d ' ')
 test "$mermaid_blocks" -ge 3 || fail=$((fail + 1))
 
 pattern=$(printf "%s%s%s|%s%s|%s%s" "T" "B" "D" "待" "定" "未" "决")
-hits=$(rg -n "$pattern" "$PLAN_FILE" | wc -l | tr -d ' ')
+hits=$( (rg -n "$pattern" "$PLAN_FILE" || true) | wc -l | tr -d ' ')
 test "$hits" -eq 0 || fail=$((fail + 1))
 
 if [ "$fail" -eq 0 ]; then
