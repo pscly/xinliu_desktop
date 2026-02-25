@@ -2172,7 +2172,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-14-todo-query.txt
   ```
 
-- [ ] 15. Collections 本地读写服务（树结构 + note_ref 混排 + 禁环）
+- [x] 15. Collections 本地读写服务（树结构 + note_ref 混排 + 禁环）
 
   **What to do**:
   - 实现 `collection_item` 的本地写路径：新建 folder/note_ref、重命名、移动、删除/恢复（软删），并同一事务写入 outbox。
