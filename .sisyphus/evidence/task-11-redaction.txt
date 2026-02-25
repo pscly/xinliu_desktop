@@ -1,0 +1,16 @@
+Task 11：脱敏护栏（token/Authorization/绝对路径）
+
+实现：
+- redaction：`src/shared/redaction.ts`
+  - 脱敏 `Authorization: Bearer <token>`
+  - 脱敏 `token=`/`access_token=` 等疑似 token 片段
+  - 脱敏 Windows/Posix 绝对路径
+
+grep 自检：
+- src 下不存在把 Authorization 明文写入日志的实现（本次命中均为测试/函数签名）：
+
+验证输出：
+
+$ npm test
+Test Files  11 passed (11)
+Tests       26 passed (26)
