@@ -1,7 +1,9 @@
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import {
   app,
   BrowserWindow,
+  dialog,
   globalShortcut,
   ipcMain,
   Menu,
@@ -26,6 +28,12 @@ import {
   type CleanupHook,
   runCleanupHooks,
 } from './tray/trayManager';
+
+import {
+  readStorageRootStatus,
+  writeStorageRootConfig,
+} from './storageRoot/storageRootConfig';
+import { migrateStorageRoot } from './storageRoot/migrateStorageRoot';
 
 const closeToTray = createCloseToTrayController();
 
@@ -100,6 +108,30 @@ app.whenReady().then(() => {
   const indexHtmlPath = path.join(__dirname, '../renderer/index.html');
   const preloadPath = path.join(__dirname, '../preload/index.js');
 
+  const storageRootConfigFs = {
+    readFile: async (fileAbsPath: string) => fs.readFile(fileAbsPath, 'utf-8'),
+    writeFile: async (fileAbsPath: string, content: string) =>
+      fs.writeFile(fileAbsPath, content, 'utf-8'),
+    mkdir: async (dirAbsPath: string, options: { recursive: boolean }) => {
+      await fs.mkdir(dirAbsPath, options);
+    },
+    rename: async (fromAbsPath: string, toAbsPath: string) => fs.rename(fromAbsPath, toAbsPath),
+    rm: async (absPath: string, options: { force: boolean }) =>
+      fs.rm(absPath, { force: options.force }),
+  };
+
+  const storageRootMigrationFs = {
+    stat: (p: string) => fs.stat(p),
+    mkdir: async (p: string, options: { recursive: boolean }) => {
+      await fs.mkdir(p, options);
+    },
+    readdir: (p: string) => fs.readdir(p),
+    copyFile: (from: string, to: string) => fs.copyFile(from, to),
+    rename: (from: string, to: string) => fs.rename(from, to),
+    rm: (p: string, options: { recursive: boolean; force: boolean }) => fs.rm(p, options),
+    unlink: (p: string) => fs.unlink(p),
+  };
+
   const quickCaptureWindowManager = createQuickCaptureWindowManager({
     preloadPath,
     indexHtmlPath,
@@ -163,6 +195,69 @@ app.whenReady().then(() => {
       setConfig: (payload) => shortcutsManager.setConfig(payload),
       resetAll: () => shortcutsManager.resetAll(),
       resetOne: (id) => shortcutsManager.resetOne(id),
+    },
+    storageRoot: {
+      getStatus: async () => {
+        const userDataDirAbsPath = app.getPath('userData');
+        return readStorageRootStatus({
+          userDataDirAbsPath,
+          fs: storageRootConfigFs,
+        });
+      },
+      chooseAndMigrate: async () => {
+        const userDataDirAbsPath = app.getPath('userData');
+        const status = await readStorageRootStatus({
+          userDataDirAbsPath,
+          fs: storageRootConfigFs,
+        });
+
+        const oldRootAbsPath = status.storageRootAbsPath;
+        const win = ensureMainWindow();
+        win.show();
+        win.focus();
+
+        const picked = await dialog.showOpenDialog(win, {
+          title: '选择数据存储目录',
+          buttonLabel: '使用此目录',
+          properties: ['openDirectory', 'createDirectory'],
+        });
+
+        if (picked.canceled || picked.filePaths.length === 0) {
+          return { kind: 'cancelled' } as const;
+        }
+
+        const newRootAbsPath = path.resolve(picked.filePaths[0] ?? '');
+        if (newRootAbsPath.length === 0) {
+          return { kind: 'cancelled' } as const;
+        }
+        if (path.resolve(oldRootAbsPath) === newRootAbsPath) {
+          return { kind: 'cancelled' } as const;
+        }
+
+        const migrated = await migrateStorageRoot({
+          oldRootAbsPath,
+          newRootAbsPath,
+          fs: storageRootMigrationFs,
+        });
+
+        await writeStorageRootConfig({
+          userDataDirAbsPath,
+          storageRootAbsPath: newRootAbsPath,
+          fs: storageRootConfigFs,
+        });
+
+        return {
+          kind: 'migrated',
+          oldStorageRootAbsPath: oldRootAbsPath,
+          newStorageRootAbsPath: newRootAbsPath,
+          moved: migrated.moved,
+          restartRequired: true,
+        } as const;
+      },
+      restartNow: async () => {
+        app.relaunch();
+        app.exit(0);
+      },
     },
   });
 

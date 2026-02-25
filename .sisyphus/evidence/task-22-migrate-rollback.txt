@@ -1,0 +1,23 @@
+Task 22 - Storage Root 更改与自动迁移：失败回滚用例证据
+
+可复现命令（Node 20 必须）：
+
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- --reporter verbose -t "失败可回滚"
+
+stdout+stderr（节选包含 PASS 统计与用例名）：
+
+Now using node v20.20.0 (npm v10.8.2)
+
+> xinliu-desktop@0.0.0 test
+> vitest run --reporter verbose -t 失败可回滚
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /root/1codes/xinliu_desktop
+
+ ✓ src/main/storageRoot/migrateStorageRoot.test.ts > src/main/storageRoot/migrateStorageRoot > 失败可回滚：copyFile 第 N 次失败时，新目录不留 staging/半成品，旧目录保持可用
+
+ Test Files  1 passed | 30 skipped (31)
+      Tests  1 passed | 92 skipped (93)
+   Start at  07:06:15
+   Duration  2.17s (transform 2.21s, setup 0ms, collect 4.85s, tests 21ms, environment 6.00s, prepare 3.32s)

@@ -6,6 +6,8 @@ import type {
   ShortcutId,
   ShortcutsSetConfigPayload,
   ShortcutsStatus,
+  StorageRootChooseAndMigrateResult,
+  StorageRootStatus,
 } from '../shared/ipc';
 
 declare global {
@@ -34,6 +36,11 @@ declare global {
         resetAll: () => Promise<IpcResult<IpcVoid>>;
         resetOne: (id: ShortcutId) => Promise<IpcResult<IpcVoid>>;
         onFocusSearch: (listener: () => void) => () => void;
+      };
+      storageRoot: {
+        getStatus: () => Promise<IpcResult<StorageRootStatus>>;
+        chooseAndMigrate: () => Promise<IpcResult<StorageRootChooseAndMigrateResult>>;
+        restartNow: () => Promise<IpcResult<IpcVoid>>;
       };
     };
   }

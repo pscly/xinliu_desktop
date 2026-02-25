@@ -156,3 +156,5 @@
 - 入口要做三重兜底：全局快捷键可能注册失败，托盘也可能被用户忽略或不可用，所以必须再提供应用内入口（放在自定义标题栏的“快捕”按钮最合适，且可给 `data-testid` 作为测试契约）。
 - 键盘交互要可预期：Enter 提交并隐藏，Esc 取消并隐藏。多行输入场景要避免误提交，通常约定 Shift+Enter 换行。
 - 保存逻辑先抽注入点：将“持久化”封成 `saveQuickCapture(content)` 依赖注入，当前可以 no-op，后续再对接 Notes/SQLite，并把真实副作用集中到 main 侧实现。
+
+- [2026-02-26] Task 22（renderer 设置页 Storage Root）：进入设置页时在 `openSettingsRoute()` 内同时刷新 `shortcuts` 与 `storageRoot` 状态（`Promise.all`）；当 `window.xinliu?.storageRoot` 不存在时在 `settings-storage-root` 区块内用 calloutWarn 给出可解释提示并禁用“更改目录”；当 `chooseAndMigrate()` 返回 `kind:'migrated'` 时展示 `data-testid="settings-restart-required"` 与“立即重启”（调用 `restartNow()`）。

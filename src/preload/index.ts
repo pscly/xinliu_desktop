@@ -10,6 +10,8 @@ import type {
   ShortcutsResetOnePayload,
   ShortcutsSetConfigPayload,
   ShortcutsStatus,
+  StorageRootChooseAndMigrateResult,
+  StorageRootStatus,
 } from '../shared/ipc';
 
 function ipcError<T>(code: IpcErrorCode, message: string): IpcResult<T> {
@@ -69,5 +71,15 @@ contextBridge.exposeInMainWorld('xinliu', {
         ipcRenderer.removeListener(IPC_EVENTS.shortcuts.focusSearch, wrapped);
       };
     },
+  },
+  storageRoot: {
+    getStatus: () =>
+      invokeIpc<StorageRootStatus>(IPC_CHANNELS.storageRoot.getStatus, EMPTY_PAYLOAD),
+    chooseAndMigrate: () =>
+      invokeIpc<StorageRootChooseAndMigrateResult>(
+        IPC_CHANNELS.storageRoot.chooseAndMigrate,
+        EMPTY_PAYLOAD
+      ),
+    restartNow: () => invokeIpc<IpcVoid>(IPC_CHANNELS.storageRoot.restartNow, EMPTY_PAYLOAD),
   },
 });

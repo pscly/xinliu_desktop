@@ -10,6 +10,8 @@ import type {
   ShortcutsResetOnePayload,
   ShortcutsSetConfigPayload,
   ShortcutsStatus,
+  StorageRootChooseAndMigrateResult,
+  StorageRootStatus,
 } from '../shared/ipc';
 
 export interface IpcMainInvokeEventLike {
@@ -46,6 +48,13 @@ export interface RegisterIpcHandlersDeps {
     setConfig: (payload: ShortcutsSetConfigPayload) => void;
     resetAll: () => void;
     resetOne: (id: ShortcutId) => void;
+  };
+  storageRoot: {
+    getStatus: () => StorageRootStatus | Promise<StorageRootStatus>;
+    chooseAndMigrate: () =>
+      | StorageRootChooseAndMigrateResult
+      | Promise<StorageRootChooseAndMigrateResult>;
+    restartNow: () => void | Promise<void>;
   };
   now?: () => number;
 }
@@ -250,6 +259,40 @@ function makeHandler<T>(options: {
   };
 }
 
+function makeHandlerWithErrorMessage<T>(options: {
+  channel: IpcChannel;
+  deps: RegisterIpcHandlersDeps;
+  rateLimiter: { allow: (key: string) => boolean };
+  validate: (payload: unknown) => IpcResult<unknown>;
+  run: (validatedPayload: unknown) => T | Promise<T>;
+}): IpcMainHandler {
+  return async (_event, payload) => {
+    if (!options.rateLimiter.allow(options.channel)) {
+      return err('RATE_LIMITED', '操作过于频繁');
+    }
+
+    const validated = options.validate(payload);
+    if (!validated.ok) {
+      return validated;
+    }
+
+    try {
+      const value = await options.run(validated.value);
+      return ok(value);
+    } catch (error) {
+      const message =
+        typeof error === 'object' &&
+        error !== null &&
+        'message' in error &&
+        typeof (error as { message: unknown }).message === 'string' &&
+        (error as { message: string }).message.trim().length > 0
+          ? (error as { message: string }).message
+          : '操作失败';
+      return err('INTERNAL_ERROR', message);
+    }
+  };
+}
+
 export function registerIpcHandlers(
   ipcMain: IpcMainLike,
   deps: RegisterIpcHandlersDeps
@@ -419,6 +462,42 @@ export function registerIpcHandlers(
       run: (validatedPayload) => {
         const v = validatedPayload as ShortcutsResetOnePayload;
         deps.shortcuts.resetOne(v.id);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.storageRoot.getStatus,
+    makeHandlerWithErrorMessage<StorageRootStatus>({
+      channel: IPC_CHANNELS.storageRoot.getStatus,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => deps.storageRoot.getStatus(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.storageRoot.chooseAndMigrate,
+    makeHandlerWithErrorMessage<StorageRootChooseAndMigrateResult>({
+      channel: IPC_CHANNELS.storageRoot.chooseAndMigrate,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => deps.storageRoot.chooseAndMigrate(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.storageRoot.restartNow,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.storageRoot.restartNow,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        await deps.storageRoot.restartNow();
         return null;
       },
     })

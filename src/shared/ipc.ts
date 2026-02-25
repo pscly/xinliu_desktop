@@ -19,6 +19,11 @@ export const IPC_CHANNELS = {
     resetAll: `${IPC_NAMESPACE}:shortcuts:resetAll`,
     resetOne: `${IPC_NAMESPACE}:shortcuts:resetOne`,
   },
+  storageRoot: {
+    getStatus: `${IPC_NAMESPACE}:storageRoot:getStatus`,
+    chooseAndMigrate: `${IPC_NAMESPACE}:storageRoot:chooseAndMigrate`,
+    restartNow: `${IPC_NAMESPACE}:storageRoot:restartNow`,
+  },
 } as const;
 
 export const IPC_EVENTS = {
@@ -36,7 +41,14 @@ export type IpcChannelQuickCapture =
 export type IpcChannelShortcuts =
   (typeof IPC_CHANNELS.shortcuts)[keyof typeof IPC_CHANNELS.shortcuts];
 
-export type IpcChannel = IpcChannelWindow | IpcChannelQuickCapture | IpcChannelShortcuts;
+export type IpcChannelStorageRoot =
+  (typeof IPC_CHANNELS.storageRoot)[keyof typeof IPC_CHANNELS.storageRoot];
+
+export type IpcChannel =
+  | IpcChannelWindow
+  | IpcChannelQuickCapture
+  | IpcChannelShortcuts
+  | IpcChannelStorageRoot;
 
 export type IpcErrorCode =
   | 'VALIDATION_ERROR'
@@ -96,3 +108,24 @@ export interface ShortcutsResetOnePayload {
 export interface QuickCaptureSubmitPayload {
   content: string;
 }
+
+export interface StorageRootStatus {
+  storageRootAbsPath: string;
+  isDefault: boolean;
+}
+
+export type StorageRootChooseAndMigrateResult =
+  | {
+      kind: 'cancelled';
+    }
+  | {
+      kind: 'migrated';
+      oldStorageRootAbsPath: string;
+      newStorageRootAbsPath: string;
+      moved: {
+        db: boolean;
+        attachmentsCache: boolean;
+        logs: boolean;
+      };
+      restartRequired: true;
+    };

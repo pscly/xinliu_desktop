@@ -1,0 +1,23 @@
+Task 22 - Storage Root 更改与自动迁移：成功迁移用例证据
+
+可复现命令（Node 20 必须）：
+
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- --reporter verbose -t "成功迁移"
+
+stdout+stderr（节选包含 PASS 统计与用例名）：
+
+Now using node v20.20.0 (npm v10.8.2)
+
+> xinliu-desktop@0.0.0 test
+> vitest run --reporter verbose -t 成功迁移
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /root/1codes/xinliu_desktop
+
+ ✓ src/main/storageRoot/migrateStorageRoot.test.ts > src/main/storageRoot/migrateStorageRoot > 成功迁移：复制主库/WAL/SHM + attachments-cache + logs，旧目录不变
+
+ Test Files  1 passed | 30 skipped (31)
+      Tests  1 passed | 92 skipped (93)
+   Start at  07:06:05
+   Duration  2.21s (transform 2.05s, setup 0ms, collect 4.88s, tests 27ms, environment 6.27s, prepare 3.25s)

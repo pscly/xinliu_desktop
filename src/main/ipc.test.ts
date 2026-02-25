@@ -39,6 +39,11 @@ describe('src/main/ipc', () => {
         resetAll: () => {},
         resetOne: () => {},
       },
+      storageRoot: {
+        getStatus: () => ({ storageRootAbsPath: '/tmp/xinliu', isDefault: true }),
+        chooseAndMigrate: () => ({ kind: 'cancelled' }),
+        restartNow: () => {},
+      },
       now: () => 0,
     });
 
@@ -47,6 +52,7 @@ describe('src/main/ipc', () => {
       ...Object.values(IPC_CHANNELS.window),
       ...Object.values(IPC_CHANNELS.quickCapture),
       ...Object.values(IPC_CHANNELS.shortcuts),
+      ...Object.values(IPC_CHANNELS.storageRoot),
     ].sort();
     expect(registered).toEqual(expected);
 
@@ -75,6 +81,11 @@ describe('src/main/ipc', () => {
         setConfig: () => {},
         resetAll: () => {},
         resetOne: () => {},
+      },
+      storageRoot: {
+        getStatus: () => ({ storageRootAbsPath: '/tmp/xinliu', isDefault: true }),
+        chooseAndMigrate: () => ({ kind: 'cancelled' }),
+        restartNow: () => {},
       },
       now: () => 0,
     });
@@ -110,6 +121,11 @@ describe('src/main/ipc', () => {
         setConfig: () => {},
         resetAll: () => {},
         resetOne: () => {},
+      },
+      storageRoot: {
+        getStatus: () => ({ storageRootAbsPath: '/tmp/xinliu', isDefault: true }),
+        chooseAndMigrate: () => ({ kind: 'cancelled' }),
+        restartNow: () => {},
       },
       now: () => 0,
     });

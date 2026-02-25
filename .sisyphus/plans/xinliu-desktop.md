@@ -1879,7 +1879,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-21-e2e.png
   ```
 
-- [ ] 22. Storage Root 更改与自动迁移（含回滚 + 重启提示）
+- [x] 22. Storage Root 更改与自动迁移（含回滚 + 重启提示）
 
   **What to do**:
   - 设置页提供“数据存储目录”展示与“更改目录”按钮。

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { ShortcutId, ShortcutStatusEntry, ShortcutsStatus } from '../shared/ipc';
+import type {
+  ShortcutId,
+  ShortcutStatusEntry,
+  ShortcutsStatus,
+  StorageRootChooseAndMigrateResult,
+  StorageRootStatus,
+} from '../shared/ipc';
 
 import { QuickCaptureWindow } from './QuickCaptureWindow';
 
@@ -22,6 +28,7 @@ const ROUTES: RouteMeta[] = [
 
 type XinliuWindowApi = NonNullable<Window['xinliu']>['window'];
 type XinliuShortcutsApi = NonNullable<Window['xinliu']>['shortcuts'];
+type XinliuStorageRootApi = NonNullable<Window['xinliu']>['storageRoot'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
   return window.xinliu?.window;
@@ -29,6 +36,10 @@ function getXinliuWindowApi(): XinliuWindowApi | undefined {
 
 function getXinliuShortcutsApi(): XinliuShortcutsApi | undefined {
   return window.xinliu?.shortcuts;
+}
+
+function getXinliuStorageRootApi(): XinliuStorageRootApi | undefined {
+  return window.xinliu?.storageRoot;
 }
 
 async function safeOpenQuickCapture() {
@@ -297,10 +308,17 @@ function SettingsContent(props: {
   shortcutsStatus: ShortcutsStatus | null;
   shortcutsError: string | null;
   shortcutsDraft: Record<string, { accelerator: string; enabled: boolean }>;
+  storageRootStatus: StorageRootStatus | null;
+  storageRootError: string | null;
+  storageRootApiAvailable: boolean;
+  storageRootRestartRequired: boolean;
+  storageRootLastMigration: (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null;
   onUpdateDraft: (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => void;
   onSaveOne: (id: ShortcutId) => void;
   onResetOne: (id: ShortcutId) => void;
   onResetAll: () => void;
+  onChooseAndMigrateStorageRoot: () => void;
+  onRestartNow: () => void;
 }) {
   return (
     <div className="contentPlaceholder">
@@ -310,6 +328,15 @@ function SettingsContent(props: {
       </div>
 
       <div className="settingsStack">
+        <SettingsStorageRootSection
+          status={props.storageRootStatus}
+          error={props.storageRootError}
+          apiAvailable={props.storageRootApiAvailable}
+          restartRequired={props.storageRootRestartRequired}
+          lastMigration={props.storageRootLastMigration}
+          onChooseAndMigrate={props.onChooseAndMigrateStorageRoot}
+          onRestartNow={props.onRestartNow}
+        />
         <SettingsShortcutsSection
           status={props.shortcutsStatus}
           error={props.shortcutsError}
@@ -321,6 +348,65 @@ function SettingsContent(props: {
         />
       </div>
     </div>
+  );
+}
+
+function SettingsStorageRootSection(props: {
+  status: StorageRootStatus | null;
+  error: string | null;
+  apiAvailable: boolean;
+  restartRequired: boolean;
+  lastMigration: (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null;
+  onChooseAndMigrate: () => void;
+  onRestartNow: () => void;
+}) {
+  return (
+    <section className="settingsSection" data-testid="settings-storage-root">
+      <div className="settingsSectionHeader">
+        <div>
+          <div className="settingsSectionTitle">数据存储目录</div>
+          <div className="settingsSectionSub">用于存放数据库、附件缓存与日志等本地数据</div>
+        </div>
+
+        <button
+          type="button"
+          className="btn"
+          onClick={() => props.onChooseAndMigrate()}
+          disabled={!props.apiAvailable}
+        >
+          更改目录
+        </button>
+      </div>
+
+      <div className="rightCardBody">
+        <div className="kvRow">
+          <div className="k">当前目录</div>
+          <div className="v">{props.status?.storageRootAbsPath ?? '-'}</div>
+        </div>
+        <div className="kvRow">
+          <div className="k">是否默认</div>
+          <div className="v">{props.status ? (props.status.isDefault ? '是' : '否') : '-'}</div>
+        </div>
+      </div>
+
+      {props.error ? <div className="callout calloutWarn">{props.error}</div> : null}
+
+      {props.restartRequired ? (
+        <div className="callout calloutWarn" data-testid="settings-restart-required">
+          <div>目录迁移已完成。为确保所有文件句柄正确释放，请重启应用后继续使用。</div>
+          {props.lastMigration ? (
+            <div className="fine">
+              迁移：{props.lastMigration.oldStorageRootAbsPath} → {props.lastMigration.newStorageRootAbsPath}
+            </div>
+          ) : null}
+          <div className="btnRow">
+            <button type="button" className="btn" onClick={() => props.onRestartNow()}>
+              立即重启
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -388,6 +474,13 @@ function MainWindowApp() {
     Record<string, { accelerator: string; enabled: boolean }>
   >({});
 
+  const [storageRootStatus, setStorageRootStatus] = useState<StorageRootStatus | null>(null);
+  const [storageRootError, setStorageRootError] = useState<string | null>(null);
+  const [storageRootRestartRequired, setStorageRootRestartRequired] = useState(false);
+  const [storageRootLastMigration, setStorageRootLastMigration] = useState<
+    (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null
+  >(null);
+
   const refreshShortcuts = async () => {
     const api = getXinliuShortcutsApi();
     if (!api) {
@@ -411,6 +504,25 @@ function MainWindowApp() {
       next[entry.id] = { accelerator: entry.accelerator, enabled: entry.enabled };
     }
     setShortcutsDraft(next);
+  };
+
+  const refreshStorageRoot = async () => {
+    const api = getXinliuStorageRootApi();
+    if (!api) {
+      setStorageRootStatus(null);
+      setStorageRootError('数据存储目录 API 不可用（preload 未注入）');
+      return;
+    }
+
+    const res = await api.getStatus();
+    if (!res.ok) {
+      setStorageRootStatus(null);
+      setStorageRootError(`${res.error.message}（${res.error.code}）`);
+      return;
+    }
+
+    setStorageRootError(null);
+    setStorageRootStatus(res.value);
   };
 
   const updateDraft = (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => {
@@ -470,7 +582,49 @@ function MainWindowApp() {
 
   const openSettingsRoute = () => {
     setRoute('settings');
-    void refreshShortcuts();
+    void Promise.all([refreshShortcuts(), refreshStorageRoot()]);
+  };
+
+  const chooseAndMigrateStorageRoot = async () => {
+    const api = getXinliuStorageRootApi();
+    const fn = api?.chooseAndMigrate;
+    if (typeof fn !== 'function') {
+      setStorageRootError('数据存储目录 API 不可用（preload 未注入）');
+      return;
+    }
+
+    try {
+      const res = await fn();
+      if (!res.ok) {
+        setStorageRootError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setStorageRootError(null);
+      if (res.value.kind === 'migrated') {
+        setStorageRootLastMigration(res.value);
+        setStorageRootRestartRequired(true);
+        setStorageRootStatus({ storageRootAbsPath: res.value.newStorageRootAbsPath, isDefault: false });
+      }
+    } catch (e) {
+      setStorageRootError(`更改目录异常：${String(e)}`);
+    }
+  };
+
+  const restartNow = async () => {
+    const api = getXinliuStorageRootApi();
+    const fn = api?.restartNow;
+    if (typeof fn !== 'function') {
+      setStorageRootError('重启 API 不可用（preload 未注入）');
+      return;
+    }
+    try {
+      const res = await fn();
+      if (!res.ok) {
+        setStorageRootError(`${res.error.message}（${res.error.code}）`);
+      }
+    } catch (e) {
+      setStorageRootError(`重启异常：${String(e)}`);
+    }
   };
 
   return (
@@ -538,10 +692,17 @@ function MainWindowApp() {
               shortcutsStatus={shortcutsStatus}
               shortcutsError={shortcutsError}
               shortcutsDraft={shortcutsDraft}
+              storageRootStatus={storageRootStatus}
+              storageRootError={storageRootError}
+              storageRootApiAvailable={Boolean(getXinliuStorageRootApi())}
+              storageRootRestartRequired={storageRootRestartRequired}
+              storageRootLastMigration={storageRootLastMigration}
               onUpdateDraft={updateDraft}
               onSaveOne={(id) => void saveOne(id)}
               onResetOne={(id) => void resetOne(id)}
               onResetAll={() => void resetAll()}
+              onChooseAndMigrateStorageRoot={() => void chooseAndMigrateStorageRoot()}
+              onRestartNow={() => void restartNow()}
             />
           ) : (
             <DefaultRoutePlaceholder routeMeta={routeMeta} />
