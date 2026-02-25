@@ -1,9 +1,9 @@
 {
-  "active_plan": "/root/1codes/xinliu_desktop/.sisyphus/plans/plan-md-fixups-hybrid-fallback.md",
-  "started_at": "2026-02-24T21:56:57.011Z",
+  "active_plan": "/root/1codes/xinliu_desktop/.sisyphus/plans/xinliu-desktop.md",
+  "started_at": "2026-02-25T03:05:19.611Z",
   "session_ids": [
-    "ses_36e583c9cffeTlDSGirWSu4ffM"
+    "ses_36d80d677ffeuGZxHHxUT62hTO"
   ],
-  "plan_name": "plan-md-fixups-hybrid-fallback",
+  "plan_name": "xinliu-desktop",
   "agent": "atlas"
 }

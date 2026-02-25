@@ -1,0 +1,36 @@
+# learnings
+
+- （持续追加）
+
+- [2026-02-25] 脚手架：Electron(main/preload) + Vite(renderer) + React + TypeScript；main/preload 用 `tsc` 编译到 `dist/`，renderer 用 `vite build` 输出到 `dist/renderer/`。
+- [2026-02-25] 目录约定已固定为 `src/main`、`src/preload`、`src/renderer`、`src/shared`；Electron 入口为 `src/main/main.ts`，preload 为 `src/preload/index.ts`。
+- [2026-02-25] 合同关键点在代码里可直接检索：`frame: false`（无边框），`nodeIntegration: false` + `contextIsolation: true`（renderer 禁 Node）。
+- [2026-02-25] npm scripts：`typecheck` 与 `build` 都只做编译/构建，不会启动 Electron GUI；验证命令为 `npm ci` / `npm run typecheck` / `npm run build`。
+- [2026-02-25] TypeScript 语言服务选用“就近 tsconfig.json”策略：在 `src/main/tsconfig.json`、`src/preload/tsconfig.json`、`src/renderer/tsconfig.json` 放置最小配置，避免不同层的编译选项互相污染。
+- [2026-02-25] Vite 配置文件使用 `vite.config.mts`（而不是 `vite.config.ts`）：在 `package.json` 未设 `type=module` 的情况下，`.mts` 可强制按 ESM 解析，从而避免 TypeScript 将 `vite` 解析到 `exports.require` 导致 `defineConfig` 类型丢失。
+- [2026-02-25] 本地存在 `.npmrc` 的 `electron_mirror/electron-mirror` 配置会触发 npm 警告（不影响构建通过，但未来 npm 大版本可能不再支持该字段）。
+
+- [2026-02-25] 修正：最终保留 `vite.config.ts`（不使用 `.mts`）。为避免 TypeScript 在默认 CommonJS 语义下走 `vite` 的 `exports.require` 分支，根 `tsconfig.json` 采用 `moduleResolution=Bundler` 进行配置文件的类型解析。
+
+
+## [2026-02-25 10:10] - Playwright + Electron 在 GitHub Actions (windows-latest) 跑 E2E
+
+- Electron 启动方式：用 Playwright 的实验性 `_electron.launch({ args, executablePath, env })`；在 CI 上优先用 `args` 指向主进程入口脚本，或用 `executablePath` 指向打包后的 `.exe`（便于贴近真实发布形态）。
+- 工件策略：Playwright Test 的 `use.screenshot / use.trace / use.video` 会把输出放到 `test-results/`，HTML 报告在 `playwright-report/`；Actions 里用 `actions/upload-artifact` 统一打包上传。
+- Windows 易踩坑：窗口 focus 不一定把窗口置顶（Windows 行为限制）；Electron 进程若“最小化到托盘/后台常驻”，CI 会卡在 teardown，必要时用强制结束进程作为兜底（见 Playwright Issue 中的 taskkill workaround 思路）。
+- 快捷键跨平台：在测试里尽量用 `ControlOrMeta` 以兼容 Windows/Linux 与 macOS。
+- 稳定选择器：统一要求 UI 组件提供 `data-testid`，测试全部走 `page.getByTestId()` 或 `locator.getByTestId()`。
+
+
+
+## [2026-02-25 10:24] - electron-builder(NSIS) + electron-updater(GitHub Releases) 的稳定版自动更新配置要点
+
+- 最小构建配置：`appId`（固定 `cc.pscly.xinliu.desktop`）、`productName`（心流）、`win.target=nsis`、`publish.provider=github`；默认更新通道是 `latest`，GitHub tag 默认需要 `v` 前缀。
+- 更新元数据：Windows(NSIS) 使用 `latest.yml`；electron-builder 会生成并随产物一起上传；应用内会自动生成 `resources/app-update.yml`（内部文件，用于 updater 读发布配置）。
+- 差分更新/Blockmap：构建产物会包含对应的 `.blockmap`，用于差分下载；GitHub provider 在某些场景下需要关注旧 blockmap 的可下载性（必要时可禁用差分或配置 old blockmap base URL）。
+- 不做签名的风险：Windows 侧 `verifyUpdateCodeSignature` 默认开启；若产物未签名，可能需要显式关闭该校验，否则更新可能被拦截；同时 Windows SmartScreen/Smart App Control 对“无信誉/未签名”应用更容易弹警告或阻止运行。
+
+
+## [2026-02-25 11:40] - 避免 Electron 安装脚本导致的 npm install/ci 网络波动
+
+- 若遇到 Electron 二进制下载（postinstall）因网络波动失败（例如 `socket hang up`），可以先用 `npm install --ignore-scripts` 在不执行安装脚本的情况下把依赖装齐（含 TypeScript types），确保 `npm run typecheck` 等纯编译步骤可跑通；后续在网络稳定时再单独执行带脚本的安装/重装。
