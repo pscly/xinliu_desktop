@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.DS_Store
+
+# 本地环境文件（不要入库）
+.env
+.env.*

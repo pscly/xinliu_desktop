@@ -1,0 +1,90 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f4ef;
+  --ink: #151515;
+  --muted: rgba(21, 21, 21, 0.62);
+  --paper: rgba(255, 255, 255, 0.85);
+  --stroke: rgba(21, 21, 21, 0.12);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    ui-serif,
+    'Noto Serif SC',
+    'Source Han Serif SC',
+    'Songti SC',
+    serif;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 650px at 25% 20%, rgba(0, 0, 0, 0.06), transparent 60%),
+    radial-gradient(900px 520px at 80% 10%, rgba(0, 0, 0, 0.04), transparent 55%),
+    var(--bg);
+}
+
+.app {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.header {
+  padding: 28px 28px 10px;
+}
+
+.brand {
+  font-size: 28px;
+  letter-spacing: 0.08em;
+}
+
+.sub {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.main {
+  padding: 18px 28px 28px;
+}
+
+.card {
+  max-width: 560px;
+  background: var(--paper);
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  padding: 18px 18px 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.cardTitle {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px dashed var(--stroke);
+}
+
+.kv:first-of-type {
+  border-top: 0;
+}
+
+.k {
+  color: var(--muted);
+}
+
+.v {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 13px;
+}

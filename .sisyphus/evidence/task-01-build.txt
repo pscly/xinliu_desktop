@@ -1,0 +1,45 @@
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+added 149 packages, and audited 150 packages in 10s
+
+24 packages are looking for funding
+  run `npm fund` for details
+
+3 moderate severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> xinliu-desktop@0.0.0 typecheck
+> tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> xinliu-desktop@0.0.0 build
+> npm run build:electron && npm run build:renderer
+
+npm warn Unknown env config "electron-mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> xinliu-desktop@0.0.0 build:electron
+> tsc -p tsconfig.electron.json
+
+npm warn Unknown env config "electron-mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "electron_mirror". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> xinliu-desktop@0.0.0 build:renderer
+> vite build
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+vite v5.4.21 building for production...
+transforming...
+✓ 31 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/renderer/index.html                   0.39 kB │ gzip:  0.28 kB
+dist/renderer/assets/index-DIgBORi0.css    1.21 kB │ gzip:  0.64 kB
+dist/renderer/assets/index-C9PeZ_to.js   143.52 kB │ gzip: 46.03 kB
+✓ built in 1.00s
