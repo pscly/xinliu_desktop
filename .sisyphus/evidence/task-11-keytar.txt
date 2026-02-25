@@ -1,0 +1,12 @@
+Task 11：鉴权凭据（keytar 优先，fallback 不落盘）
+
+实现：
+- TokenStore：`src/main/auth/tokenStore.ts`
+  - 可注入 keytar mock（用于单测）
+  - 未安装/不可用 keytar 时，仅使用进程内内存保存 token（不写文件/不写 SQLite）
+
+验证输出：
+
+$ npm test
+Test Files  11 passed (11)
+Tests       26 passed (26)
