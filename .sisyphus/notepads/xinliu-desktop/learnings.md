@@ -44,6 +44,8 @@
 - renderer 组件测试使用 jsdom；若用 Node 环境会出现 `ReferenceError: document is not defined`。
 - `npm` 可能输出 `.npmrc` 中 `electron_mirror` unknown config 警告；当前不影响 `lint/test/typecheck` 通过，但未来 npm 大版本可能需要迁移/清理该字段。
 
+- [2026-02-25] Flow sync/push 的“成功”必须逐条以响应体 `applied[]/rejected[]` 判定并回写 outbox（不能以 HTTP 200 作为成功标准）；同时把 `X-Request-Id`（或 ErrorResponse.request_id）落到 outbox.request_id，便于后续诊断面板按条目追溯。
+
 ## [2026-02-25 12:21] - GitHub Actions CI（windows-latest）基础配置
 
 - 固定 `runs-on: windows-latest`，Node 版本使用 `actions/setup-node@v4` 的 `node-version: 20`，并启用 `cache: npm`。
