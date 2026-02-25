@@ -1,0 +1,15 @@
+Task 51 - Flow Notes（降级 provider）本地表 Schema + 使用边界（当本次请求最终 provider=flow_notes 时允许访问本地 notes 表：包含 kind='degraded' 的 fallback（degradeReason）以及 kind='single' 且 provider='flow_notes'（providerReason））
+
+验证命令与关键输出：
+
+$ node -v
+v24.13.0
+
+$ npm test
+Test Files  25 passed (25)
+Tests       70 passed (70)
+✓ src/main/db/flowNotesDegradedNotes.test.ts (3 tests)
+
+$ npm run build
+✓ built in 982ms
+(exit 0)

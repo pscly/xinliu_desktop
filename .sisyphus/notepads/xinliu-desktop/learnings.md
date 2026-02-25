@@ -108,3 +108,11 @@
 - 服务端 memo id 类型：`memos.server_memo_id` 必须是 `TEXT NULL`（兼容 uuid/自定义 id 等非纯数字形态）。
 - 资源名与路径护栏：`server_memo_name`（形如 `memos/123`）仅作为服务端资源名存储，禁止用于本地文件名/路径片段拼接（包括 `path.join/resolve`）。
 - 附件关联：`memo_attachments.memo_local_uuid` 外键引用 `memos.local_uuid`，并使用 `ON DELETE CASCADE`，确保删除 memo 时附件记录可自动清理。
+
+## [2026-02-25] - Task 51 Flow Notes（降级 provider）本地 notes 表 + 边界守卫
+
+- SQLite 迁移 v5 新增 `notes` 表（专用于 FlowNotes 降级路径），必须包含 tombstone `deleted_at`，并额外保留诊断字段：`provider_reason`、`last_request_id`、`last_error`。
+- “仅降级时可读写”的实现模式：让 repo 的每次读写都显式接收 Notes Router 的 per-request 路由结果，并在运行时要求 `kind==='degraded'`；否则抛中文可解释错误，确保默认路径不可能误写入降级表。
+- DB 相关测试必须在 Node 环境跑（better-sqlite3）；Vitest 里用文件头 `// @vitest-environment node` 是必要指令（不是普通注释）。
+
+- [2026-02-25] 修正：Task 51 的 notes 表边界守卫应以“Notes Router 本次请求最终 provider”为准：只要最终 `provider==='flow_notes'` 即允许访问（包含 `kind='degraded'` fallback 与 `kind='single' && provider='flow_notes'`）；并据 `degradeReason/providerReason` 选择对应的 `provider_reason`。

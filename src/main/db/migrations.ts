@@ -259,6 +259,35 @@ export const MIGRATIONS: readonly SqliteMigration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: 'notes_flow_notes_degraded_local_cache',
+    up: (db) => {
+      db.exec(`
+        -- Flow Notes 降级 provider 专用本地表。
+        -- 使用边界：仅当本次请求路由结果为 Flow Notes(degraded) 时才允许读写（由代码层守卫强制）。
+        CREATE TABLE IF NOT EXISTS notes (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          body_md TEXT NOT NULL,
+          tags_json TEXT NOT NULL,
+          client_updated_at_ms INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          deleted_at TEXT NULL,
+
+          -- 诊断/回放字段（至少包含 request_id/lastError/providerReason）。
+          provider_reason TEXT NOT NULL,
+          last_request_id TEXT NULL,
+          last_error TEXT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_notes_deleted_at ON notes(deleted_at);
+        CREATE INDEX IF NOT EXISTS idx_notes_client_updated_at_ms
+          ON notes(client_updated_at_ms);
+      `);
+    },
+  },
 ];
 
 export function applyMigrations(
