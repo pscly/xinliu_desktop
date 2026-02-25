@@ -1,0 +1,51 @@
+Task 42：登录/登出与账号状态（Flow Auth：token 获取、存储、失效处理）
+
+实现范围：main 层用例 + 单测（不涉及 renderer/UI/IPC）。
+
+复现命令：
+
+1) 仅跑 Task 42：
+
+```bash
+npm test -- -t "Task 42"
+```
+
+关键通过行（节选）：
+
+```text
+✓ src/main/auth/authService.test.ts (3 tests)
+Test Files  1 passed
+Tests       3 passed
+```
+
+2) 全量测试（验收要求 npm test 通过）：
+
+```bash
+npm test
+```
+
+关键通过行（节选）：
+
+```text
+Test Files  24 passed (24)
+Tests       67 passed (67)
+```
+
+3) 类型检查：
+
+```bash
+npm run typecheck
+```
+
+关键通过行（节选）：
+
+```text
+> tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+```
+
+备注：若在新环境里出现 better-sqlite3 的 Node ABI 不匹配错误，需要先准备编译工具链并重建 native 模块：
+
+```bash
+apt-get update && apt-get install -y build-essential
+npm rebuild better-sqlite3
+```

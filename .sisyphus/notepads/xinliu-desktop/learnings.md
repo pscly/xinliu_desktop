@@ -83,6 +83,10 @@
 - [2026-02-25] Notes(Memos) 本地落库：在 SQLite 迁移 v4 创建 `memos` 与 `memo_attachments` 表；`memos.sync_status` 必须用 `CHECK(sync_status IN (...))` 受控值域（LOCAL_ONLY/DIRTY/SYNCING/SYNCED/FAILED），避免状态机字段被写入任意字符串。
 - [2026-02-25] better-sqlite3 在 CHECK 约束失败时，抛错信息可能是 `CHECK constraint failed: ...`（不一定包含 `SQLITE_CONSTRAINT` 字样）；单测断言建议匹配 `check constraint failed` 或 `err.code`。
 
+- [2026-02-25] Vitest 通过 npm script 传参时，必须用 `npm test -- -t "..."`（`--` 后的参数才会透传给 vitest）；否则 npm 会把 `-t` 当成自身参数，导致筛选不生效。
+- [2026-02-25] 401 unauthorized 的稳定判定模式：`status===401 || errorResponse.error==='unauthorized'`；建议在“用例层/状态机”集中处理并切到 `reauthRequired`，UI/IPC 只读状态。
+- [2026-02-25] 若出现 better-sqlite3 的 Node ABI 不匹配（`NODE_MODULE_VERSION`），可通过 `npm rebuild better-sqlite3` 修复；Linux 环境需要先安装编译工具链（例如 `build-essential`）。
+
 ## [2026-02-25] - Memos API Client（Task 34）约定
 
 - API base path 固定为 `/api/v1`。在复用 `createHttpClient` 的情况下，推荐将实例 `baseUrl` 传入为“纯实例地址”（例如 `https://memos.example.com`），并在每个请求的 `pathname` 上显式带上 `/api/v1/...`（对齐现有 `FlowClient` 的写法）。
