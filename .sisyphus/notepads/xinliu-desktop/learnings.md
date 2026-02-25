@@ -79,3 +79,9 @@
 - [2026-02-25] memoName 编码落地：
   - 放进路由/URL 参数：用 `encodeURIComponent` / `decodeURIComponent`（确保 `memos/123` 中的 `/` 被编码为 `%2F`，可 round-trip）。
   - 放进本地 KV key：用 base64url(utf8)，输出必须不含 `+`、`/`、`=`；解码时根据长度 `% 4` 补齐 `=` padding。
+
+## [2026-02-25] - Memos API Client（Task 34）约定
+
+- API base path 固定为 `/api/v1`。在复用 `createHttpClient` 的情况下，推荐将实例 `baseUrl` 传入为“纯实例地址”（例如 `https://memos.example.com`），并在每个请求的 `pathname` 上显式带上 `/api/v1/...`（对齐现有 `FlowClient` 的写法）。
+- `updateMask` 是 Memos 的强约束：UpdateMemo/UpdateAttachment 必须提供 query 参数 `updateMask`（field-mask，逗号分隔）；缺失/空值时应在 client 层直接抛出中文可解释错误，避免误覆盖字段。
+- 资源名（resource name）拼接规则：当输入是 `memos/123` 或 `attachments/1` 这种资源名时，应当拼成 API pathname（例如 `/api/v1/memos/123`），并且禁止把资源名当成本地文件路径片段使用。
