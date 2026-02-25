@@ -1,0 +1,26 @@
+Task 38：Memos Sync Job - 附件上传顺序
+
+验证目标：
+- 必须先 CreateAttachment 拿到服务端 attachment.name
+- 再 SetMemoAttachments 绑定到 memo
+
+运行命令：
+
+```bash
+npm test -- -t "src/main/memos/memosSyncJob"
+```
+
+关键输出（节选）：
+
+```text
+✓ src/main/memos/memosSyncJob.test.ts (5 tests)
+
+Test Files  1 passed | 26 skipped (27)
+     Tests  5 passed | 72 skipped (77)
+```
+
+关键断言点（来自单元测试 `src/main/memos/memosSyncJob.test.ts`）：
+- 调用序列严格为：CreateMemo -> CreateAttachment:att_a -> CreateAttachment:att_b -> SetMemoAttachments
+- SetMemoAttachments 的 attachments.name 必须为服务端返回的 attachment name（attachments/<id>）
+
+PASS: CreateAttachment 在 SetMemoAttachments 之前执行（顺序受测且通过）

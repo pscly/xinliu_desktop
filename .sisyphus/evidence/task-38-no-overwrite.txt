@@ -1,0 +1,27 @@
+Task 38：Memos Sync Job - 回拉合并保护本地编辑
+
+验证目标：
+- 回拉/刷新 server memo 时，不得覆盖本地正在编辑中的内容
+- 当本地 memo.sync_status 为 DIRTY 或 SYNCING 时：
+  - 禁止覆盖 content/visibility
+  - 仅允许回填安全元数据（例如 server_memo_name/server_memo_id）
+
+运行命令：
+
+```bash
+npm test -- -t "src/main/memos/memosSyncJob"
+```
+
+关键输出（节选）：
+
+```text
+✓ src/main/memos/memosSyncJob.test.ts (5 tests)
+
+Test Files  1 passed | 26 skipped (27)
+     Tests  5 passed | 72 skipped (77)
+```
+
+关键断言点（来自单元测试 `src/main/memos/memosSyncJob.test.ts`）：
+- `runMemosRefreshOneMemo` 在本地状态为 DIRTY 与 SYNCING 两种情况下，刷新后本地 content/visibility 保持不变
+
+PASS: refresh/merge 不会覆盖 DIRTY 或 SYNCING 的本地 content/visibility

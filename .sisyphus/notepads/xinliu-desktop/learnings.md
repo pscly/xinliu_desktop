@@ -81,6 +81,14 @@
   - 放进本地 KV key：用 base64url(utf8)，输出必须不含 `+`、`/`、`=`；解码时根据长度 `% 4` 补齐 `=` padding。
 
 - [2026-02-25] Notes(Memos) 本地落库：在 SQLite 迁移 v4 创建 `memos` 与 `memo_attachments` 表；`memos.sync_status` 必须用 `CHECK(sync_status IN (...))` 受控值域（LOCAL_ONLY/DIRTY/SYNCING/SYNCED/FAILED），避免状态机字段被写入任意字符串。
+
+- [2026-02-25] Task 38（Memos Sync Job）单测保持离线确定性：附件上传逻辑不要在测试里依赖真实文件 IO；建议在同步函数中注入 `loadAttachmentContentBase64`（测试用 stub），避免因为本地路径/文件不存在导致用例不稳定。
+
+- [2026-02-25] Task 38（Memos Sync Job）附件绑定的硬约束：必须先为每个本地附件拿到 `server_attachment_name`（CreateAttachment 的响应 `attachment.name`），再调用 SetMemoAttachments；SetMemoAttachments 的入参应只使用服务端返回的 name（不要用本地 id/路径“猜”资源名）。
+
+- [2026-02-25] Task 38（Memos Refresh/Merge）本地编辑保护：回拉/刷新时若本地 memo 处于 `DIRTY` 或 `SYNCING`，合并逻辑应避免覆盖 `content/visibility`，仅回填安全元数据（例如 `server_memo_name/server_memo_id`），从而避免“正在编辑被服务器覆盖”。
+
+- [2026-02-25] Task 38（Memos Sync Job）单测模式：用临时 SQLite 文件 + `applyMigrations` 初始化 schema；直接插入 `memos/memo_attachments` 行构造场景；对 `MemosClient` 用 `vi.fn()` 全 mock，并用数组记录调用序列来断言“CreateAttachment 在 SetMemoAttachments 之前”。
 - [2026-02-25] better-sqlite3 在 CHECK 约束失败时，抛错信息可能是 `CHECK constraint failed: ...`（不一定包含 `SQLITE_CONSTRAINT` 字样）；单测断言建议匹配 `check constraint failed` 或 `err.code`。
 
 - [2026-02-25] Vitest 通过 npm script 传参时，必须用 `npm test -- -t "..."`（`--` 后的参数才会透传给 vitest）；否则 npm 会把 `-t` 当成自身参数，导致筛选不生效。
@@ -122,3 +130,12 @@
 - [2026-02-25] FlowNotes 写入边界：所有写方法必须显式接收 Notes Router 的 per-request 决策（`NotesRoutedResult`），并在运行时要求最终 `provider==='flow_notes'`；这样可以同时兼容 `kind='degraded'` 与 `kind='single'`，且不会“伪装成 Memos”写入。
 - [2026-02-25] 409 conflict 的冲突中心素材：服务端快照放在 `ErrorResponse.details.server_snapshot`；httpClient 已把 `errorResponse.details` 原样透传到 `HttpError.errorResponse.details`，客户端侧无需额外解析器即可取到快照。
 - [2026-02-25] main-side TypeScript 默认不引入 DOM lib：在 httpClient 的 fetch 形状上用 `body?: unknown` 比 `BodyInit` 更稳（避免引入 DOM types）；具体用例里再传 `FormData/Blob` 即可。
+
+
+## [2026-02-25] - Task 38 Memos Sync Job
+
+- `sync_status` 状态机：从 `DIRTY/LOCAL_ONLY/FAILED` 进入同步时统一切为 `SYNCING`；成功后落到 `SYNCED`，失败则落到 `FAILED`（避免“同步中/失败/已同步”混写导致 UI/重试逻辑混乱）。
+- 附件绑定顺序是硬约束：必须先对每个本地附件调用 `CreateAttachment` 拿到服务端 `attachment.name`，再调用 `SetMemoAttachments`；`SetMemoAttachments` 只能使用服务端返回的 name（不要用本地 id/路径推断）。
+- refresh/merge 的本地编辑保护：当本地 memo 处于 `DIRTY`/`SYNCING` 时，合并逻辑不得覆盖本地 `content/visibility`；只允许回填不破坏编辑的元数据（例如 `server_memo_name/server_memo_id`）。
+- 单测保持离线确定性：`memosClient` 全量 mock（`vi.fn()`），并通过依赖注入 `loadAttachmentContentBase64`（测试里用 stub）替代真实文件 IO；用调用序列断言 `CreateAttachment` 发生在 `SetMemoAttachments` 之前。
+- 环境提示：DB 相关测试依赖 `better-sqlite3` 原生模块，统一在 Node 20 下运行（例：`source ~/.nvm/nvm.sh && nvm use 20.20.0`）。
