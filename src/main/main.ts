@@ -1,16 +1,22 @@
 import path from 'node:path';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
+
+import { buildSecureBrowserWindowOptions, installNavigationGuards } from './security';
 
 function createMainWindow(): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 1200,
-    height: 780,
-    frame: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, '../preload/index.js')
-    }
+  const win = new BrowserWindow(
+    buildSecureBrowserWindowOptions({
+      width: 1200,
+      height: 780,
+      frame: false,
+      webPreferences: {
+        preload: path.join(__dirname, '../preload/index.js'),
+      },
+    })
+  );
+
+  installNavigationGuards(win.webContents, {
+    openExternal: (url) => shell.openExternal(url),
   });
 
   const indexHtmlPath = path.join(__dirname, '../renderer/index.html');

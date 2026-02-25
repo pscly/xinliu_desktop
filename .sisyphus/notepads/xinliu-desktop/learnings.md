@@ -50,3 +50,11 @@
 - 任务顺序：`npm ci` → `npm run lint` → `npm run test` → `npm run typecheck` → `npm run build`，日志可直接定位到具体 step。
 - 工件上传：用 `actions/upload-artifact@v4` 上传 `.sisyphus/evidence/` 与 `dist/`，并设置 `if-no-files-found: ignore`，确保目录不存在时不会导致 CI 失败。
 - Electron 镜像：优先依赖仓库 `.npmrc` 的 `electron_mirror` 配置；CI 侧无需额外注入环境变量（npm 可能仍会输出 unknown config 警告，但不影响安装/构建）。
+
+## [2026-02-25] - Electron main 安全基线在 Node/Vitest 下的可测实现
+
+- electron 的 npm 包在纯 Node 环境下并不提供 Electron runtime API（测试里直接 `import { app, BrowserWindow } from 'electron'` 会踩坑），因此 main-side 单测应只覆盖“纯函数 + 依赖注入”的逻辑。
+- Vitest 全局环境设置为 `jsdom` 时，若某个测试必须在 Node 环境运行，可以在测试文件顶部使用 `// @vitest-environment node` 进行按文件覆盖。
+- 安全基线建议集中封装到 `src/main/security.ts`：
+  - `buildSecureWebPreferences`：强制覆盖 MUST 值（`contextIsolation: true`、`nodeIntegration: false`、`webSecurity: true`、`allowRunningInsecureContent: false`），其余字段（如 `preload`）由调用方补充。
+  - `installNavigationGuards(webContents, { openExternal })`：将 `openExternal` 作为依赖注入，便于用 stub webContents 在 Node 环境断言 `preventDefault()` 与 `window.open` deny 行为。

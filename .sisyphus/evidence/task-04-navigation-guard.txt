@@ -1,0 +1,9 @@
+src/main/security.ts:73:  webContents.on('will-navigate', (event, url) => {
+src/main/security.test.ts:47:  it('installNavigationGuards: will-navigate 仅允许 file:，http(s) 外链走系统浏览器', () => {
+src/main/security.test.ts:73:    listeners['will-navigate']?.(fileEvent, 'file:///C:/app/index.html');
+src/main/security.test.ts:78:    listeners['will-navigate']?.(httpsEvent, 'https://example.com/');
+src/main/security.test.ts:83:    listeners['will-navigate']?.(jsEvent, 'javascript:alert(1)');
+src/main/security.test.ts:62:      setWindowOpenHandler: (handler: (details: { url: string }) => { action: 'deny' | 'allow' }) => {
+src/main/security.test.ts:105:      setWindowOpenHandler: (handler: (details: { url: string }) => { action: 'deny' | 'allow' }) => {
+src/main/security.ts:48:  'on' | 'setWindowOpenHandler'
+src/main/security.ts:90:  webContents.setWindowOpenHandler(({ url }) => {
