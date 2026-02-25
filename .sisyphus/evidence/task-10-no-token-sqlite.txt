@@ -1,0 +1,7 @@
+Task 10：token 不落 SQLite 自检
+
+结论：`src/main/db` 中不应出现 token 字段/写入。
+
+自检口径：
+- 搜索 `src/main/db` 关键词 `token`（应无命中）。
+- 搜索全仓库 SQL/语句是否存在 `INSERT/UPDATE token`（应无命中）。

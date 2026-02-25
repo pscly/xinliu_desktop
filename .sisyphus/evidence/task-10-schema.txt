@@ -1,0 +1,18 @@
+Task 10：outbox_mutations / sync_state / jobs / user_settings 表
+
+合同来源：
+- PLAN.md 1.5.3：outbox_mutations、sync_state、jobs 作为离线优先与同步恢复的最小集合。
+- apidocs/api.zh-CN.md：sync/push 与 sync/pull 的资源与 cursor 语义（cursor/next_cursor/has_more）。
+
+实现说明：
+- 迁移版本 v3：
+  - outbox_mutations：离线写入队列（resource/op/entity_id/client_updated_at_ms/status/attempt/next_retry_at_ms 等）
+  - sync_state：持久化 Flow cursor（以 key/value_json 形式扩展）
+  - jobs：后台任务去重与恢复（status/next_run_at_ms/dedupe_key 等）
+  - user_settings：Flow user_setting 镜像表（支持 deleted_at tombstone）
+
+验证输出：
+
+$ npm test
+Test Files  11 passed (11)
+Tests       26 passed (26)
