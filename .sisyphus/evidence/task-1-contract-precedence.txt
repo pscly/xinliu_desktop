@@ -1,0 +1,24 @@
+$ rg -n --fixed-strings "collection_item" PLAN.md
+22:| `sync/*` 资源枚举是否包含 `collection_item` | `apidocs/collections.zh-CN.md` | 专题同步合同比汇总枚举更具体, 且直接约束 Collections 的资源命名与 pull changes key | 客户端允许 push `resource="collection_item"` 并处理 pull `changes.collection_items`, 同时对 `apidocs/api.zh-CN.md` 枚举缺口做容错, 禁止用该枚举做硬校验 |
+57:- MUST: Collections 同步资源名为 `collection_item`。
+58:- MUST: Collections pull changes key 为 `collection_items`。
+269:| Collections | Flow Backend | Flow | sync 资源为 collection_item |
+316:- MUST: Flow 侧至少落库并支持 tombstone `deleted_at`: `todo_lists`, `todo_items`, `todo_occurrences`, `collection_items`, `user_settings`, `notes`。
+342:- MUST: 结构层实体为 `collection_item`。
+343:- MUST: pull changes key 为 `collection_items`。
+344:- MUST: `collection_item.item_type` 仅允许 `folder` 与 `note_ref`。
+398:已知漂移: `apidocs/api.zh-CN.md` 的 sync 资源枚举未列出 `collection_item`, 但 `apidocs/collections.zh-CN.md` 的 Collections 合同明确支持并以其为准。
+400:- MUST: 以 Collections 合同为准, push 允许 `resource="collection_item"`。
+401:- MUST: pull 显式处理 `changes.collection_items`。
+417:- 动作: 更新对应 `collection_item` 的 `ref_id`, 并 bump `client_updated_at_ms`。
+464:  DB-->>BF: 发现 collection_items.ref_local_uuid == memo.local_uuid 且 ref_id 为空
+465:  BF->>DB: 更新 collection_items.ref_id + bump client_updated_at_ms
+466:  BF->>OB: 写入 outbox_mutations (resource=collection_item, op=upsert)
+655:- `collection_item`
+670:  "collection_item"
+771:  "applied" "rejected" "server_snapshot" "collection_item"
+
+$ rg -n --fixed-strings "apidocs/collections.zh-CN.md" PLAN.md
+13:   - MUST: 若 `apidocs/api.zh-CN.md` 与专题合同冲突, 以专题合同为准(例如 Collections 以 `apidocs/collections.zh-CN.md` 为准)。
+22:| `sync/*` 资源枚举是否包含 `collection_item` | `apidocs/collections.zh-CN.md` | 专题同步合同比汇总枚举更具体, 且直接约束 Collections 的资源命名与 pull changes key | 客户端允许 push `resource="collection_item"` 并处理 pull `changes.collection_items`, 同时对 `apidocs/api.zh-CN.md` 枚举缺口做容错, 禁止用该枚举做硬校验 |
+398:已知漂移: `apidocs/api.zh-CN.md` 的 sync 资源枚举未列出 `collection_item`, 但 `apidocs/collections.zh-CN.md` 的 Collections 合同明确支持并以其为准。

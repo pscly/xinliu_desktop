@@ -1,0 +1,17 @@
+$ rg -n "(决策树|Decision Tree|fallback|降级)" PLAN.md
+116:降级规则:
+118:- SHOULD: 窗口宽度不足时可降级为双栏(左栏抽屉 + 中右合并), 但不改变核心信息架构。
+157:- 异常: 索引不可用需提示重建并降级, 不阻断使用。
+273:#### 1.4.1.1 Notes 路由决策树(混合 + 可降级 fallback / Decision Tree)
+275:目标: 默认不走 Flow Notes, Notes 以直连 Memos 为主链路; 只有在严格触发条件下, 单次请求可降级到 Flow Notes 作为可用性兜底。
+281:   - 选择结果: MUST: 本次 Notes 请求走 Flow Notes(降级), 且 MUST NOT 继续尝试直连 Memos。
+283:     - MUST: 设置页展示 `Notes Provider = Flow Notes(降级)` 并显示原因 `memos_base_url_invalid`。
+292:3) Memos 鉴权/权限失败降级
+294:   - 选择结果: MUST: 本次请求立即降级到 Flow Notes 重试一次(同一用户操作内不得双写; 仅选择其一作为最终落点)。
+296:     - MUST: UI 必须明确提示“`[Memos] 401/403, Notes 已降级到 Flow Notes`”, 并提示用户可行动作: 重新登录/检查 token。
+299:4) Memos 网络不可达/超时降级
+301:   - 选择结果: MUST: 本次请求降级到 Flow Notes 重试一次。
+303:     - MUST: UI 必须明确提示“`[Memos] 网络不可达/超时, Notes 已降级到 Flow Notes`”。
+306:5) 非降级错误(避免掩盖真实故障)
+308:   - 选择结果: MUST: 不得自动降级到 Flow Notes(避免把 Memos 的真实错误掩盖为“可用性问题”), 直接向用户暴露该错误。
+316:- MUST: 设置页在“后端/网络”区域展示当前 Notes Provider(直连/降级)、最近一次降级原因(若有)、最近一次 Notes 请求的 `request_id`(可复制)。

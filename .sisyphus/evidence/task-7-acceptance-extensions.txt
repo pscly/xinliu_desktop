@@ -1,0 +1,73 @@
+$ rg -n "(决策树|fallback|降级)" PLAN.md
+116:降级规则:
+118:- SHOULD: 窗口宽度不足时可降级为双栏(左栏抽屉 + 中右合并), 但不改变核心信息架构。
+157:- 异常: 索引不可用需提示重建并降级, 不阻断使用。
+280:- MUST: 默认只写入一个 provider（Memos 或 Flow Notes）。Notes 的 provider 由 Notes 路由决策树裁决, 单次请求只允许一个最终落点。
+291:| Notes(正文) | Notes Router 选定的 provider(默认 Memos; 降级时 Flow Notes) | 读优先本地 SQLite 镜像/缓存; 需要刷新时从本次选定 provider 拉取并回填 SQLite | 写必须先落本地 SQLite(草稿/待同步/回滚证据)并产生可追踪变更; 后台仅向本次选定 provider 写入一次作为最终落点 |
+301:- MUST: 对于曾经降级写入 Flow Notes 的 Notes, 在 Memos 恢复可用后不得自动把同一内容迁移/补写到 Memos(避免隐式双写与语义漂移)。若需要统一落点, 只能走显式迁移动作。
+303:#### 1.4.1.2 Notes 路由决策树(混合 + 可降级 fallback / Decision Tree)
+305:目标: 默认不走 Flow Notes, Notes 以直连 Memos 为主链路; 只有在严格触发条件下, 单次请求可降级到 Flow Notes 作为可用性兜底。
+311:   - 选择结果: MUST: 本次 Notes 请求走 Flow Notes(降级), 且 MUST NOT 继续尝试直连 Memos。
+313:     - MUST: 设置页展示 `Notes Provider = Flow Notes(降级)` 并显示原因 `memos_base_url_invalid`。
+322:3) Memos 鉴权/权限失败降级
+324:   - 选择结果: MUST: 本次请求立即降级到 Flow Notes 重试一次(同一用户操作内不得双写; 仅选择其一作为最终落点)。
+326:     - MUST: UI 必须明确提示“`[Memos] 401/403, Notes 已降级到 Flow Notes`”, 并提示用户可行动作: 重新登录/检查 token。
+329:4) Memos 网络不可达/超时降级
+331:   - 选择结果: MUST: 本次请求降级到 Flow Notes 重试一次。
+333:     - MUST: UI 必须明确提示“`[Memos] 网络不可达/超时, Notes 已降级到 Flow Notes`”。
+336:5) 非降级错误(避免掩盖真实故障)
+338:   - 选择结果: MUST: 不得自动降级到 Flow Notes(避免把 Memos 的真实错误掩盖为“可用性问题”), 直接向用户暴露该错误。
+346:- MUST: 若一次用户操作内发生“直连 Memos 失败 -> 降级到 Flow Notes 重试”, UI/日志必须分别记录并展示两条 request_id, 且至少区分来源(Flow 与 Memos 的 request_id 不得混用; 允许展示为 `memos_request_id`/`flow_request_id` 或 `request_id + source`)。
+347:- MUST: 设置页在“后端/网络”区域展示当前 Notes Provider(直连/降级)、最近一次降级原因(若有)、最近一次 Notes 请求的 `request_id`(可复制)。
+349:补充: Notes 降级路径关键时序(用户操作内一次降级重试):
+367:  NR-->>UI: UI 提示 [Memos] 失败, Notes 已降级到 Flow Notes<br/>显示 Notes Provider=Memos(直连) 与 memos_request_id(可复制)
+370:  NR->>NR: 触发降级, 本次用户操作仅重试一次
+373:  NR-->>UI: UI 渲染成功<br/>显示 Notes Provider=Flow Notes(降级) 与 flow_request_id(可复制)
+387:- MUST: 不得假设 Flow token 永远可用于 Memos(其有效性取决于部署配置/集成状态; 参见 `apidocs/to_app_plan.md` 对“取决于配置”的说明), 直连失败由 Notes 路由决策树触发降级策略。
+422:- MUST: `notes` 仅作为 Flow Notes provider 的降级承载(离线镜像/派生缓存): 仅当 Notes Router 单次请求选择 `Flow Notes(降级)` 时, 才允许读写与同步该表, 且必须支持 tombstone `deleted_at`。该表不代表 Flow 是 Notes 的权威源, 也不代表默认路径走 Flow。
+423:- MUST NOT: 任何实现者不得把 Flow `resource=note` 的 sync 当成默认路径或后台常驻同步, 除非降级触发且本次请求 provider 已裁决为 `Flow Notes(降级)`。
+844:### 1.11.5 决策树唯一性/矛盾清零/漂移声明检查
+846:PASS 判定: `PLAN.md` 中以下 3 类约束都至少命中 1 行(用于确保 Notes 路由决策树、SoT 护栏与 Collections 漂移声明均被明确写入验收口径)。
+855:decision_tree_pattern='(决策树|fallback|降级)'
+861:  echo "[FAIL] Notes 决策树/降级口径缺失: pattern=$decision_tree_pattern"
+864:  echo "[PASS] Notes 决策树/降级口径 (hits=$decision_tree_hits)"
+884:echo "[PASS] 决策树/SoT/漂移声明检查: missing=$missing"
+932:rg -n "(决策树|fallback|降级)" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+
+$ rg -n "(禁止.*双写|Source-of-Truth|事实来源|权威源)" PLAN.md
+77:- Notes(正文与附件)以 Memos 为内容权威源, 客户端直连。
+265:| 领域 | 权威源 | 客户端链路 | 备注 |
+273:#### 1.4.1.1 Source-of-Truth（SoT）与“禁止隐式双写”护栏
+275:本节定义每个领域的 Source-of-Truth（SoT，事实来源/权威源）以及可执行的读写路径护栏，用于阻止实现者在混合后端下出现“看似更稳”的隐式双写。
+281:- MUST NOT: 禁止隐式双写(silent dual-write/dual-write)。不得在无用户显式意图与无可见证据的情况下, 同时写入 Memos 与 Flow Notes 的同一份 Notes 正文/附件引用。
+287:Ownership Matrix（可执行规则: 领域 -> 权威源(SoT) -> 允许的读路径/写路径）:
+289:| 领域 | 权威源(SoT) | 允许读路径 | 允许写路径 |
+399:- MUST: 本地 SQLite 是离线权威源。
+422:- MUST: `notes` 仅作为 Flow Notes provider 的降级承载(离线镜像/派生缓存): 仅当 Notes Router 单次请求选择 `Flow Notes(降级)` 时, 才允许读写与同步该表, 且必须支持 tombstone `deleted_at`。该表不代表 Flow 是 Notes 的权威源, 也不代表默认路径走 Flow。
+856:sot_pattern='(禁止.*双写|Source-of-Truth|事实来源|权威源)'
+869:  echo "[FAIL] SoT/禁止隐式双写护栏缺失: pattern=$sot_pattern"
+872:  echo "[PASS] SoT/禁止隐式双写护栏 (hits=$sot_hits)"
+933:rg -n "(禁止.*双写|Source-of-Truth|事实来源|权威源)" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))
+
+$ rg -n --fixed-strings "collection_item" PLAN.md
+22:| `sync/*` 资源枚举是否包含 `collection_item` | `apidocs/collections.zh-CN.md` | 专题同步合同比汇总枚举更具体, 且直接约束 Collections 的资源命名与 pull changes key | 客户端允许 push `resource="collection_item"` 并处理 pull `changes.collection_items`, 同时对 `apidocs/api.zh-CN.md` 枚举缺口做容错, 禁止用该枚举做硬校验 |
+57:- MUST: Collections 同步资源名为 `collection_item`。
+58:- MUST: Collections pull changes key 为 `collection_items`。
+269:| Collections | Flow Backend | Flow | sync 资源为 collection_item |
+294:| Collections | 本地 SQLite(离线权威) + Flow Sync(最终一致) | UI 只读 SQLite; sync/pull 回填, Backfill 只读/回填引用 | UI 写 SQLite + 同一事务写入 `outbox_mutations(resource=collection_item, ...)`; 仅通过 Flow sync/push 上送 |
+421:- MUST: Flow 侧至少落库并支持 tombstone `deleted_at`: `todo_lists`, `todo_items`, `todo_occurrences`, `collection_items`, `user_settings`。
+449:- MUST: 结构层实体为 `collection_item`。
+450:- MUST: pull changes key 为 `collection_items`。
+451:- MUST: `collection_item.item_type` 仅允许 `folder` 与 `note_ref`。
+505:已知漂移: `apidocs/api.zh-CN.md` 的 sync 资源枚举未列出 `collection_item`, 但 `apidocs/collections.zh-CN.md` 的 Collections 合同明确支持并以其为准。
+507:- MUST: 以 Collections 合同为准, push 允许 `resource="collection_item"`。
+508:- MUST: pull 显式处理 `changes.collection_items`。
+524:- 动作: 更新对应 `collection_item` 的 `ref_id`, 并 bump `client_updated_at_ms`。
+571:  DB-->>BF: 发现 collection_items.ref_local_uuid == memo.local_uuid 且 ref_id 为空
+572:  BF->>DB: 更新 collection_items.ref_id + bump client_updated_at_ms
+573:  BF->>OB: 写入 outbox_mutations (resource=collection_item, op=upsert)
+762:- `collection_item`
+777:  "collection_item"
+857:drift_keyword='collection_item'
+921:  "applied" "rejected" "server_snapshot" "collection_item"
+934:rg -n --fixed-strings "collection_item" "$PLAN_FILE" >/dev/null || fail=$((fail + 1))

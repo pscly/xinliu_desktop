@@ -1,0 +1,20 @@
+Verification evidence (Task 3): SoT + dual-write guardrails
+
+Command:
+rg -n "(Source-of-Truth|事实来源|权威源)" PLAN.md
+
+Output:
+77:- Notes(正文与附件)以 Memos 为内容权威源, 客户端直连。
+265:| 领域 | 权威源 | 客户端链路 | 备注 |
+273:#### 1.4.1.1 Source-of-Truth（SoT）与“禁止隐式双写”护栏
+275:本节定义每个领域的 Source-of-Truth（SoT，事实来源/权威源）以及可执行的读写路径护栏，用于阻止实现者在混合后端下出现“看似更稳”的隐式双写。
+287:Ownership Matrix（可执行规则: 领域 -> 权威源(SoT) -> 允许的读路径/写路径）:
+289:| 领域 | 权威源(SoT) | 允许读路径 | 允许写路径 |
+369:- MUST: 本地 SQLite 是离线权威源。
+
+Command:
+rg -n "(禁止.*双写|dual-write)" PLAN.md
+
+Output:
+273:#### 1.4.1.1 Source-of-Truth（SoT）与“禁止隐式双写”护栏
+281:- MUST NOT: 禁止隐式双写(silent dual-write/dual-write)。不得在无用户显式意图与无可见证据的情况下, 同时写入 Memos 与 Flow Notes 的同一份 Notes 正文/附件引用。

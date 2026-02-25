@@ -1,0 +1,28 @@
+# Evidence: task-5-token-fallback
+
+## Command
+rg -n "(401|403).*降级" PLAN.md
+
+## Output
+326:     - MUST: UI 必须明确提示“`[Memos] 401/403, Notes 已降级到 Flow Notes`”, 并提示用户可行动作: 重新登录/检查 token。
+
+## Command
+rg -n "Flow Notes" PLAN.md
+
+## Output
+280:- MUST: 默认只写入一个 provider（Memos 或 Flow Notes）。Notes 的 provider 由 Notes 路由决策树裁决, 单次请求只允许一个最终落点。
+281:- MUST NOT: 禁止隐式双写(silent dual-write/dual-write)。不得在无用户显式意图与无可见证据的情况下, 同时写入 Memos 与 Flow Notes 的同一份 Notes 正文/附件引用。
+284:  - MUST: 显式迁移/修复动作(例如用户点击“迁移到 Memos/修复到 Flow Notes”)才允许发生跨 provider 的二次写入, 且 UI 必须展示来源/目标/数量/失败项与可复制 `request_id`。
+291:| Notes(正文) | Notes Router 选定的 provider(默认 Memos; 降级时 Flow Notes) | 读优先本地 SQLite 镜像/缓存; 需要刷新时从本次选定 provider 拉取并回填 SQLite | 写必须先落本地 SQLite(草稿/待同步/回滚证据)并产生可追踪变更; 后台仅向本次选定 provider 写入一次作为最终落点 |
+301:- MUST: 对于曾经降级写入 Flow Notes 的 Notes, 在 Memos 恢复可用后不得自动把同一内容迁移/补写到 Memos(避免隐式双写与语义漂移)。若需要统一落点, 只能走显式迁移动作。
+305:目标: 默认不走 Flow Notes, Notes 以直连 Memos 为主链路; 只有在严格触发条件下, 单次请求可降级到 Flow Notes 作为可用性兜底。
+311:   - 选择结果: MUST: 本次 Notes 请求走 Flow Notes(降级), 且 MUST NOT 继续尝试直连 Memos。
+313:     - MUST: 设置页展示 `Notes Provider = Flow Notes(降级)` 并显示原因 `memos_base_url_invalid`。
+324:   - 选择结果: MUST: 本次请求立即降级到 Flow Notes 重试一次(同一用户操作内不得双写; 仅选择其一作为最终落点)。
+326:     - MUST: UI 必须明确提示“`[Memos] 401/403, Notes 已降级到 Flow Notes`”, 并提示用户可行动作: 重新登录/检查 token。
+331:   - 选择结果: MUST: 本次请求降级到 Flow Notes 重试一次。
+333:     - MUST: UI 必须明确提示“`[Memos] 网络不可达/超时, Notes 已降级到 Flow Notes`”。
+338:   - 选择结果: MUST: 不得自动降级到 Flow Notes(避免把 Memos 的真实错误掩盖为“可用性问题”), 直接向用户暴露该错误。
+346:- MUST: 若一次用户操作内发生“直连 Memos 失败 -> 降级到 Flow Notes 重试”, UI/日志必须分别记录并展示两条 request_id, 且至少区分来源(Flow 与 Memos 的 request_id 不得混用; 允许展示为 `memos_request_id`/`flow_request_id` 或 `request_id + source`)。
+394:- MUST: `notes` 仅作为 Flow Notes provider 的降级承载(离线镜像/派生缓存): 仅当 Notes Router 单次请求选择 `Flow Notes(降级)` 时, 才允许读写与同步该表, 且必须支持 tombstone `deleted_at`。该表不代表 Flow 是 Notes 的权威源, 也不代表默认路径走 Flow。
+395:- MUST NOT: 任何实现者不得把 Flow `resource=note` 的 sync 当成默认路径或后台常驻同步, 除非降级触发且本次请求 provider 已裁决为 `Flow Notes(降级)`。

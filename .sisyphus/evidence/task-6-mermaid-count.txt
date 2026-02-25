@@ -1,0 +1,6 @@
+$ rg -n '^```mermaid$' PLAN.md
+244:```mermaid
+351:```mermaid
+529:```mermaid
+542:```mermaid
+562:```mermaid
