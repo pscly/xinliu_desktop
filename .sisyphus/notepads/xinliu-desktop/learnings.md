@@ -85,3 +85,11 @@
 - API base path 固定为 `/api/v1`。在复用 `createHttpClient` 的情况下，推荐将实例 `baseUrl` 传入为“纯实例地址”（例如 `https://memos.example.com`），并在每个请求的 `pathname` 上显式带上 `/api/v1/...`（对齐现有 `FlowClient` 的写法）。
 - `updateMask` 是 Memos 的强约束：UpdateMemo/UpdateAttachment 必须提供 query 参数 `updateMask`（field-mask，逗号分隔）；缺失/空值时应在 client 层直接抛出中文可解释错误，避免误覆盖字段。
 - 资源名（resource name）拼接规则：当输入是 `memos/123` 或 `attachments/1` 这种资源名时，应当拼成 API pathname（例如 `/api/v1/memos/123`），并且禁止把资源名当成本地文件路径片段使用。
+
+## [2026-02-25] - Notes Router（Task 35）路由决策树实现要点
+
+- Router 必须是“纯函数 + 依赖注入”：对外只接受 `memosRequest/flowNotesRequest` 两个异步函数，保证 Node/Vitest 下可测且不依赖 Electron runtime。
+- 配置校验必须走 `normalizeBaseUrl`：`memosBaseUrl` 缺失/空/非法/非 http(s) 一律视为 invalid，并且本次请求必须直接选择 FlowNotes（不得尝试 Memos）。
+- 降级触发条件必须严格：仅当 Memos 返回 401/403，或错误码为 `NETWORK_ERROR/TIMEOUT`（获得有效 HTTP 前失败）时，才允许当次请求降级到 FlowNotes 重试一次；若已获得有效 HTTP 且非 401/403（400/404/409/429/5xx 等）不得降级。
+- request_id 展示规则（Notes 专用，保守一致）：优先 `responseRequestIdHeader`（`X-Request-Id`），否则回退 `requestId`；若发生降级重试则必须分离展示 `memos_request_id` 与 `flow_request_id`。
+- 环境坑：本仓库含 `better-sqlite3` 原生模块，运行 `npm test` 需使用 Node 20（例如 `source ~/.nvm/nvm.sh && nvm use 20.20.0`），否则会出现 `NODE_MODULE_VERSION` 不匹配导致大量测试失败。
