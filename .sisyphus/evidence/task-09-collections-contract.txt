@@ -1,0 +1,13 @@
+Task 9：Collections 资源名合同核对（避免命名漂移）
+
+结论：实现侧表名使用 `collection_items`（本地表），远端 sync 资源名使用：
+- resource: "collection_item"
+- pull changes key: "collection_items"
+
+证据来源：
+- PLAN.md：
+  - MUST: 结构层实体为 `collection_item`
+  - MUST: pull changes key 为 `collection_items`
+- apidocs/collections.zh-CN.md：
+  - 明确 Collections 已作为 sync 资源：`collection_item`
+  - changes 中总是存在 `collection_items` key
