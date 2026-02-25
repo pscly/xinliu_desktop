@@ -1,0 +1,6 @@
+Task 8：renderer 无 SQLite 依赖自检
+
+结论：renderer 目录不应出现 better-sqlite3 引用（SQLite 仅 main）。
+
+自检口径：
+- 以 grep/rg 搜索 `better-sqlite3` 于 `src/renderer`，应无命中。
