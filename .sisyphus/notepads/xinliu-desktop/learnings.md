@@ -67,3 +67,11 @@
 - main 侧用 `registerIpcHandlers(ipcMain, deps)` 显式逐一 `ipcMain.handle(...)`，禁止通配；并通过依赖注入 `getWindowForSender`，避免在 Node/Vitest 测试里导入 electron runtime。
 - IPC handler 不应 `throw` 给 renderer：统一返回 `IpcResult`（`ok/value` 或 `ok:false/error{code,message}`），并避免把堆栈/绝对路径透传。
 - preload 侧封装 `invokeIpc`：捕获 `ipcRenderer.invoke` 的异常并返回 `IpcResult`，只暴露用例级 API（例如 `window.xinliu.window.minimize()`），不暴露通用 `ipcRenderer`。
+
+## [2026-02-25] - Flow Sync Pull 引擎（Task 18）实现要点
+
+- `sync_state` 用一个稳定 key 持久化 Flow pull cursor（本实现使用 `flow_sync_pull_cursor`），`value_json` 保存为 `{"cursor": <number>}`，读取时对“数字或对象”两种形态都做容错。
+- “apply changes + cursor 推进”必须同一事务：每一轮 pull 都在 `withImmediateTransaction` 内执行 `applyChanges(...)` 后才 `UPDATE sync_state`，确保 apply 失败时 cursor 不会推进。
+- Pull apply 必须直写业务表，不能走 TodoRepo/CollectionsRepo（否则会 enqueue outbox 破坏 outbox 语义）。
+- LWW 推荐用 SQLite 原生条件 upsert：`ON CONFLICT DO UPDATE ... WHERE excluded.client_updated_at_ms >= table.client_updated_at_ms`，保证 incoming older 不覆盖本地 newer。
+- Collections 漂移兼容：显式处理 `changes.collection_items`（对齐 `apidocs/collections.zh-CN.md` 的 key/resource 命名）。
