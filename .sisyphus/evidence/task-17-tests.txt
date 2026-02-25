@@ -1,0 +1,38 @@
+Now using node v20.20.0 (npm v10.8.2)
+
+> xinliu-desktop@0.0.0 test
+> vitest run
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /root/1codes/xinliu_desktop
+
+ ✓ src/main/auth/tokenStore.test.ts (2 tests) 8ms
+ ✓ src/main/security.test.ts (4 tests) 11ms
+ ✓ src/main/device/deviceIdentity.test.ts (1 test) 6ms
+ ✓ src/main/flow/flowClient.test.ts (2 tests) 11ms
+ ✓ src/main/net/httpClient.test.ts (5 tests) 12ms
+ ✓ src/main/db/metaSchema.test.ts (1 test) 235ms
+ ✓ src/main/db/flowSchema.test.ts (2 tests) 461ms
+ ✓ src/main/sync/outbox.test.ts (3 tests) 438ms
+ ✓ src/main/db/sqlite.test.ts (3 tests) 524ms
+ ✓ src/main/collections/collectionsRepo.test.ts (2 tests) 492ms
+ ✓ src/main/storageLayout.test.ts (5 tests) 9ms
+ ✓ src/main/todo/todoRepo.test.ts (3 tests) 660ms
+ ✓ src/main/flow/flowSyncPush.test.ts (4 tests) 841ms
+ ✓ src/main/ipc.test.ts (2 tests) 5ms
+ ✓ src/shared/url.test.ts (3 tests) 7ms
+ ✓ src/shared/redaction.test.ts (3 tests) 5ms
+ ✓ src/shared/number.test.ts (2 tests) 5ms
+stderr | src/renderer/App.test.tsx > <App /> > 可以在不依赖 Electron 的情况下渲染
+[titlebar] window.xinliu.window.minimize 不可用
+[titlebar] window.xinliu.window.toggleMaximize 不可用
+[titlebar] window.xinliu.window.close 不可用
+
+ ✓ src/renderer/App.test.tsx (1 test) 85ms
+
+ Test Files  18 passed (18)
+      Tests  48 passed (48)
+   Start at  18:32:14
+   Duration  1.91s (transform 1.25s, setup 0ms, collect 2.77s, tests 3.81s, environment 4.89s, prepare 1.89s)
+
