@@ -7,6 +7,12 @@ export const IPC_CHANNELS = {
     close: `${IPC_NAMESPACE}:window:close`,
     isMaximized: `${IPC_NAMESPACE}:window:isMaximized`,
   },
+  quickCapture: {
+    open: `${IPC_NAMESPACE}:quickCapture:open`,
+    hide: `${IPC_NAMESPACE}:quickCapture:hide`,
+    submit: `${IPC_NAMESPACE}:quickCapture:submit`,
+    cancel: `${IPC_NAMESPACE}:quickCapture:cancel`,
+  },
   shortcuts: {
     getStatus: `${IPC_NAMESPACE}:shortcuts:getStatus`,
     setConfig: `${IPC_NAMESPACE}:shortcuts:setConfig`,
@@ -24,10 +30,13 @@ export const IPC_EVENTS = {
 export type IpcChannelWindow =
   (typeof IPC_CHANNELS.window)[keyof typeof IPC_CHANNELS.window];
 
+export type IpcChannelQuickCapture =
+  (typeof IPC_CHANNELS.quickCapture)[keyof typeof IPC_CHANNELS.quickCapture];
+
 export type IpcChannelShortcuts =
   (typeof IPC_CHANNELS.shortcuts)[keyof typeof IPC_CHANNELS.shortcuts];
 
-export type IpcChannel = IpcChannelWindow | IpcChannelShortcuts;
+export type IpcChannel = IpcChannelWindow | IpcChannelQuickCapture | IpcChannelShortcuts;
 
 export type IpcErrorCode =
   | 'VALIDATION_ERROR'
@@ -82,4 +91,8 @@ export interface ShortcutsSetConfigPayload {
 
 export interface ShortcutsResetOnePayload {
   id: ShortcutId;
+}
+
+export interface QuickCaptureSubmitPayload {
+  content: string;
 }

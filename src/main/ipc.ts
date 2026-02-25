@@ -5,6 +5,7 @@ import type {
   IpcErrorCode,
   IpcResult,
   IpcVoid,
+  QuickCaptureSubmitPayload,
   ShortcutId,
   ShortcutsResetOnePayload,
   ShortcutsSetConfigPayload,
@@ -34,6 +35,12 @@ export interface BrowserWindowLike {
 
 export interface RegisterIpcHandlersDeps {
   getWindowForSender: (sender: unknown) => BrowserWindowLike | null;
+  quickCapture: {
+    open: () => void | Promise<void>;
+    hide: () => void | Promise<void>;
+    submit: (content: string) => void | Promise<void>;
+    cancel: () => void | Promise<void>;
+  };
   shortcuts: {
     getStatus: () => ShortcutsStatus;
     setConfig: (payload: ShortcutsSetConfigPayload) => void;
@@ -118,6 +125,19 @@ function validateShortcutsResetOnePayload(
     return err('VALIDATION_ERROR', '参数不合法');
   }
   return ok({ id });
+}
+
+function validateQuickCaptureSubmitPayload(
+  payload: unknown
+): IpcResult<QuickCaptureSubmitPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const content = payload['content'];
+  if (typeof content !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ content });
 }
 
 function createRateLimiter(options: {
@@ -294,6 +314,63 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.quickCapture.open,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.quickCapture.open,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        await deps.quickCapture.open();
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.quickCapture.hide,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.quickCapture.hide,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        await deps.quickCapture.hide();
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.quickCapture.submit,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.quickCapture.submit,
+      deps,
+      rateLimiter,
+      validate: validateQuickCaptureSubmitPayload,
+      run: async (validatedPayload) => {
+        const v = validatedPayload as QuickCaptureSubmitPayload;
+        await deps.quickCapture.submit(v.content);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.quickCapture.cancel,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.quickCapture.cancel,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        await deps.quickCapture.cancel();
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.shortcuts.getStatus,
     makeHandler<ShortcutsStatus>({
       channel: IPC_CHANNELS.shortcuts.getStatus,
@@ -351,6 +428,7 @@ export function registerIpcHandlers(
 export const __test__ = {
   toIpcResult,
   validateEmptyPayload,
+  validateQuickCaptureSubmitPayload,
   validateShortcutsSetConfigPayload,
   validateShortcutsResetOnePayload,
 };

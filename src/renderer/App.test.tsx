@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IpcResult, IpcVoid, ShortcutsStatus } from '../shared/ipc';
 
@@ -31,6 +31,8 @@ describe('<App />', () => {
     fireEvent.click(screen.getByTestId('titlebar-maximize'));
     fireEvent.click(screen.getByTestId('titlebar-close'));
 
+    fireEvent.click(screen.getByTestId('titlebar-quick-capture'));
+
     fireEvent.click(screen.getByTestId('nav-settings'));
     expect(screen.getAllByText('设置').length).toBeGreaterThan(0);
     expect(screen.getByTestId('settings-shortcuts')).toBeTruthy();
@@ -61,6 +63,12 @@ describe('<App />', () => {
         close: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
         isMaximized: async () => ({ ok: true, value: false } satisfies IpcResult<boolean>),
       },
+      quickCapture: {
+        open: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        hide: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        submit: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        cancel: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+      },
       shortcuts: {
         getStatus: async () => ({ ok: true, value: fakeShortcutsStatus } satisfies IpcResult<ShortcutsStatus>),
         setConfig: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
@@ -75,6 +83,41 @@ describe('<App />', () => {
     fireEvent.click(screen.getByTestId('nav-settings'));
 
     expect(await screen.findByTestId('settings-shortcut-openQuickCapture-register-failed')).toBeTruthy();
+
+    delete window.xinliu;
+  });
+
+  it('应用内按钮兜底：点击快捕按钮会调用 quickCapture.open', () => {
+    const open = async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>);
+    const spy = vi.fn(open);
+
+    window.xinliu = {
+      versions: { electron: '0', chrome: '0', node: '0' },
+      window: {
+        minimize: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        toggleMaximize: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        close: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        isMaximized: async () => ({ ok: true, value: false } satisfies IpcResult<boolean>),
+      },
+      quickCapture: {
+        open: spy,
+        hide: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        submit: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        cancel: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+      },
+      shortcuts: {
+        getStatus: async () => ({ ok: true, value: { entries: [] } } satisfies IpcResult<ShortcutsStatus>),
+        setConfig: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        resetAll: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        resetOne: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        onFocusSearch: () => () => {},
+      },
+    };
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('titlebar-quick-capture'));
+
+    expect(spy).toHaveBeenCalledTimes(1);
 
     delete window.xinliu;
   });

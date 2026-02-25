@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ShortcutId, ShortcutStatusEntry, ShortcutsStatus } from '../shared/ipc';
 
+import { QuickCaptureWindow } from './QuickCaptureWindow';
+
 type RouteKey = 'notes' | 'collections' | 'todo' | 'settings' | 'conflicts';
 
 type RouteMeta = {
@@ -27,6 +29,22 @@ function getXinliuWindowApi(): XinliuWindowApi | undefined {
 
 function getXinliuShortcutsApi(): XinliuShortcutsApi | undefined {
   return window.xinliu?.shortcuts;
+}
+
+async function safeOpenQuickCapture() {
+  const fn = window.xinliu?.quickCapture?.open;
+  if (typeof fn !== 'function') {
+    console.warn('[quickCapture] window.xinliu.quickCapture.open 不可用');
+    return;
+  }
+  try {
+    const res = await fn();
+    if (!res.ok) {
+      console.warn(`[quickCapture] open 失败：${res.error.code}`);
+    }
+  } catch (e) {
+    console.warn(`[quickCapture] open 异常：${String(e)}`);
+  }
 }
 
 async function safeCallWindowAction(action: 'minimize' | 'toggleMaximize' | 'close') {
@@ -103,6 +121,14 @@ function Titlebar({ title }: { title: string }) {
       </div>
 
       <div className="titlebarRight titlebarNoDrag">
+        <button
+          type="button"
+          className="btn titlebarQuickCaptureBtn"
+          data-testid="titlebar-quick-capture"
+          onClick={() => void safeOpenQuickCapture()}
+        >
+          快捕
+        </button>
         <button
           type="button"
           className="titlebarBtn"
@@ -352,7 +378,7 @@ function GlobalSearchBox() {
   );
 }
 
-export function App() {
+function MainWindowApp() {
   const [route, setRoute] = useState<RouteKey>('notes');
   const routeMeta = useMemo(() => ROUTES.find((r) => r.key === route)!, [route]);
 
@@ -549,4 +575,11 @@ export function App() {
       </main>
     </div>
   );
+}
+
+export function App() {
+  if (window.location.hash === '#quick-capture') {
+    return <QuickCaptureWindow />;
+  }
+  return <MainWindowApp />;
 }

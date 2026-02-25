@@ -149,3 +149,10 @@
 - 环境提示：DB 相关测试依赖 `better-sqlite3` 原生模块，统一在 Node 20 下运行（例：`source ~/.nvm/nvm.sh && nvm use 20.20.0`）。
 
 - [2026-02-26] ESLint(no-explicit-any)：在 Vitest 测试里解析 `errorResponse.details` 时，避免 `as any`，改用 `unknown` + 类型守卫（例如先断言 `details.server_snapshot.id` 为 string）来保持断言可读性与类型安全。验证：`source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm run lint` / `npm test`。
+
+## [2026-02-26 06:18] - Task 21 快速捕捉窗口（Quick Capture）
+
+- 同一 renderer bundle 的多视图切分：用 main `loadFile(..., { hash: 'quick-capture' })`，renderer 以 `window.location.hash === '#quick-capture'` 分流渲染，能用最小成本支撑“主窗 + 快捕窗”两套界面，同时保持测试与构建链路简单。
+- 入口要做三重兜底：全局快捷键可能注册失败，托盘也可能被用户忽略或不可用，所以必须再提供应用内入口（放在自定义标题栏的“快捕”按钮最合适，且可给 `data-testid` 作为测试契约）。
+- 键盘交互要可预期：Enter 提交并隐藏，Esc 取消并隐藏。多行输入场景要避免误提交，通常约定 Shift+Enter 换行。
+- 保存逻辑先抽注入点：将“持久化”封成 `saveQuickCapture(content)` 依赖注入，当前可以 no-op，后续再对接 Notes/SQLite，并把真实副作用集中到 main 侧实现。

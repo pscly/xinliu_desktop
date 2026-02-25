@@ -13,6 +13,8 @@ import type { WebContents } from 'electron';
 
 import { IPC_EVENTS } from '../shared/ipc';
 import { registerIpcHandlers } from './ipc';
+import { createQuickCaptureController } from './quickCapture/quickCaptureController';
+import { createQuickCaptureWindowManager } from './quickCapture/quickCaptureWindowManager';
 import { buildSecureBrowserWindowOptions, installNavigationGuards } from './security';
 import {
   createShortcutsManager,
@@ -95,10 +97,22 @@ function toggleMainWindow(): void {
 }
 
 app.whenReady().then(() => {
+  const indexHtmlPath = path.join(__dirname, '../renderer/index.html');
+  const preloadPath = path.join(__dirname, '../preload/index.js');
+
+  const quickCaptureWindowManager = createQuickCaptureWindowManager({
+    preloadPath,
+    indexHtmlPath,
+    isExitRequested: () => closeToTray.isExitRequested(),
+  });
+
+  const quickCaptureController = createQuickCaptureController({
+    ensureWindow: () => quickCaptureWindowManager.ensureWindow(),
+    saveQuickCapture: async () => undefined,
+  });
+
   const onQuickCapture = () => {
-    const win = ensureMainWindow();
-    win.show();
-    win.focus();
+    quickCaptureController.open();
   };
 
   const onOpenMainAndFocusSearch = () => {
@@ -138,6 +152,12 @@ app.whenReady().then(() => {
   registerIpcHandlers(ipcMain, {
     getWindowForSender: (sender) =>
       BrowserWindow.fromWebContents(sender as WebContents),
+    quickCapture: {
+      open: () => quickCaptureController.open(),
+      hide: () => quickCaptureController.hide(),
+      submit: (content) => quickCaptureController.submit(content),
+      cancel: () => quickCaptureController.cancel(),
+    },
     shortcuts: {
       getStatus: () => shortcutsManager.getStatus(),
       setConfig: (payload) => shortcutsManager.setConfig(payload),
@@ -148,7 +168,9 @@ app.whenReady().then(() => {
 
   ensureMainWindow();
 
-  const exitCleanupHooks: CleanupHook[] = [];
+  const exitCleanupHooks: CleanupHook[] = [
+    () => quickCaptureWindowManager.destroy(),
+  ];
 
   const onSyncNowMemos = async () => undefined;
   const onSyncNowFlow = async () => undefined;

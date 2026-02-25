@@ -27,6 +27,12 @@ describe('src/main/ipc', () => {
 
     registerIpcHandlers(ipcMain, {
       getWindowForSender: () => createFakeWindow(),
+      quickCapture: {
+        open: () => {},
+        hide: () => {},
+        submit: () => {},
+        cancel: () => {},
+      },
       shortcuts: {
         getStatus: () => ({ entries: [] }),
         setConfig: () => {},
@@ -37,7 +43,11 @@ describe('src/main/ipc', () => {
     });
 
     const registered = Array.from(handlers.keys()).sort();
-    const expected = [...Object.values(IPC_CHANNELS.window), ...Object.values(IPC_CHANNELS.shortcuts)].sort();
+    const expected = [
+      ...Object.values(IPC_CHANNELS.window),
+      ...Object.values(IPC_CHANNELS.quickCapture),
+      ...Object.values(IPC_CHANNELS.shortcuts),
+    ].sort();
     expect(registered).toEqual(expected);
 
     expect(registered.some((c) => c.includes('*'))).toBe(false);
@@ -54,6 +64,12 @@ describe('src/main/ipc', () => {
 
     registerIpcHandlers(ipcMain, {
       getWindowForSender: () => createFakeWindow(),
+      quickCapture: {
+        open: () => {},
+        hide: () => {},
+        submit: () => {},
+        cancel: () => {},
+      },
       shortcuts: {
         getStatus: () => ({ entries: [] }),
         setConfig: () => {},
@@ -70,6 +86,41 @@ describe('src/main/ipc', () => {
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+
+  it('IPC 参数校验：quickCapture.submit 必须包含 string content', async () => {
+    const handlers = new Map<string, IpcMainHandler>();
+    const ipcMain: IpcMainLike = {
+      handle: (channel, handler) => {
+        handlers.set(channel, handler);
+      },
+    };
+
+    registerIpcHandlers(ipcMain, {
+      getWindowForSender: () => createFakeWindow(),
+      quickCapture: {
+        open: () => {},
+        hide: () => {},
+        submit: () => {},
+        cancel: () => {},
+      },
+      shortcuts: {
+        getStatus: () => ({ entries: [] }),
+        setConfig: () => {},
+        resetAll: () => {},
+        resetOne: () => {},
+      },
+      now: () => 0,
+    });
+
+    const handler = handlers.get(IPC_CHANNELS.quickCapture.submit);
+    expect(handler).toBeTypeOf('function');
+
+    const bad = (await handler?.({ sender: {} }, { content: 123 })) as IpcResult<unknown>;
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.error.code).toBe('VALIDATION_ERROR');
     }
   });
 });

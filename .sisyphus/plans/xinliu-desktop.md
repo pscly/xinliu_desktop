@@ -1828,7 +1828,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-20-shortcut-cleanup.txt
   ```
 
-- [ ] 21. 快速捕捉窗口（Quick Capture：Enter 保存隐藏、Esc 取消隐藏）
+- [x] 21. 快速捕捉窗口（Quick Capture：Enter 保存隐藏、Esc 取消隐藏）
 
   **What to do**:
   - main 新建快捕窗（独立 BrowserWindow）：显示/聚焦/隐藏控制。

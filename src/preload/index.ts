@@ -5,6 +5,7 @@ import type {
   IpcErrorCode,
   IpcResult,
   IpcVoid,
+  QuickCaptureSubmitPayload,
   ShortcutId,
   ShortcutsResetOnePayload,
   ShortcutsSetConfigPayload,
@@ -39,6 +40,13 @@ contextBridge.exposeInMainWorld('xinliu', {
       invokeIpc<IpcVoid>(IPC_CHANNELS.window.toggleMaximize, EMPTY_PAYLOAD),
     close: () => invokeIpc<IpcVoid>(IPC_CHANNELS.window.close, EMPTY_PAYLOAD),
     isMaximized: () => invokeIpc<boolean>(IPC_CHANNELS.window.isMaximized, EMPTY_PAYLOAD),
+  },
+  quickCapture: {
+    open: () => invokeIpc<IpcVoid>(IPC_CHANNELS.quickCapture.open, EMPTY_PAYLOAD),
+    hide: () => invokeIpc<IpcVoid>(IPC_CHANNELS.quickCapture.hide, EMPTY_PAYLOAD),
+    submit: (content: string) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.quickCapture.submit, { content } satisfies QuickCaptureSubmitPayload),
+    cancel: () => invokeIpc<IpcVoid>(IPC_CHANNELS.quickCapture.cancel, EMPTY_PAYLOAD),
   },
   shortcuts: {
     getStatus: () =>

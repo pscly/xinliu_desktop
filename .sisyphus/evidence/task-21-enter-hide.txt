@@ -1,0 +1,19 @@
+Task 21 Evidence: Enter 保存隐藏
+
+Command:
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- -t "Enter 保存隐藏"
+
+Output:
+Now using node v20.20.0 (npm v10.8.2)
+
+> xinliu-desktop@0.0.0 test
+> vitest run -t Enter 保存隐藏
+
+ RUN  v2.1.9 /root/1codes/xinliu_desktop
+
+ ✓ src/main/quickCapture/quickCaptureController.test.ts (3 tests | 2 skipped) 8ms
+
+ Test Files  1 passed | 29 skipped (30)
+      Tests  1 passed | 88 skipped (89)
+   Start at  06:11:41
+   Duration  2.07s (transform 1.90s, setup 0ms, collect 4.57s, tests 8ms, environment 5.77s, prepare 3.12s)

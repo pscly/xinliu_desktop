@@ -96,6 +96,49 @@ body {
   gap: 6px;
 }
 
+.titlebarQuickCaptureBtn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 12px;
+}
+
+.quickCaptureApp {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: var(--titlebar-h) 1fr;
+}
+
+.quickCaptureMain {
+  padding: 14px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 10px;
+}
+
+.quickCaptureInput {
+  width: 100%;
+  resize: none;
+  border-radius: 18px;
+  border: 1px solid rgba(21, 21, 21, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 12px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(21, 21, 21, 0.84);
+  outline: none;
+}
+
+.quickCaptureInput:focus {
+  border-color: rgba(21, 21, 21, 0.22);
+  box-shadow: 0 14px 40px var(--shadow);
+}
+
+.quickCaptureFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .titlebarNoDrag,
 .titlebarNoDrag * {
   -webkit-app-region: no-drag;

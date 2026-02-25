@@ -22,6 +22,12 @@ declare global {
         close: () => Promise<IpcResult<IpcVoid>>;
         isMaximized: () => Promise<IpcResult<boolean>>;
       };
+      quickCapture: {
+        open: () => Promise<IpcResult<IpcVoid>>;
+        hide: () => Promise<IpcResult<IpcVoid>>;
+        submit: (content: string) => Promise<IpcResult<IpcVoid>>;
+        cancel: () => Promise<IpcResult<IpcVoid>>;
+      };
       shortcuts: {
         getStatus: () => Promise<IpcResult<ShortcutsStatus>>;
         setConfig: (payload: ShortcutsSetConfigPayload) => Promise<IpcResult<IpcVoid>>;
