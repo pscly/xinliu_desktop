@@ -1,0 +1,24 @@
+Task 16：Flow API Client（请求头注入：Bearer + X-Request-Id + 设备头）
+
+合同来源：
+- PLAN.md：Flow 请求必须带 Authorization Bearer + X-Request-Id + 设备头。
+- apidocs/api.zh-CN.md：
+  - 2.3 Request ID：服务端支持并回显 `X-Request-Id`
+  - 2.4 设备信息：推荐 `X-Flow-Device-Id` / `X-Flow-Device-Name`
+
+实现说明：
+- Flow client：`src/main/flow/flowClient.ts`
+  - 复用 `src/main/net/httpClient.ts`（自动注入 `X-Request-Id`）
+  - 通过 defaultHeaders 注入：
+    - `Authorization: Bearer <token>`
+    - `X-Flow-Device-Id`
+    - `X-Flow-Device-Name`
+
+单测覆盖：`src/main/flow/flowClient.test.ts`
+- 断言 headers 同时包含：Authorization / X-Request-Id / X-Flow-Device-Id / X-Flow-Device-Name。
+
+验证输出：
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+Test Files  17 passed (17)
+Tests       43 passed (43)

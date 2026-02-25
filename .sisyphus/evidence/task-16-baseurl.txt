@@ -1,0 +1,18 @@
+Task 16：Flow API Client（Base URL 标准化）
+
+合同来源：
+- PLAN.md：Flow Base URL 默认 `https://xl.pscly.cc`，并支持标准化（去尾部 `/`）。
+- src/shared/url.ts：normalizeBaseUrl 规则（http/https + 去尾 `/`）。
+
+实现说明：
+- Flow client：`src/main/flow/flowClient.ts`
+  - baseUrl 交由底层 `createHttpClient` 标准化
+
+单测覆盖：`src/main/flow/flowClient.test.ts`
+- baseUrl 传入 `https://xl.pscly.cc/`，断言实际请求 URL 不出现 `https://xl.pscly.cc//api/...`。
+
+验证输出：
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+Test Files  17 passed (17)
+Tests       43 passed (43)
