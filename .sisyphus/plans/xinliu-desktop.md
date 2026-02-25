@@ -1925,7 +1925,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-22-migrate-rollback.txt
   ```
 
-- [ ] 16. Flow API Client（基于 OpenAPI 快照 + 鉴权头 + 设备头）
+- [x] 16. Flow API Client（基于 OpenAPI 快照 + 鉴权头 + 设备头）
 
   **What to do**:
   - 以 `apidocs/openapi-v1.json`（必要时对照 `openapi-v1.dev.json`）为类型来源，建立 Flow API 的类型与调用封装。
