@@ -2317,7 +2317,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-11-redaction.txt
   ```
 
-- [ ] 12. HTTP 客户端基础设施（Base URL 标准化 + request_id + ErrorResponse + 重试）
+- [x] 12. HTTP 客户端基础设施（Base URL 标准化 + request_id + ErrorResponse + 重试）
 
   **What to do**:
   - 实现统一 HTTP client（Flow 与 Memos 各自实例，但共享底层能力）：

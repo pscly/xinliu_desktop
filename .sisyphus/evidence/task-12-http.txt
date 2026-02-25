@@ -1,0 +1,19 @@
+Task 12：HTTP 客户端基础设施（Base URL 标准化 + request_id + ErrorResponse + 重试）
+
+实现：
+- Base URL 标准化：`src/shared/url.ts`
+  - 自动补全 https（无 scheme 时）
+  - 去尾部 `/`，确保 protocol 为 http/https
+- HTTP client：`src/main/net/httpClient.ts`
+  - 每次请求注入 `X-Request-Id`
+  - 非 2xx best-effort 解析 `ErrorResponse(error/message/request_id/details)`
+  - 重试策略：
+    - 401：不重试
+    - 429：遵守 `Retry-After`
+    - 5xx/网络异常：指数退避 + 抖动（上限 maxAttempts）
+
+验证：
+
+$ npm test
+Test Files  13 passed (13)
+Tests       33 passed (33)

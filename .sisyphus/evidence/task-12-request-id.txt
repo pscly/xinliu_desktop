@@ -1,0 +1,6 @@
+Task 12：request_id 注入与可追溯性
+
+结论：HTTP client 在每次请求自动注入 `X-Request-Id`，并读取响应头 `X-Request-Id`（若存在）。
+
+实现位置：
+- `src/main/net/httpClient.ts`
