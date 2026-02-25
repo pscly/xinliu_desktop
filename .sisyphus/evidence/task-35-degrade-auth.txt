@@ -1,0 +1,18 @@
+Task 35：Notes Router（401/403 触发降级一次）
+
+## Command
+
+```bash
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- -t "规则 3"
+```
+
+## Output（关键通过行，脱敏）
+
+```text
+> vitest run -t 规则 3
+
+✓ src/main/notes/notesRouter.test.ts (6 tests | 5 skipped)
+
+Test Files  1 passed | 21 skipped (22)
+Tests       1 passed | 61 skipped (62)
+```
