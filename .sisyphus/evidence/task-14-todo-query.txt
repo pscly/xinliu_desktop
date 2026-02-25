@@ -1,0 +1,19 @@
+Task 14：Todo 本地读写服务（列表分页查询 / 避免查询风暴）
+
+合同来源：
+- PLAN.md：列表页一次返回一页窗口 + 必要字段，避免 IPC 查询风暴（禁止 ID 列表后逐条查详情的 N+1）。
+- apidocs/api.zh-CN.md：GET /api/v1/todo/items 支持 limit/offset/filter。
+
+实现说明：
+- 列表查询实现：src/main/todo/todoRepo.ts
+  - listTodoLists：单条 SQL + LIMIT/OFFSET；默认不包含 deleted。
+  - listTodoItems：单条 SQL + JOIN todo_lists（用于 include_archived_lists 过滤）+ LIMIT/OFFSET；支持 list_id/status/tag 过滤；默认不包含 deleted。
+
+单测覆盖：src/main/todo/todoRepo.test.ts
+- limit/offset 生效；默认 includeDeleted=false；includeDeleted=true 时返回 tombstone 记录。
+
+验证输出：
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+Test Files  15 passed (15)
+Tests       39 passed (39)

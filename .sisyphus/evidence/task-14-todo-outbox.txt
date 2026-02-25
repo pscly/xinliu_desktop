@@ -1,0 +1,21 @@
+Task 14：Todo 本地读写服务（写入生成 outbox）
+
+合同来源：
+- PLAN.md：Todo 写入必须先落本地 SQLite，并在同一事务写 outbox_mutations；禁止 UI 直写远端状态表。
+- apidocs/api.zh-CN.md：sync/push mutations 形状（resource/op/entity_id/client_updated_at_ms/data）。
+
+实现说明：
+- 新增 Todo 本地服务：src/main/todo/todoRepo.ts
+  - upsertTodoList/patchTodoList/deleteTodoList/restoreTodoList：写 todo_lists，并 enqueue outbox（resource=todo_list）
+  - upsertTodoItem/patchTodoItem/deleteTodoItem/restoreTodoItem：写 todo_items，并 enqueue outbox（resource=todo_item）
+  - 所有写入统一使用 withImmediateTransaction（BEGIN IMMEDIATE），保证业务表 + outbox 同一事务提交/回滚。
+
+单测覆盖：src/main/todo/todoRepo.test.ts
+- upsert list + upsert item：断言 outbox 插入 2 条，resource/op/entity_id 正确；data_json 含必要字段。
+- delete/restore item：断言 tombstone 字段变化，且每次动作都会额外生成 outbox。
+
+验证输出：
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+Test Files  15 passed (15)
+Tests       39 passed (39)
