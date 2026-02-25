@@ -2081,7 +2081,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-18-cursor-rollback.txt
   ```
 
-- [ ] 13. Outbox 写入工具与 `client_updated_at_ms` 单调递增（基础能力）
+- [x] 13. Outbox 写入工具与 `client_updated_at_ms` 单调递增（基础能力）
 
   **What to do**:
   - 实现 `client_updated_at_ms` 的 monotonic bump 规则：对同一实体 id，新值为 `max(now_ms, last_ms + 1)`。
