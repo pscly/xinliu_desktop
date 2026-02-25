@@ -209,6 +209,56 @@ export const MIGRATIONS: readonly SqliteMigration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    name: 'notes_memos_and_attachments',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS memos (
+          local_uuid TEXT PRIMARY KEY,
+          server_memo_id TEXT NULL,
+          server_memo_name TEXT NULL,
+          content TEXT NOT NULL,
+          visibility TEXT NOT NULL,
+          sync_status TEXT NOT NULL
+            CHECK(sync_status IN ('LOCAL_ONLY', 'DIRTY', 'SYNCING', 'SYNCED', 'FAILED')),
+          last_error TEXT NULL,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_memos_server_memo_id
+          ON memos(server_memo_id)
+          WHERE server_memo_id IS NOT NULL;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_memos_server_memo_name
+          ON memos(server_memo_name)
+          WHERE server_memo_name IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_memos_sync_status ON memos(sync_status);
+        CREATE INDEX IF NOT EXISTS idx_memos_updated_at_ms ON memos(updated_at_ms);
+
+        CREATE TABLE IF NOT EXISTS memo_attachments (
+          id TEXT PRIMARY KEY,
+          memo_local_uuid TEXT NOT NULL,
+          server_attachment_name TEXT NULL,
+          local_relpath TEXT NULL,
+          cache_relpath TEXT NULL,
+          cache_key TEXT NULL,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL,
+          FOREIGN KEY (memo_local_uuid) REFERENCES memos(local_uuid)
+            ON DELETE CASCADE
+            DEFERRABLE INITIALLY DEFERRED
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_memo_attachments_memo_local_uuid
+          ON memo_attachments(memo_local_uuid);
+        CREATE INDEX IF NOT EXISTS idx_memo_attachments_cache_key
+          ON memo_attachments(cache_key);
+      `);
+    },
+  },
 ];
 
 export function applyMigrations(
