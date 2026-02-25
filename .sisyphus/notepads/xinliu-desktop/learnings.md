@@ -80,6 +80,9 @@
   - 放进路由/URL 参数：用 `encodeURIComponent` / `decodeURIComponent`（确保 `memos/123` 中的 `/` 被编码为 `%2F`，可 round-trip）。
   - 放进本地 KV key：用 base64url(utf8)，输出必须不含 `+`、`/`、`=`；解码时根据长度 `% 4` 补齐 `=` padding。
 
+- [2026-02-25] Notes(Memos) 本地落库：在 SQLite 迁移 v4 创建 `memos` 与 `memo_attachments` 表；`memos.sync_status` 必须用 `CHECK(sync_status IN (...))` 受控值域（LOCAL_ONLY/DIRTY/SYNCING/SYNCED/FAILED），避免状态机字段被写入任意字符串。
+- [2026-02-25] better-sqlite3 在 CHECK 约束失败时，抛错信息可能是 `CHECK constraint failed: ...`（不一定包含 `SQLITE_CONSTRAINT` 字样）；单测断言建议匹配 `check constraint failed` 或 `err.code`。
+
 ## [2026-02-25] - Memos API Client（Task 34）约定
 
 - API base path 固定为 `/api/v1`。在复用 `createHttpClient` 的情况下，推荐将实例 `baseUrl` 传入为“纯实例地址”（例如 `https://memos.example.com`），并在每个请求的 `pathname` 上显式带上 `/api/v1/...`（对齐现有 `FlowClient` 的写法）。
@@ -93,3 +96,11 @@
 - 降级触发条件必须严格：仅当 Memos 返回 401/403，或错误码为 `NETWORK_ERROR/TIMEOUT`（获得有效 HTTP 前失败）时，才允许当次请求降级到 FlowNotes 重试一次；若已获得有效 HTTP 且非 401/403（400/404/409/429/5xx 等）不得降级。
 - request_id 展示规则（Notes 专用，保守一致）：优先 `responseRequestIdHeader`（`X-Request-Id`），否则回退 `requestId`；若发生降级重试则必须分离展示 `memos_request_id` 与 `flow_request_id`。
 - 环境坑：本仓库含 `better-sqlite3` 原生模块，运行 `npm test` 需使用 Node 20（例如 `source ~/.nvm/nvm.sh && nvm use 20.20.0`），否则会出现 `NODE_MODULE_VERSION` 不匹配导致大量测试失败。
+
+## [2026-02-25] - Memos 本地表 Schema（Task 36）要点
+
+- SQLite 迁移：在 `src/main/db/migrations.ts` 的 migration v4 新增 `memos` 与 `memo_attachments` 两张表（版本号必须连续递增，v4 需追加在 MIGRATIONS 末尾）。
+- 同步状态机受控：`memos.sync_status` 必须使用 `CHECK(sync_status IN ('LOCAL_ONLY','DIRTY','SYNCING','SYNCED','FAILED'))` 限定值域，禁止自由文本。
+- 服务端 memo id 类型：`memos.server_memo_id` 必须是 `TEXT NULL`（兼容 uuid/自定义 id 等非纯数字形态）。
+- 资源名与路径护栏：`server_memo_name`（形如 `memos/123`）仅作为服务端资源名存储，禁止用于本地文件名/路径片段拼接（包括 `path.join/resolve`）。
+- 附件关联：`memo_attachments.memo_local_uuid` 外键引用 `memos.local_uuid`，并使用 `ON DELETE CASCADE`，确保删除 memo 时附件记录可自动清理。
