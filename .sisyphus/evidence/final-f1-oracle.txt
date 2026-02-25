@@ -1,0 +1,18 @@
+结构覆盖 [PASS] | 关键字对齐 [PASS] | mermaid [4>=3? YES] | TBD 清零 [PASS] | VERDICT PASS
+
+**Bottom line**
+`PLAN.md` 已覆盖 `.sisyphus/plans/desktop-design-completion-plan.md` 的 Must Have/Must NOT Have 要点，并把关键“硬约束”(Windows-only/托盘语义/混合后端边界/同步合同/协议安全/更新发布)明确写死。读取 `.sisyphus/evidence/final-plan-verify.txt` 可确认验收脚本输出为 `VERDICT: PASS`。  
+no major issues
+
+**Verification（显式确认）**
+- 章节/结构：`PLAN.md` 包含目标/非目标、IA/导航、Windows 窗口与系统集成、后端边界、数据模型(SQLite)、同步与冲突、安全(Electron/IPC/协议)、错误处理、性能预算、安装与更新、验收清单（且给出可执行命令）。
+- 强制项存在性：Windows-only；托盘常驻；关闭到托盘；仅托盘菜单退出；全局快捷键可配置且注册失败有可见退路；Storage Root 迁移+失败回滚+重启提示；GitHub Actions 发布(NSIS)；应用内自动检测更新；混合后端边界(Flow vs Memos)；Flow 同步合同关键字与冲突证据；Memos `memoName` 形如 `memos/123` + encode/decode；自定义协议 `memo-res://` 白名单/防穿越/拒绝 symlink&reparse point/MIME 白名单。
+- 验收检查：`.sisyphus/evidence/final-plan-verify.txt` 显示结构 missing=0、合同关键字 missing=0、`mermaid_blocks=4`、`tbd_hits=0`，最终 `VERDICT: PASS`。
+
+**Action plan**
+1) 将 `PLAN.md` 作为唯一最终规格执行来源（实现与测试以其为准）。  
+2) 实现时直接复用 `PLAN.md` 的验收命令段落（1.11）作为 CI/本地核对脚本。  
+3) 若后续有人改动规格，要求同步更新并重新生成一份新的验收输出文件以保持“可运行验收”属性。
+
+**Effort estimate**
+Quick（<1h）

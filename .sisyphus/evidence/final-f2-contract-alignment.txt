@@ -1,0 +1,108 @@
+F2. 合同对齐审阅（apidocs 对账）
+生成时间：2026-02-25T04:58:15+08:00
+
+基准来源（只读对账，不改合同）：
+- PLAN：PLAN.md
+- Flow 合同：apidocs/api.zh-CN.md
+- Collections 合同：apidocs/collections.zh-CN.md
+- 客户端对接总指南：apidocs/to_app_plan.md
+- Memos 编码约束证据：DESIGN.md
+
+对齐项 [7/7] | 漂移项 [0]（PLAN 对账） | 文档问题提示 [1]（不阻断 PASS） | VERDICT: PASS
+
+说明：
+- 先前漂移点 D1（has_more）与 D2（413）已在 PLAN.md 修复（见下文“已修复漂移点”证据）。
+- apidocs 内部不一致（D3）保留为“文档问题提示”，但不应导致 PLAN 对账 FAIL（PLAN.md 已明确容错原则，且实现以 Collections 合同为准）。
+
+====================
+对齐检查明细（7 项）
+====================
+
+1) Flow Base URL 与 /api/v1 口径：PASS
+证据（PLAN.md）：
+- 关键字/小节：`### 1.4.2 Base URL 与标准化`（Flow Base URL 默认 `https://xl.pscly.cc`；要求标准化去尾部 `/`）
+- 关键字/小节：多处显式使用 `/api/v1/...`（例如 `POST /api/v1/sync/push`、`GET /api/v1/sync/pull` 的文字/mermaid）
+证据（apidocs）：
+- apidocs/api.zh-CN.md：`## 1. 基本信息`（v1 Base Path = `/api/v1`）
+- apidocs/to_app_plan.md：`## 2. Base URL 与鉴权`（固定拼接 `{FLOW_BACKEND_BASE_URL}/api/v1/...`，并强调去尾部 `/`）
+- apidocs/collections.zh-CN.md：`### 1.1 Base URL`（Base: `{ORIGIN}/api/v1`）
+判定说明：PLAN 将“origin（如 https://xl.pscly.cc）”与“固定前缀 /api/v1”分离，并要求标准化，符合 apidocs 口径。
+
+2) Auth：login/register/logout/me 的存在性：PASS（侧对齐）
+证据（PLAN.md）：
+- 关键字/小节：`## 0. 已确认决策与护栏` 的优先级声明（接口字段与同步合同以 apidocs 为准）
+- 关键字/小节：`### 1.4.1 责任划分`（Auth 归属 Flow；登录返回 token + server_url）
+- 关键字/小节：`### 1.4.3 鉴权与请求头`（`Authorization: Bearer <token>`）
+证据（apidocs）：
+- apidocs/api.zh-CN.md：`### 5.1 Auth`（列出：`POST /api/v1/auth/register`、`POST /api/v1/auth/login`、`POST /api/v1/auth/logout`、`GET /api/v1/me`）
+- apidocs/to_app_plan.md：`### 阶段 A：先把“登录态”打通`（同上四个 endpoint）
+判定说明：PLAN 以“端侧行为/边界”为主规格，接口清单以 apidocs 为权威源，不重复枚举 endpoint，属于预期的规格分工。
+
+3) Sync pull/push：cursor/next_cursor/has_more；applied/rejected；冲突证据（rejected[].server / server_snapshot）：PASS
+证据（PLAN.md）：
+- 关键字/小节：`### 0.5 Flow 同步合同硬约束`（sync/pull cursor；sync/push applied/rejected；冲突证据 `server_snapshot` 或 `rejected[].server`）
+- 关键字/小节：`#### 1.6.1.4 sync/pull`（明确：`has_more=true` 必须循环拉取并 apply，直到 `has_more=false`；cursor 严格使用上一轮 `next_cursor`；任一轮 apply 失败必须停止并保持旧 cursor 不变）
+证据（apidocs/api.zh-CN.md）：
+- `### 5.6 Sync（v1）`：pull 响应包含 `cursor / next_cursor / has_more / changes`；push 返回 `applied[]/rejected[]` 且 rejected 项含 `server` 快照
+- `### 4.2 错误响应（ErrorResponse）`：409 conflict 常带 `details.server_snapshot`
+判定说明：D1（has_more）缺口已补齐；并且 PLAN 的“落库成功才推进 cursor”与 apidocs 的 cursor/next_cursor 语义一致且更保守。
+
+4) 并发字段：client_updated_at_ms 单调递增；deleted_at tombstone：PASS
+证据（PLAN.md）：
+- 关键字/小节：`#### 1.6.1.2 client_updated_at_ms 单调递增`（规则：`max(now_ms, last_ms + 1)`）
+- 关键字/小节：`#### 1.6.1.4 sync/pull`（`deleted_at != null` 按 tombstone 应用）
+证据（apidocs）：
+- apidocs/api.zh-CN.md：`## 3. 时间与并发冲突`（client_updated_at_ms 用于 LWW）
+- apidocs/collections.zh-CN.md：`### 1.4 LWW` + `### 1.5 软删除`（同口径）
+判定说明：PLAN 对 client_updated_at_ms 的单调递增规则比 apidocs 更严格（向上收紧），不构成漂移。
+
+5) Collections：sync resource=collection_item；pull changes key=collection_items；item_type 范围：PASS（含文档漂移容错）
+证据（PLAN.md）：
+- 关键字/小节：`### 1.5.5 Collections(结构层) 的同步资源名`（resource=collection_item；changes key=collection_items；`item_type` 仅允许 `folder|note_ref`）
+- 关键字/小节：`#### 1.6.1.5 Collections 合同漂移容错原则`（已知 apidocs 内部漂移时，以 Collections 合同为准；并允许兼容映射且记录日志）
+证据（apidocs/collections.zh-CN.md）：
+- `### 4.1 资源名与 cursor 语义`（resource=collection_item；pull 的 `changes` 中总是存在 `collection_items` key）
+- `### 2.1 CollectionItem`（`item_type=folder|note_ref`）
+文档问题提示（D3，不阻断 PASS）：
+- apidocs/api.zh-CN.md：sync/push “资源类型（固定）”列表未包含 `collection_item`；sync/pull 示例 `changes` 未包含 `collection_items`
+判定说明：PLAN 已明确“以 Collections 合同为准 + 容错”，因此该不一致被归类为“apidocs 文档问题”，不应导致 PLAN 对账 FAIL。
+
+6) 401/429/413 的客户端策略：PASS（413 已补齐）
+证据（PLAN.md）：
+- 关键字/小节：`#### 1.6.1.3 sync/push`（429 `rate_limited`：遵守 `Retry-After` 并暂停本轮剩余 push；401 `unauthorized`：停止自动重试并引导重新登录）
+- 关键字/小节：`### 1.8.5 413 payload_too_large 处理策略`（413 或 `error==payload_too_large`：立即停止自动重试；UI 明确提示；日志记录 request_id 与 error code；附件场景提供用户动作；sync/push 场景允许降低 batch size/拆分分批）
+证据（apidocs/api.zh-CN.md）：
+- `#### 4.2.1 错误码与 error 字段对照`（413 -> `payload_too_large`；429 -> `rate_limited`；401 -> `unauthorized`）
+- `#### 4.2.3 客户端处理建议`（401：清理 token 并提示重新登录；429：读取 `Retry-After` 后退避重试）
+判定说明：D2（413 策略）缺口已补齐；PLAN 的策略与 apidocs 一致，并对 Flow sync/push 给出可实现的拆分/降级原则。
+
+7) Memos：memoName/name 可能为 memos/123（含 /）；encode/decode 规则与禁止当路径片段：PASS
+证据（PLAN.md）：
+- 关键字/小节：`### 0.6 Memos 标识符与编码`（memoName/name 可能为 `memos/123`；禁止当路径片段；必须 encode/decode）
+- 关键字/小节：`#### 1.5.4.1 encode/decode 规则`（路由参数：`encodeURIComponent/decodeURIComponent`；本地 key 建议 base64url；要求 round-trip）
+证据（DESIGN.md）：
+- 关键字/小节：`### 4.2 路由（Navigation Contracts）`（uuid 可能包含 `/`（例：memos/123），必须 `Uri.encode`；强调路由层必须 encode/decode）
+判定说明：PLAN 将“路由 encode/decode”与“本地 key 稳定编码（避免路径片段/文件名/KV key 注入）”拆开规定，满足桌面端安全与可恢复性约束。
+
+====================
+已修复漂移点（证据）
+====================
+
+D1) has_more 已修复：PASS
+- 证据（PLAN.md）：`#### 1.6.1.4 sync/pull` 明确包含关键字 `has_more`，并要求 `has_more=true` 时循环拉取直到 `has_more=false`。
+- 合同来源（apidocs/api.zh-CN.md）：`### 5.6 Sync（v1）` 的 `SyncPullResponse.has_more` 字段。
+
+D2) 413 payload_too_large 已修复：PASS
+- 证据（PLAN.md）：`### 1.8.5 413 payload_too_large 处理策略` 小节（关键字 `payload_too_large`），明确“停止自动重试 + 用户可行动作 + sync/push 可拆分/降 batch”。
+- 合同来源（apidocs/api.zh-CN.md）：`#### 4.2.1`（413 -> `payload_too_large`）。
+
+====================
+文档问题提示（不阻断 PASS）
+====================
+
+D3) apidocs 内部口径不一致：Sync 资源列表 vs Collections Sync
+- 证据（apidocs/api.zh-CN.md）：sync/push “资源类型（固定）”未列 `collection_item`；sync/pull 示例 `changes` 未含 `collection_items`
+- 证据（apidocs/collections.zh-CN.md）：明确 `resource=collection_item` 且 `changes.collection_items` key 总存在
+- PLAN.md 容错依据：`#### 1.6.1.5 Collections 合同漂移容错原则`
+
+—— 结束 ——

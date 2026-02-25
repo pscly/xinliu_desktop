@@ -1,0 +1,40 @@
+== Section Coverage ==
+[PASS] 目标
+[PASS] 非目标
+[PASS] 信息架构
+[PASS] 导航
+[PASS] 窗口
+[PASS] 系统集成
+[PASS] 数据模型
+[PASS] SQLite
+[PASS] 同步
+[PASS] 冲突
+[PASS] Electron
+[PASS] 安全
+[PASS] 错误处理
+[PASS] 性能预算
+[PASS] 安装
+[PASS] 更新
+[PASS] 验收
+[PASS] 清单
+missing=0
+
+== Flow Contract Keywords ==
+[PASS] client_updated_at_ms (hits=8)
+[PASS] deleted_at (hits=6)
+[PASS] sync/pull (hits=8)
+[PASS] sync/push (hits=11)
+[PASS] applied (hits=7)
+[PASS] rejected (hits=13)
+[PASS] server_snapshot (hits=8)
+[PASS] collection_item (hits=17)
+[PASS] has_more (hits=1)
+missing=0
+
+== Mermaid Blocks ==
+mermaid_blocks=4
+
+== TBD Markers ==
+tbd_hits=0
+
+VERDICT: PASS

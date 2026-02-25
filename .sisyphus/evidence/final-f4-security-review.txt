@@ -1,0 +1,29 @@
+F4. Electron 安全边界审阅（IPC/协议/敏感信息）- 基于 PLAN.md
+
+安全基线 [PASS] | IPC 边界 [PASS] | 风险点 [1) preload API 漫延/暴露 ipcRenderer; 2) IPC 通道或参数校验被“临时调试”绕过; 3) 导入/导出路径权限门被 renderer 传绝对路径破坏; 4) memo-res:// 协议实现出现路径穿越或跟随 symlink/reparse point; 5) 日志脱敏遗漏导致 token/Authorization 泄露] | VERDICT: PASS
+
+核对结论（以 PLAN.md 为唯一规格）
+
+1) Electron 安全基线是否明确
+- 已明确 MUST: contextIsolation=true、nodeIntegration=false、webSecurity=true、allowRunningInsecureContent=false（PLAN.md 1.7.1）。
+- 已明确 MUST: renderer 不直接接触 SQLite/文件系统写入/系统凭据库；preload 仅暴露用例级 API，禁止暴露通用 ipcRenderer（PLAN.md 1.7.1）。
+- 已明确 MUST: 禁止任意导航（will-navigate 默认 preventDefault）、拦截 window.open 默认 deny，仅允许受控外链策略（PLAN.md 1.7.1）。
+
+2) IPC 白名单/参数校验/权限门是否明确
+- 已明确 MUST: IPC 命名空间静态可枚举，main 侧逐一 handle，禁止通配（PLAN.md 1.7.2）。
+- 已明确 MUST: 每个 IPC 参数校验与限流，防 DoS；统一错误结构，禁止把内部堆栈与绝对路径透传给 renderer（PLAN.md 1.7.2）。
+- 已明确 MUST: 导出路径仅来自系统保存对话框、导入路径仅来自系统打开对话框（或等价二次确认）；renderer 不得经 IPC 传任意绝对路径给 main 读写（PLAN.md 1.7.3，且“分享与导出”也强调导出路径必须走系统保存对话框授权）。
+
+3) 自定义协议 memo-res:// 安全边界是否明确
+- 已明确 MUST: 仅允许读取白名单目录 <root>/attachments-cache/ 与 <root>/attachments/（PLAN.md 1.7.4）。
+- 已明确 MUST: 防穿越，拒绝任何分隔符与编码绕过；拒绝 symlink 与 Windows reparse point（PLAN.md 1.7.4，且在 0.7 章节亦再次声明）。
+- 已明确 MUST: MIME 白名单；高风险可执行类型强制下载（Content-Disposition: attachment），禁止内联预览（PLAN.md 1.7.4）。
+
+4) 敏感信息与可观测性是否明确
+- 已明确 MUST: Flow/Memos 请求使用 Authorization Bearer token，但 token 不写入日志、不在 UI 明文展示；token 持久化必须使用 Windows Credential Vault/DPAPI 等安全存储，不落明文文件/SQLite（PLAN.md 1.4.3）。
+- 已明确 MUST: 请求携带 X-Request-Id；诊断面板支持复制 request_id；日志位于 <root>/logs/ 且脱敏，禁止包含 token、Authorization、绝对路径（PLAN.md 1.8.3）。
+
+实现期注意点（PASS 时 0-3 条）
+- preload 桥接层要“只增不泛化”：新增能力必须新增具体用例 API，禁止为省事暴露任意通道/任意方法（与 PLAN.md 1.7.1 的“禁暴露通用 ipcRenderer”一致）。
+- IPC 参数校验建议在 main 侧做强制 schema 校验 + 速率限制的公共封装，避免某个新 IPC 忘了校验或忘了限流（对应 PLAN.md 1.7.2）。
+- memo-res:// 处理必须坚持“cacheKey/不透明标识 -> 受控映射 -> 白名单根目录 realpath 校验”的路线；实现时务必使用 lstat/realpath 并显式拒绝 symlink/junction/reparse point，避免 Windows 下的路径/编码绕过（对应 PLAN.md 1.7.4 与 1.5.6）。
