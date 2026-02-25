@@ -2127,7 +2127,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-13-delete-outbox.txt
   ```
 
-- [ ] 14. Todo 本地读写服务（SQLite SoT + tombstone + outbox）
+- [x] 14. Todo 本地读写服务（SQLite SoT + tombstone + outbox）
 
   **What to do**:
   - 实现 Todo 的本地写路径：新建/编辑/完成/删除/恢复（软删）全部写入 SQLite，并同一事务写 outbox。
