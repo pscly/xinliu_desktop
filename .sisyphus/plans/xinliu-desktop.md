@@ -1454,7 +1454,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-27-ui.txt
   ```
 
-- [ ] 28. 全局搜索（FTS5 + 单次 IPC 分页返回 + 快捷键入口）
+- [x] 28. 全局搜索（FTS5 + 单次 IPC 分页返回 + 快捷键入口）
 
   **What to do**:
   - SQLite 启用 FTS5（作为 SHOULD，但为完整实现纳入），建立搜索索引（Notes/Todo/Collections 的必要字段）。

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   ContextMenuDidSelectPayload,
   DiagnosticsStatus,
+  SearchQueryResult,
+  SearchResultItem,
   ShortcutId,
   ShortcutStatusEntry,
   ShortcutsStatus,
@@ -33,6 +35,7 @@ type XinliuShortcutsApi = NonNullable<Window['xinliu']>['shortcuts'];
 type XinliuStorageRootApi = NonNullable<Window['xinliu']>['storageRoot'];
 type XinliuDiagnosticsApi = NonNullable<Window['xinliu']>['diagnostics'];
 type XinliuContextMenuApi = NonNullable<Window['xinliu']>['contextMenu'];
+type XinliuSearchApi = NonNullable<Window['xinliu']>['search'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
   return window.xinliu?.window;
@@ -52,6 +55,10 @@ function getXinliuDiagnosticsApi(): XinliuDiagnosticsApi | undefined {
 
 function getXinliuContextMenuApi(): XinliuContextMenuApi | undefined {
   return window.xinliu?.contextMenu;
+}
+
+function getXinliuSearchApi(): XinliuSearchApi | undefined {
+  return window.xinliu?.search;
 }
 
 async function safePopupMiddleItemMenu(itemId: string) {
@@ -644,6 +651,12 @@ function DefaultRoutePlaceholder(props: {
 function GlobalSearchBox() {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<SearchResultItem[]>([]);
+  const [lastResult, setLastResult] = useState<SearchQueryResult | null>(null);
+
   useEffect(() => {
     const api = getXinliuShortcutsApi();
     const off = api?.onFocusSearch?.(() => {
@@ -655,6 +668,90 @@ function GlobalSearchBox() {
     };
   }, []);
 
+  const renderMarkedSnippet = (snippet: string) => {
+    const s = String(snippet ?? '');
+    if (!s.includes('<mark>')) {
+      return s;
+    }
+
+    const parts: Array<{ text: string; marked: boolean; key: number }> = [];
+    let cursor = 0;
+    while (cursor < s.length) {
+      const open = s.indexOf('<mark>', cursor);
+      if (open < 0) {
+        parts.push({ text: s.slice(cursor), marked: false, key: cursor });
+        break;
+      }
+      if (open > cursor) {
+        parts.push({ text: s.slice(cursor, open), marked: false, key: cursor });
+      }
+      const close = s.indexOf('</mark>', open + 6);
+      if (close < 0) {
+        parts.push({ text: s.slice(open), marked: false, key: open });
+        break;
+      }
+      parts.push({ text: s.slice(open + 6, close), marked: true, key: open });
+      cursor = close + 7;
+    }
+
+    return parts.map((p) =>
+      p.marked ? <mark key={p.key}>{p.text}</mark> : <span key={p.key}>{p.text}</span>
+    );
+  };
+
+  const runQuery = useCallback(
+    async (options: { query: string; page: number; append: boolean }) => {
+    const api = getXinliuSearchApi();
+    const fn = api?.query;
+    if (typeof fn !== 'function') {
+      setError('搜索能力不可用（preload 未注入）');
+      setItems([]);
+      setLastResult(null);
+      return;
+    }
+
+    const q = options.query.trim();
+    if (q.length === 0) {
+      setError(null);
+      setItems([]);
+      setLastResult(null);
+      return;
+    }
+
+      setLoading(true);
+      setError(null);
+      try {
+      const res = await fn({ query: q, page: options.page, pageSize: 20 });
+      if (!res.ok) {
+        setError(`搜索失败：${res.error.code}`);
+        setItems([]);
+        setLastResult(null);
+        return;
+      }
+      setLastResult(res.value);
+      setItems((prev) => (options.append ? [...prev, ...res.value.items] : res.value.items));
+    } catch (e) {
+      setError(`搜索异常：${String(e)}`);
+      setItems([]);
+      setLastResult(null);
+    } finally {
+      setLoading(false);
+    }
+    },
+    []
+  );
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void runQuery({ query, page: 0, append: false });
+    }, 180);
+    return () => {
+      window.clearTimeout(handle);
+    };
+  }, [query, runQuery]);
+
+  const canLoadMore = Boolean(lastResult?.hasMore) && !loading;
+
   return (
     <div className="rightCard" data-testid="global-search">
       <div className="rightCardTitle">搜索</div>
@@ -663,9 +760,89 @@ function GlobalSearchBox() {
           ref={inputRef}
           className="textInput"
           data-testid="global-search-input"
-          placeholder="搜索（占位，后续接入 FTS5）"
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+          placeholder="搜索 Notes / Todo / Collections"
         />
-        <div className="fine">提示：可通过全局快捷键打开主窗并聚焦此输入框。</div>
+
+        {error ? <div className="calloutWarn">{error}</div> : null}
+
+        {lastResult && !lastResult.ftsAvailable ? (
+          <div className="calloutWarn">
+            索引不可用：已降级为有限搜索（仅扫描最近部分数据）。
+            <div className="calloutActions">
+              <button
+                type="button"
+                className="btnSmall"
+                onClick={async () => {
+                  const api = getXinliuSearchApi();
+                  const fn = api?.rebuildIndex;
+                  if (typeof fn !== 'function') {
+                    setError('重建索引不可用');
+                    return;
+                  }
+                  setLoading(true);
+                  setError(null);
+                  try {
+                    const res = await fn();
+                    if (!res.ok) {
+                      setError(`重建失败：${res.error.code}`);
+                      return;
+                    }
+                    if (!res.value.rebuilt) {
+                      setError(res.value.message);
+                      return;
+                    }
+                    void runQuery({ query, page: 0, append: false });
+                  } catch (e) {
+                    setError(`重建异常：${String(e)}`);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
+                重建索引
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="fine">
+          {loading ? '搜索中…' : '提示：可通过全局快捷键打开主窗并聚焦此输入框。'}
+        </div>
+
+        {items.length > 0 ? (
+          <ul className="searchResults">
+            {items.map((item) => {
+              const secondary = item.matchSnippet?.trim().length
+                ? item.matchSnippet
+                : item.preview;
+              return (
+                <li key={`${item.kind}:${item.id}`} className="searchResultRow">
+                  <div className="searchResultTop">
+                    <div className="searchResultTitle">{item.title}</div>
+                    <div className="searchResultKind">{item.kind}</div>
+                  </div>
+                  {secondary.length > 0 ? (
+                    <div className="searchResultSnippet">{renderMarkedSnippet(secondary)}</div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+
+        {canLoadMore ? (
+          <button
+            type="button"
+            className="btnSmall"
+            onClick={() =>
+              void runQuery({ query, page: (lastResult?.page ?? 0) + 1, append: true })
+            }
+          >
+            加载更多
+          </button>
+        ) : null}
       </div>
     </div>
   );

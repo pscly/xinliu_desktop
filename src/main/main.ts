@@ -39,11 +39,14 @@ import {
 import { migrateStorageRoot } from './storageRoot/migrateStorageRoot';
 import { installMemoResProtocol } from './protocol/memoResProtocol';
 import { resolveMainDbFileAbsPath } from './db/paths';
+import { openSqliteDatabase, closeSqliteDatabase } from './db/sqlite';
+import { applyMigrations } from './db/migrations';
 import { createDiagnosticsController } from './diagnostics/diagnosticsController';
 import {
   popupFolderContextMenu,
   popupMiddleItemContextMenu,
 } from './menu/contextMenu';
+import { queryGlobalSearch, rebuildGlobalSearchIndex } from './search/globalSearch';
 
 const closeToTray = createCloseToTrayController();
 
@@ -287,6 +290,20 @@ app.whenReady().then(async () => {
 
   const diagnostics = createDiagnosticsController();
 
+  const withMainDb = <T>(run: (db: Database.Database) => T): T => {
+    const dbFileAbsPath = resolveMainDbFileAbsPath(storageRootStatus.storageRootAbsPath);
+    const { db } = openSqliteDatabase({
+      dbFileAbsPath,
+      busyTimeoutMs: 2000,
+    });
+    try {
+      applyMigrations(db);
+      return run(db);
+    } finally {
+      closeSqliteDatabase(db);
+    }
+  };
+
   registerIpcHandlers(ipcMain, {
     getWindowForSender: (sender) =>
       BrowserWindow.fromWebContents(sender as WebContents),
@@ -373,6 +390,10 @@ app.whenReady().then(async () => {
         popupMiddleItemContextMenu({ win: win as BrowserWindow, itemId }),
       popupFolder: ({ win, folderId }) =>
         popupFolderContextMenu({ win: win as BrowserWindow, folderId }),
+    },
+    search: {
+      query: (payload) => withMainDb((db) => queryGlobalSearch(db, payload)),
+      rebuildIndex: () => withMainDb((db) => rebuildGlobalSearchIndex(db)),
     },
   });
 

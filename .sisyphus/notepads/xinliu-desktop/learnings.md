@@ -182,3 +182,14 @@
 - renderer 不创建系统菜单：只在 `onContextMenu` 中 `event.preventDefault()`，并调用 `window.xinliu.contextMenu.popupFolder(folderId)` / `popupMiddleItem(itemId)`。
 - 菜单选择的回传：main 在 `MenuItem.click` 时通过 `webContents.send(IPC_EVENTS.contextMenu.didSelect, {target,command})` 发事件；preload 暴露用例级订阅 `window.xinliu.contextMenu.onCommand(listener)`。
 - Vitest main-side 测试要强制 Node 环境：`// @vitest-environment node` 是必要指令（否则会走默认 jsdom，容易踩 Electron/runtime 相关坑）。
+
+## [2026-02-26] - Task 28 全局搜索（FTS5 + IPC 单次分页 + 降级）
+
+- FTS5 迁移的健壮性：不要让 `CREATE VIRTUAL TABLE ... fts5` 失败把整个 `applyMigrations` 打崩。
+  - 实用做法：在 migration 的 `up(db)` 里先用 JS try/catch 单独执行虚表创建；失败则直接 return（让迁移整体完成、user_version 继续推进）。
+  - 上层查询侧以“表是否存在 + 查询是否抛错”决定 `mode='fts'|'fallback'`，并对 UI 提供结构化 `ftsAvailable/degradedReason`。
+- 降级查询避免全表扫描：fallback 不要直接对大表 `LIKE '%q%'`；建议每张表只扫最近 N 条（按 updated/client_updated_at 排序 + LIMIT），再 union 后做 LIKE 过滤 + 分页。
+- IPC 合同：全局搜索必须“一次 IPC 返回一页”，payload 里显式带 `page/pageSize/query`；renderer 的分页只能再发一次 query IPC（禁止 N+1 逐条拉详情）。
+- 测试技巧：
+  - FTS 路径：往 memos 连续插入 25+ 条含关键词的数据，断言第一页 20 条 + hasMore=true，再断言第二页与第一页不重叠；再断言 snippet 含 `<mark>`（证明走了 FTS snippet）。
+  - 降级路径：只 apply 到 v6（不建 FTS 表），或者 drop FTS 表，然后断言 mode='fallback' 且 ftsAvailable=false。

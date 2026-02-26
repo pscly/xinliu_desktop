@@ -315,6 +315,299 @@ export const MIGRATIONS: readonly SqliteMigration[] = [
       `);
     },
   },
+  {
+    version: 7,
+    name: 'global_search_fts5',
+    up: (db) => {
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE IF NOT EXISTS global_search_fts
+          USING fts5(
+            kind UNINDEXED,
+            entity_id UNINDEXED,
+            title,
+            body,
+            tags,
+            updated_at_ms UNINDEXED,
+            tokenize = 'unicode61 remove_diacritics 2'
+          );
+        `);
+      } catch {
+        return;
+      }
+
+      db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_memos_fts_ai
+        AFTER INSERT ON memos
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'memo' AND entity_id = new.local_uuid;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES('memo', new.local_uuid, '', new.content, '', new.updated_at_ms);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_memos_fts_au
+        AFTER UPDATE ON memos
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'memo' AND entity_id = new.local_uuid;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES('memo', new.local_uuid, '', new.content, '', new.updated_at_ms);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_memos_fts_ad
+        AFTER DELETE ON memos
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'memo' AND entity_id = old.local_uuid;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_notes_fts_ai
+        AFTER INSERT ON notes
+        WHEN new.deleted_at IS NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'note' AND entity_id = new.id;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES(
+              'note',
+              new.id,
+              new.title,
+              new.body_md,
+              new.tags_json,
+              CAST((julianday(new.updated_at) - 2440587.5) * 86400000 AS INTEGER)
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_notes_fts_au
+        AFTER UPDATE ON notes
+        WHEN new.deleted_at IS NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'note' AND entity_id = new.id;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES(
+              'note',
+              new.id,
+              new.title,
+              new.body_md,
+              new.tags_json,
+              CAST((julianday(new.updated_at) - 2440587.5) * 86400000 AS INTEGER)
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_notes_fts_au_tombstone
+        AFTER UPDATE ON notes
+        WHEN new.deleted_at IS NOT NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'note' AND entity_id = new.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_notes_fts_ad
+        AFTER DELETE ON notes
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'note' AND entity_id = old.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_todo_items_fts_ai
+        AFTER INSERT ON todo_items
+        WHEN new.deleted_at IS NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'todo_item' AND entity_id = new.id;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES(
+              'todo_item',
+              new.id,
+              new.title,
+              new.note,
+              new.tags_json,
+              CAST((julianday(new.updated_at) - 2440587.5) * 86400000 AS INTEGER)
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_todo_items_fts_au
+        AFTER UPDATE ON todo_items
+        WHEN new.deleted_at IS NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'todo_item' AND entity_id = new.id;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES(
+              'todo_item',
+              new.id,
+              new.title,
+              new.note,
+              new.tags_json,
+              CAST((julianday(new.updated_at) - 2440587.5) * 86400000 AS INTEGER)
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_todo_items_fts_au_tombstone
+        AFTER UPDATE ON todo_items
+        WHEN new.deleted_at IS NOT NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'todo_item' AND entity_id = new.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_todo_items_fts_ad
+        AFTER DELETE ON todo_items
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'todo_item' AND entity_id = old.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_todo_lists_fts_ai
+        AFTER INSERT ON todo_lists
+        WHEN new.deleted_at IS NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'todo_list' AND entity_id = new.id;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES(
+              'todo_list',
+              new.id,
+              new.name,
+              '',
+              '',
+              CAST((julianday(new.updated_at) - 2440587.5) * 86400000 AS INTEGER)
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_todo_lists_fts_au
+        AFTER UPDATE ON todo_lists
+        WHEN new.deleted_at IS NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'todo_list' AND entity_id = new.id;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES(
+              'todo_list',
+              new.id,
+              new.name,
+              '',
+              '',
+              CAST((julianday(new.updated_at) - 2440587.5) * 86400000 AS INTEGER)
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_todo_lists_fts_au_tombstone
+        AFTER UPDATE ON todo_lists
+        WHEN new.deleted_at IS NOT NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'todo_list' AND entity_id = new.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_todo_lists_fts_ad
+        AFTER DELETE ON todo_lists
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'todo_list' AND entity_id = old.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_collection_items_fts_ai
+        AFTER INSERT ON collection_items
+        WHEN new.deleted_at IS NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'collection_item' AND entity_id = new.id;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES(
+              'collection_item',
+              new.id,
+              new.name,
+              '',
+              '',
+              CAST((julianday(new.updated_at) - 2440587.5) * 86400000 AS INTEGER)
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_collection_items_fts_au
+        AFTER UPDATE ON collection_items
+        WHEN new.deleted_at IS NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'collection_item' AND entity_id = new.id;
+          INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+            VALUES(
+              'collection_item',
+              new.id,
+              new.name,
+              '',
+              '',
+              CAST((julianday(new.updated_at) - 2440587.5) * 86400000 AS INTEGER)
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_collection_items_fts_au_tombstone
+        AFTER UPDATE ON collection_items
+        WHEN new.deleted_at IS NOT NULL
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'collection_item' AND entity_id = new.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_collection_items_fts_ad
+        AFTER DELETE ON collection_items
+        BEGIN
+          DELETE FROM global_search_fts
+            WHERE kind = 'collection_item' AND entity_id = old.id;
+        END;
+
+        INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+        SELECT 'memo', local_uuid, '', content, '', updated_at_ms
+          FROM memos;
+
+        INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+        SELECT
+          'note',
+          id,
+          title,
+          body_md,
+          tags_json,
+          CAST((julianday(updated_at) - 2440587.5) * 86400000 AS INTEGER)
+          FROM notes
+          WHERE deleted_at IS NULL;
+
+        INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+        SELECT
+          'todo_item',
+          id,
+          title,
+          note,
+          tags_json,
+          CAST((julianday(updated_at) - 2440587.5) * 86400000 AS INTEGER)
+          FROM todo_items
+          WHERE deleted_at IS NULL;
+
+        INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+        SELECT
+          'todo_list',
+          id,
+          name,
+          '',
+          '',
+          CAST((julianday(updated_at) - 2440587.5) * 86400000 AS INTEGER)
+          FROM todo_lists
+          WHERE deleted_at IS NULL;
+
+        INSERT INTO global_search_fts(kind, entity_id, title, body, tags, updated_at_ms)
+        SELECT
+          'collection_item',
+          id,
+          name,
+          '',
+          '',
+          CAST((julianday(updated_at) - 2440587.5) * 86400000 AS INTEGER)
+          FROM collection_items
+          WHERE deleted_at IS NULL;
+      `);
+    },
+  },
 ];
 
 export function applyMigrations(

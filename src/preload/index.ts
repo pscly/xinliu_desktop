@@ -11,6 +11,9 @@ import type {
   IpcVoid,
   QuickCaptureSubmitPayload,
   ShortcutId,
+  SearchQueryPayload,
+  SearchQueryResult,
+  SearchRebuildIndexResult,
   ShortcutsResetOnePayload,
   ShortcutsSetConfigPayload,
   ShortcutsStatus,
@@ -112,5 +115,11 @@ contextBridge.exposeInMainWorld('xinliu', {
         ipcRenderer.removeListener(IPC_EVENTS.contextMenu.didSelect, wrapped);
       };
     },
+  },
+  search: {
+    query: (payload: SearchQueryPayload) =>
+      invokeIpc<SearchQueryResult>(IPC_CHANNELS.search.query, payload),
+    rebuildIndex: () =>
+      invokeIpc<SearchRebuildIndexResult>(IPC_CHANNELS.search.rebuildIndex, EMPTY_PAYLOAD),
   },
 });

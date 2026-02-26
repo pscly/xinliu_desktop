@@ -1,0 +1,30 @@
+Task 28 - 全局搜索（FTS5 + 单次 IPC 分页返回）证据
+
+涉及测试文件：
+- src/main/search/globalSearch.test.ts
+  - 用临时 SQLite 文件 + applyMigrations(db)
+  - 写入 33 条 memos，触发 migration v7 的 FTS 回填/触发器
+  - 断言：
+    - pageSize=20 的第一页 items.length=20 且 hasMore=true
+    - 第二页仍有数据且与第一页不重叠
+    - matchSnippet 包含 <mark> 高亮（证明走的是 FTS snippet）
+  - 构造降级：仅 apply 到 v6（applyMigrations(db, MIGRATIONS.slice(0, 6))）
+    - 断言 mode='fallback' 且 ftsAvailable=false 且 degradedReason='fts_table_missing'
+
+关键实现点（一次 IPC 返回一页，禁止 N+1）：
+- src/shared/ipc.ts：IPC_CHANNELS.search.query + search.rebuildIndex 静态可枚举
+- src/main/ipc.ts：显式注册 handler，返回 SearchQueryResult（包含 items/hasMore/page/pageSize/ftsAvailable/mode）
+- src/preload/index.ts：仅暴露 window.xinliu.search.query/rebuildIndex（不暴露 ipcRenderer）
+- src/renderer/App.tsx：全局搜索框每次查询只调用一次 query IPC，分页通过“加载更多”再次请求下一页
+
+验证输出（Node 20.20.0）：
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+
+Test Files  36 passed (36)
+Tests       107 passed (107)
+
+其中与本任务直接相关：
+- ✓ src/main/search/globalSearch.test.ts (2 tests)
+  - ✓ FTS：单次查询返回一页结果，并可翻页
+  - ✓ 降级：当 FTS 表缺失时仍可返回分页结果，并标记 ftsAvailable=false

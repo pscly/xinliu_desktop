@@ -9,6 +9,9 @@ import type {
   IpcResult,
   IpcVoid,
   QuickCaptureSubmitPayload,
+  SearchQueryPayload,
+  SearchQueryResult,
+  SearchRebuildIndexResult,
   ShortcutId,
   ShortcutsResetOnePayload,
   ShortcutsSetConfigPayload,
@@ -71,6 +74,10 @@ export interface RegisterIpcHandlersDeps {
       win: BrowserWindowLike;
       folderId: string;
     }) => void | Promise<void>;
+  };
+  search: {
+    query: (payload: SearchQueryPayload) => SearchQueryResult | Promise<SearchQueryResult>;
+    rebuildIndex: () => SearchRebuildIndexResult | Promise<SearchRebuildIndexResult>;
   };
   now?: () => number;
 }
@@ -197,6 +204,31 @@ function validateContextMenuPopupFolderPayload(
     return err('VALIDATION_ERROR', '参数不合法');
   }
   return ok({ folderId: trimmed });
+}
+
+function validateSearchQueryPayload(payload: unknown): IpcResult<SearchQueryPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const query = payload['query'];
+  const page = payload['page'];
+  const pageSize = payload['pageSize'];
+
+  if (typeof query !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (typeof page !== 'number' || !Number.isFinite(page)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (typeof pageSize !== 'number' || !Number.isFinite(pageSize)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const trimmed = query.trim();
+  const pageInt = Math.max(0, Math.floor(page));
+  const pageSizeInt = Math.max(1, Math.min(50, Math.floor(pageSize)));
+
+  return ok({ query: trimmed, page: pageInt, pageSize: pageSizeInt });
 }
 
 function createRateLimiter(options: {
@@ -629,6 +661,31 @@ export function registerIpcHandlers(
       },
     })
   );
+
+  ipcMain.handle(
+    IPC_CHANNELS.search.query,
+    makeHandlerWithErrorMessage<SearchQueryResult>({
+      channel: IPC_CHANNELS.search.query,
+      deps,
+      rateLimiter,
+      validate: validateSearchQueryPayload,
+      run: async (validatedPayload) => {
+        const v = validatedPayload as SearchQueryPayload;
+        return deps.search.query(v);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.search.rebuildIndex,
+    makeHandlerWithErrorMessage<SearchRebuildIndexResult>({
+      channel: IPC_CHANNELS.search.rebuildIndex,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => deps.search.rebuildIndex(),
+    })
+  );
 }
 
 export const __test__ = {
@@ -639,4 +696,5 @@ export const __test__ = {
   validateShortcutsResetOnePayload,
   validateContextMenuPopupMiddleItemPayload,
   validateContextMenuPopupFolderPayload,
+  validateSearchQueryPayload,
 };

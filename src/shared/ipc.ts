@@ -31,6 +31,10 @@ export const IPC_CHANNELS = {
     popupMiddleItem: `${IPC_NAMESPACE}:contextMenu:popupMiddleItem`,
     popupFolder: `${IPC_NAMESPACE}:contextMenu:popupFolder`,
   },
+  search: {
+    query: `${IPC_NAMESPACE}:search:query`,
+    rebuildIndex: `${IPC_NAMESPACE}:search:rebuildIndex`,
+  },
 } as const;
 
 export const IPC_EVENTS = {
@@ -60,13 +64,17 @@ export type IpcChannelDiagnostics =
 export type IpcChannelContextMenu =
   (typeof IPC_CHANNELS.contextMenu)[keyof typeof IPC_CHANNELS.contextMenu];
 
+export type IpcChannelSearch =
+  (typeof IPC_CHANNELS.search)[keyof typeof IPC_CHANNELS.search];
+
 export type IpcChannel =
   | IpcChannelWindow
   | IpcChannelQuickCapture
   | IpcChannelShortcuts
   | IpcChannelStorageRoot
   | IpcChannelDiagnostics
-  | IpcChannelContextMenu;
+  | IpcChannelContextMenu
+  | IpcChannelSearch;
 
 export type IpcErrorCode =
   | 'VALIDATION_ERROR'
@@ -166,6 +174,47 @@ export interface QuickCaptureSubmitPayload {
 export interface StorageRootStatus {
   storageRootAbsPath: string;
   isDefault: boolean;
+}
+
+export type GlobalSearchEntityKind =
+  | 'memo'
+  | 'note'
+  | 'todo_item'
+  | 'todo_list'
+  | 'collection_item';
+
+export interface SearchQueryPayload {
+  query: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface SearchResultItem {
+  kind: GlobalSearchEntityKind;
+  id: string;
+  title: string;
+  preview: string;
+  updatedAtMs: number;
+  matchSnippet: string | null;
+}
+
+export type SearchQueryMode = 'fts' | 'fallback';
+
+export interface SearchQueryResult {
+  mode: SearchQueryMode;
+  ftsAvailable: boolean;
+  degradedReason: string | null;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  items: SearchResultItem[];
+}
+
+export interface SearchRebuildIndexResult {
+  ok: true;
+  ftsAvailable: boolean;
+  rebuilt: boolean;
+  message: string;
 }
 
 export type StorageRootChooseAndMigrateResult =

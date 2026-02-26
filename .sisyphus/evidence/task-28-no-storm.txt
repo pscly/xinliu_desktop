@@ -1,0 +1,13 @@
+Task 28 - no N+1 IPC / no query storm 证据
+
+目标：renderer 禁止出现“for 循环里逐条 await ipc(...) 拉详情”的 N+1 模式。
+
+检查命令：
+
+$ rg -n "for .*await.*ipc" src/renderer -S || true
+
+输出：
+
+(无匹配)
+
+结论：renderer 未出现明显的 for+await+ipc 的 N+1 模式。

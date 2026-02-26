@@ -5,6 +5,8 @@ import type {
   DiagnosticsStatus,
   IpcResult,
   IpcVoid,
+  SearchQueryResult,
+  SearchRebuildIndexResult,
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
 } from '../shared/ipc';
@@ -114,6 +116,31 @@ describe('<App />', () => {
         popupFolder: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
         onCommand: () => () => {},
       },
+      search: {
+        query: async () =>
+          ({
+            ok: true,
+            value: {
+              mode: 'fallback',
+              ftsAvailable: false,
+              degradedReason: 'test',
+              page: 0,
+              pageSize: 20,
+              hasMore: false,
+              items: [],
+            } satisfies SearchQueryResult,
+          } satisfies IpcResult<SearchQueryResult>),
+        rebuildIndex: async () =>
+          ({
+            ok: true,
+            value: {
+              ok: true,
+              ftsAvailable: false,
+              rebuilt: false,
+              message: 'test',
+            } satisfies SearchRebuildIndexResult,
+          } satisfies IpcResult<SearchRebuildIndexResult>),
+      },
     };
 
     render(<App />);
@@ -178,6 +205,31 @@ describe('<App />', () => {
         popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
         popupFolder: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
         onCommand: () => () => {},
+      },
+      search: {
+        query: async () =>
+          ({
+            ok: true,
+            value: {
+              mode: 'fallback',
+              ftsAvailable: false,
+              degradedReason: 'test',
+              page: 0,
+              pageSize: 20,
+              hasMore: false,
+              items: [],
+            } satisfies SearchQueryResult,
+          } satisfies IpcResult<SearchQueryResult>),
+        rebuildIndex: async () =>
+          ({
+            ok: true,
+            value: {
+              ok: true,
+              ftsAvailable: false,
+              rebuilt: false,
+              message: 'test',
+            } satisfies SearchRebuildIndexResult,
+          } satisfies IpcResult<SearchRebuildIndexResult>),
       },
     };
 
@@ -252,6 +304,31 @@ describe('<App />', () => {
         popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
         popupFolder: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
         onCommand: () => () => {},
+      },
+      search: {
+        query: async () =>
+          ({
+            ok: true,
+            value: {
+              mode: 'fallback',
+              ftsAvailable: false,
+              degradedReason: 'test',
+              page: 0,
+              pageSize: 20,
+              hasMore: false,
+              items: [],
+            } satisfies SearchQueryResult,
+          } satisfies IpcResult<SearchQueryResult>),
+        rebuildIndex: async () =>
+          ({
+            ok: true,
+            value: {
+              ok: true,
+              ftsAvailable: false,
+              rebuilt: false,
+              message: 'test',
+            } satisfies SearchRebuildIndexResult,
+          } satisfies IpcResult<SearchRebuildIndexResult>),
       },
     };
 

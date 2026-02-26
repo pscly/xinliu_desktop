@@ -58,6 +58,18 @@ describe('src/main/ipc', () => {
         popupMiddleItem: () => {},
         popupFolder: () => {},
       },
+      search: {
+        query: () => ({
+          mode: 'fallback',
+          ftsAvailable: false,
+          degradedReason: 'test',
+          page: 0,
+          pageSize: 20,
+          hasMore: false,
+          items: [],
+        }),
+        rebuildIndex: () => ({ ok: true, ftsAvailable: false, rebuilt: false, message: 'test' }),
+      },
       now: () => 0,
     });
 
@@ -69,6 +81,7 @@ describe('src/main/ipc', () => {
       ...Object.values(IPC_CHANNELS.storageRoot),
       ...Object.values(IPC_CHANNELS.diagnostics),
       ...Object.values(IPC_CHANNELS.contextMenu),
+      ...Object.values(IPC_CHANNELS.search),
     ].sort();
     expect(registered).toEqual(expected);
 
@@ -116,6 +129,18 @@ describe('src/main/ipc', () => {
       contextMenu: {
         popupMiddleItem: () => {},
         popupFolder: () => {},
+      },
+      search: {
+        query: () => ({
+          mode: 'fallback',
+          ftsAvailable: false,
+          degradedReason: 'test',
+          page: 0,
+          pageSize: 20,
+          hasMore: false,
+          items: [],
+        }),
+        rebuildIndex: () => ({ ok: true, ftsAvailable: false, rebuilt: false, message: 'test' }),
       },
       now: () => 0,
     });
@@ -170,6 +195,18 @@ describe('src/main/ipc', () => {
       contextMenu: {
         popupMiddleItem: () => {},
         popupFolder: () => {},
+      },
+      search: {
+        query: () => ({
+          mode: 'fallback',
+          ftsAvailable: false,
+          degradedReason: 'test',
+          page: 0,
+          pageSize: 20,
+          hasMore: false,
+          items: [],
+        }),
+        rebuildIndex: () => ({ ok: true, ftsAvailable: false, rebuilt: false, message: 'test' }),
       },
       now: () => 0,
     });

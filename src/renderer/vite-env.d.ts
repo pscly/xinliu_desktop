@@ -5,6 +5,9 @@ import type {
   DiagnosticsStatus,
   IpcResult,
   IpcVoid,
+  SearchQueryPayload,
+  SearchQueryResult,
+  SearchRebuildIndexResult,
   ShortcutId,
   ShortcutsSetConfigPayload,
   ShortcutsStatus,
@@ -46,6 +49,10 @@ declare global {
       };
       diagnostics: {
         getStatus: () => Promise<IpcResult<DiagnosticsStatus>>;
+      };
+      search: {
+        query: (payload: SearchQueryPayload) => Promise<IpcResult<SearchQueryResult>>;
+        rebuildIndex: () => Promise<IpcResult<SearchRebuildIndexResult>>;
       };
       contextMenu: {
         popupMiddleItem: (itemId: string) => Promise<IpcResult<IpcVoid>>;
