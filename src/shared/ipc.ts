@@ -24,11 +24,18 @@ export const IPC_CHANNELS = {
     chooseAndMigrate: `${IPC_NAMESPACE}:storageRoot:chooseAndMigrate`,
     restartNow: `${IPC_NAMESPACE}:storageRoot:restartNow`,
   },
+  contextMenu: {
+    popupMiddleItem: `${IPC_NAMESPACE}:contextMenu:popupMiddleItem`,
+    popupFolder: `${IPC_NAMESPACE}:contextMenu:popupFolder`,
+  },
 } as const;
 
 export const IPC_EVENTS = {
   shortcuts: {
     focusSearch: `${IPC_NAMESPACE}:shortcuts:focusSearch`,
+  },
+  contextMenu: {
+    didSelect: `${IPC_NAMESPACE}:contextMenu:didSelect`,
   },
 } as const;
 
@@ -44,11 +51,15 @@ export type IpcChannelShortcuts =
 export type IpcChannelStorageRoot =
   (typeof IPC_CHANNELS.storageRoot)[keyof typeof IPC_CHANNELS.storageRoot];
 
+export type IpcChannelContextMenu =
+  (typeof IPC_CHANNELS.contextMenu)[keyof typeof IPC_CHANNELS.contextMenu];
+
 export type IpcChannel =
   | IpcChannelWindow
   | IpcChannelQuickCapture
   | IpcChannelShortcuts
-  | IpcChannelStorageRoot;
+  | IpcChannelStorageRoot
+  | IpcChannelContextMenu;
 
 export type IpcErrorCode =
   | 'VALIDATION_ERROR'
@@ -76,6 +87,42 @@ export type EmptyPayload = Record<string, never>;
 export const EMPTY_PAYLOAD: EmptyPayload = {};
 
 export type IpcVoid = null;
+
+export const CONTEXT_MENU_COMMANDS = {
+  open: 'open',
+  moveTo: 'moveTo',
+  delete: 'delete',
+  export: 'export',
+  newChild: 'newChild',
+  rename: 'rename',
+  move: 'move',
+} as const;
+
+export type ContextMenuCommand =
+  (typeof CONTEXT_MENU_COMMANDS)[keyof typeof CONTEXT_MENU_COMMANDS];
+
+export interface ContextMenuPopupMiddleItemPayload {
+  itemId: string;
+}
+
+export interface ContextMenuPopupFolderPayload {
+  folderId: string;
+}
+
+export type ContextMenuTarget =
+  | {
+      kind: 'middleItem';
+      itemId: string;
+    }
+  | {
+      kind: 'folder';
+      folderId: string;
+    };
+
+export interface ContextMenuDidSelectPayload {
+  target: ContextMenuTarget;
+  command: ContextMenuCommand;
+}
 
 export type ShortcutId = 'openQuickCapture' | 'openMainAndFocusSearch';
 
