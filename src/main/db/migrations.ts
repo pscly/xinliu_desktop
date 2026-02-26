@@ -288,6 +288,33 @@ export const MIGRATIONS: readonly SqliteMigration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    name: 'memo_attachments_cache_lru_meta',
+    up: (db) => {
+      db.exec(`
+        -- 附件缓存(LRU/配额)元数据：main 侧维护。
+        -- local_relpath(原件) 不参与 GC；cache_relpath(缓存) 受 LRU 驱逐。
+
+        ALTER TABLE memo_attachments ADD COLUMN cache_size_bytes INTEGER NULL;
+        ALTER TABLE memo_attachments ADD COLUMN last_access_at_ms INTEGER NULL;
+
+        -- cacheKey 必须是不透明标识（禁止把 relpath 塞进 memo-res URL）。
+        -- 用 SQLite 随机数回填缺失 key（无需依赖 Node/Electron runtime）。
+        UPDATE memo_attachments
+        SET cache_key = 'att_' || lower(hex(randomblob(16)))
+        WHERE cache_key IS NULL OR TRIM(cache_key) = '';
+
+        -- cache_key 用于 memo-res://<cacheKey> 映射，必须唯一（NULL 允许）。
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_memo_attachments_cache_key
+          ON memo_attachments(cache_key)
+          WHERE cache_key IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_memo_attachments_last_access_at_ms
+          ON memo_attachments(last_access_at_ms);
+      `);
+    },
+  },
 ];
 
 export function applyMigrations(
