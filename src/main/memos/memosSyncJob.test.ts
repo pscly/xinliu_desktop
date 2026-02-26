@@ -76,6 +76,7 @@ function insertAttachment(
     id: string;
     memoLocalUuid: string;
     localRelpath: string;
+    cacheKey?: string;
     serverAttachmentName?: string | null;
     createdAtMs: number;
     updatedAtMs: number;
@@ -98,7 +99,7 @@ function insertAttachment(
         @server_attachment_name,
         @local_relpath,
         NULL,
-        NULL,
+        @cache_key,
         @created_at_ms,
         @updated_at_ms
       )
@@ -108,6 +109,7 @@ function insertAttachment(
     memo_local_uuid: args.memoLocalUuid,
     server_attachment_name: args.serverAttachmentName ?? null,
     local_relpath: args.localRelpath,
+    cache_key: args.cacheKey ?? `att_${args.id}`,
     created_at_ms: args.createdAtMs,
     updated_at_ms: args.updatedAtMs,
   });
