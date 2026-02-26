@@ -328,6 +328,103 @@ body {
   font-size: 13px;
 }
 
+.contentList {
+  margin-top: 12px;
+  border: 1px solid rgba(21, 21, 21, 0.1);
+  background: rgba(255, 255, 255, 0.52);
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.contentListTitle {
+  font-size: 13px;
+  color: rgba(21, 21, 21, 0.78);
+}
+
+.contentListBody {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.listRow {
+  text-align: left;
+  border: 1px solid rgba(21, 21, 21, 0.1);
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 14px;
+  padding: 12px 12px 10px;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.listRow:hover {
+  border-color: var(--stroke-strong);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 12px 34px var(--shadow);
+}
+
+.listRowTitle {
+  font-size: 14px;
+}
+
+.listRowSub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.tree {
+  border: 1px dashed rgba(21, 21, 21, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.42);
+  padding: 12px;
+}
+
+.treeTitle {
+  font-size: 13px;
+  color: rgba(21, 21, 21, 0.78);
+}
+
+.treeBody {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.treeRow {
+  text-align: left;
+  border: 1px solid rgba(21, 21, 21, 0.1);
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 14px;
+  padding: 10px 10px 8px;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.treeRow:hover {
+  border-color: var(--stroke-strong);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 12px 34px var(--shadow);
+}
+
+.treeRowTitle {
+  font-size: 14px;
+}
+
+.treeRowSub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .paneRight {
   grid-template-rows: auto 1fr;
 }

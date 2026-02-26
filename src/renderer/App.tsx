@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
+  ContextMenuDidSelectPayload,
   ShortcutId,
   ShortcutStatusEntry,
   ShortcutsStatus,
@@ -29,6 +30,7 @@ const ROUTES: RouteMeta[] = [
 type XinliuWindowApi = NonNullable<Window['xinliu']>['window'];
 type XinliuShortcutsApi = NonNullable<Window['xinliu']>['shortcuts'];
 type XinliuStorageRootApi = NonNullable<Window['xinliu']>['storageRoot'];
+type XinliuContextMenuApi = NonNullable<Window['xinliu']>['contextMenu'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
   return window.xinliu?.window;
@@ -40,6 +42,44 @@ function getXinliuShortcutsApi(): XinliuShortcutsApi | undefined {
 
 function getXinliuStorageRootApi(): XinliuStorageRootApi | undefined {
   return window.xinliu?.storageRoot;
+}
+
+function getXinliuContextMenuApi(): XinliuContextMenuApi | undefined {
+  return window.xinliu?.contextMenu;
+}
+
+async function safePopupMiddleItemMenu(itemId: string) {
+  const api = getXinliuContextMenuApi();
+  const fn = api?.popupMiddleItem;
+  if (typeof fn !== 'function') {
+    console.warn('[contextMenu] window.xinliu.contextMenu.popupMiddleItem 不可用');
+    return;
+  }
+  try {
+    const res = await fn(itemId);
+    if (!res.ok) {
+      console.warn(`[contextMenu] popupMiddleItem 失败：${res.error.code}`);
+    }
+  } catch (e) {
+    console.warn(`[contextMenu] popupMiddleItem 异常：${String(e)}`);
+  }
+}
+
+async function safePopupFolderMenu(folderId: string) {
+  const api = getXinliuContextMenuApi();
+  const fn = api?.popupFolder;
+  if (typeof fn !== 'function') {
+    console.warn('[contextMenu] window.xinliu.contextMenu.popupFolder 不可用');
+    return;
+  }
+  try {
+    const res = await fn(folderId);
+    if (!res.ok) {
+      console.warn(`[contextMenu] popupFolder 失败：${res.error.code}`);
+    }
+  } catch (e) {
+    console.warn(`[contextMenu] popupFolder 异常：${String(e)}`);
+  }
 }
 
 async function safeOpenQuickCapture() {
@@ -410,11 +450,15 @@ function SettingsStorageRootSection(props: {
   );
 }
 
-function DefaultRoutePlaceholder({ routeMeta }: { routeMeta: RouteMeta }) {
+function DefaultRoutePlaceholder(props: {
+  routeMeta: RouteMeta;
+  middleItems: Array<{ id: string; title: string; sub: string }>;
+  onPopupMiddleItemMenu: (itemId: string) => void;
+}) {
   return (
     <div className="contentPlaceholder">
       <div className="contentHero">
-        <div className="contentHeroTitle">{routeMeta.label} 入口占位</div>
+        <div className="contentHeroTitle">{props.routeMeta.label} 入口占位</div>
         <div className="contentHeroSub">
           这里将承载核心页面内容：列表、编辑器、时间线、或设置表单。
         </div>
@@ -428,6 +472,26 @@ function DefaultRoutePlaceholder({ routeMeta }: { routeMeta: RouteMeta }) {
         <div className="contentCard">
           <div className="contentCardTitle">下一步</div>
           <div className="contentCardBody">按路由逐个落地 Notes/Collections/Todo/设置/冲突页面。</div>
+        </div>
+      </div>
+
+      <div className="contentList" data-testid="middle-list">
+        <div className="contentListTitle">条目（占位，可右键）</div>
+        <div className="contentListBody">
+          {props.middleItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="listRow"
+              onContextMenu={(e) => {
+                e.preventDefault();
+                props.onPopupMiddleItemMenu(item.id);
+              }}
+            >
+              <div className="listRowTitle">{item.title}</div>
+              <div className="listRowSub">{item.sub}</div>
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -468,6 +532,9 @@ function MainWindowApp() {
   const [route, setRoute] = useState<RouteKey>('notes');
   const routeMeta = useMemo(() => ROUTES.find((r) => r.key === route)!, [route]);
 
+  const [lastContextMenuSelection, setLastContextMenuSelection] =
+    useState<ContextMenuDidSelectPayload | null>(null);
+
   const [shortcutsStatus, setShortcutsStatus] = useState<ShortcutsStatus | null>(null);
   const [shortcutsError, setShortcutsError] = useState<string | null>(null);
   const [shortcutsDraft, setShortcutsDraft] = useState<
@@ -480,6 +547,50 @@ function MainWindowApp() {
   const [storageRootLastMigration, setStorageRootLastMigration] = useState<
     (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null
   >(null);
+
+  useEffect(() => {
+    const api = getXinliuContextMenuApi();
+    const off = api?.onCommand?.((payload) => {
+      setLastContextMenuSelection(payload);
+    });
+    return () => {
+      off?.();
+    };
+  }, []);
+
+  const demoFolders = useMemo(
+    () => [
+      { id: 'folder_inbox', title: '收件箱' },
+      { id: 'folder_projects', title: '项目' },
+      { id: 'folder_archive', title: '归档' },
+    ],
+    []
+  );
+
+  const demoMiddleItems = useMemo(() => {
+    if (route === 'notes') {
+      return [
+        { id: 'note_1', title: '示例笔记：今日复盘', sub: '右键：打开 / 移动到 / 删除 / 导出' },
+        { id: 'note_2', title: '示例笔记：灵感碎片', sub: '（占位数据，后续接入本地库）' },
+      ];
+    }
+    if (route === 'collections') {
+      return [
+        { id: 'col_1', title: '示例条目：收藏夹', sub: '右键：打开 / 移动到 / 删除 / 导出' },
+      ];
+    }
+    if (route === 'todo') {
+      return [
+        { id: 'todo_1', title: '示例任务：实现右键菜单', sub: '右键：打开 / 移动到 / 删除 / 导出' },
+      ];
+    }
+    if (route === 'conflicts') {
+      return [
+        { id: 'conflict_1', title: '示例冲突：标题不一致', sub: '右键：打开 / 移动到 / 删除 / 导出' },
+      ];
+    }
+    return [];
+  }, [route]);
 
   const refreshShortcuts = async () => {
     const api = getXinliuShortcutsApi();
@@ -670,6 +781,27 @@ function MainWindowApp() {
               testId="nav-conflicts"
               onClick={() => setRoute('conflicts')}
             />
+
+            <div className="navDivider" />
+            <div className="tree" data-testid="folder-tree">
+              <div className="treeTitle">Folders（占位，可右键）</div>
+              <div className="treeBody">
+                {demoFolders.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className="treeRow"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      void safePopupFolderMenu(f.id);
+                    }}
+                  >
+                    <div className="treeRowTitle">{f.title}</div>
+                    <div className="treeRowSub">右键：新建子项 / 重命名 / 移动 / 删除</div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </nav>
 
           <div className="paneFooter">
@@ -705,7 +837,11 @@ function MainWindowApp() {
               onRestartNow={() => void restartNow()}
             />
           ) : (
-            <DefaultRoutePlaceholder routeMeta={routeMeta} />
+            <DefaultRoutePlaceholder
+              routeMeta={routeMeta}
+              middleItems={demoMiddleItems}
+              onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
+            />
           )}
         </section>
 
@@ -728,6 +864,14 @@ function MainWindowApp() {
                 <div className="kvRow">
                   <div className="k">说明</div>
                   <div className="v">{routeMeta.hint}</div>
+                </div>
+                <div className="kvRow">
+                  <div className="k">最近右键命令</div>
+                  <div className="v">
+                    {lastContextMenuSelection
+                      ? `${lastContextMenuSelection.command} @ ${lastContextMenuSelection.target.kind}`
+                      : '-'}
+                  </div>
                 </div>
               </div>
             </div>

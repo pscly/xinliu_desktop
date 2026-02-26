@@ -91,6 +91,11 @@ describe('<App />', () => {
           ({ ok: true, value: { kind: 'cancelled' } } satisfies IpcResult<{ kind: 'cancelled' }>),
         restartNow: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
       },
+      contextMenu: {
+        popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        popupFolder: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        onCommand: () => () => {},
+      },
     };
 
     render(<App />);
@@ -136,6 +141,11 @@ describe('<App />', () => {
         chooseAndMigrate: async () =>
           ({ ok: true, value: { kind: 'cancelled' } } satisfies IpcResult<{ kind: 'cancelled' }>),
         restartNow: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+      },
+      contextMenu: {
+        popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        popupFolder: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        onCommand: () => () => {},
       },
     };
 
@@ -191,6 +201,11 @@ describe('<App />', () => {
           }>),
         chooseAndMigrate,
         restartNow,
+      },
+      contextMenu: {
+        popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        popupFolder: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        onCommand: () => () => {},
       },
     };
 
