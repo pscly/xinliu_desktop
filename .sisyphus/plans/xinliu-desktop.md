@@ -1406,7 +1406,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-33-quick-capture.png
   ```
 
-- [ ] 27. 诊断面板 + 脱敏日志（request_id 可复制、provider 状态可见）
+- [x] 27. 诊断面板 + 脱敏日志（request_id 可复制、provider 状态可见）
 
   **What to do**:
   - 落地日志目录 `<root>/logs/`，并实现脱敏：禁止包含 token、Authorization、绝对路径。
@@ -1645,7 +1645,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-24-no-download.txt
   ```
 
-- [ ] 25. 附件原件/缓存合同落地（LRU/配额 + cacheKey 映射）
+- [x] 25. 附件原件/缓存合同落地（LRU/配额 + cacheKey 映射）
 
   **What to do**:
   - 落地三类引用：`local_relpath`（原件）、`cache_relpath`（缓存）、远端引用（仅用于再下载）。
@@ -1690,7 +1690,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-25-cachekey.txt
   ```
 
-- [ ] 26. 右键菜单（中栏条目 + 左栏 Folder 树）
+- [x] 26. 右键菜单（中栏条目 + 左栏 Folder 树）
 
   **What to do**:
   - 中栏条目右键：打开、移动到、删除、导出。
