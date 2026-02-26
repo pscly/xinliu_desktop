@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 import { EMPTY_PAYLOAD, IPC_CHANNELS, IPC_EVENTS } from '../shared/ipc';
 import type {
+  ContextMenuDidSelectPayload,
+  ContextMenuPopupFolderPayload,
+  ContextMenuPopupMiddleItemPayload,
   IpcErrorCode,
   IpcResult,
   IpcVoid,
@@ -81,5 +84,28 @@ contextBridge.exposeInMainWorld('xinliu', {
         EMPTY_PAYLOAD
       ),
     restartNow: () => invokeIpc<IpcVoid>(IPC_CHANNELS.storageRoot.restartNow, EMPTY_PAYLOAD),
+  },
+  contextMenu: {
+    popupMiddleItem: (itemId: string) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.contextMenu.popupMiddleItem, {
+        itemId,
+      } satisfies ContextMenuPopupMiddleItemPayload),
+    popupFolder: (folderId: string) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.contextMenu.popupFolder, {
+        folderId,
+      } satisfies ContextMenuPopupFolderPayload),
+    onCommand: (listener: (payload: ContextMenuDidSelectPayload) => void) => {
+      const wrapped = (_event: unknown, payload: unknown) => {
+        try {
+          listener(payload as ContextMenuDidSelectPayload);
+        } catch (error) {
+          console.warn(`[contextMenu] didSelect listener 异常：${String(error)}`);
+        }
+      };
+      ipcRenderer.on(IPC_EVENTS.contextMenu.didSelect, wrapped);
+      return () => {
+        ipcRenderer.removeListener(IPC_EVENTS.contextMenu.didSelect, wrapped);
+      };
+    },
   },
 });

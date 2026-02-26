@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type {
+  ContextMenuDidSelectPayload,
   IpcResult,
   IpcVoid,
   ShortcutId,
@@ -41,6 +42,11 @@ declare global {
         getStatus: () => Promise<IpcResult<StorageRootStatus>>;
         chooseAndMigrate: () => Promise<IpcResult<StorageRootChooseAndMigrateResult>>;
         restartNow: () => Promise<IpcResult<IpcVoid>>;
+      };
+      contextMenu: {
+        popupMiddleItem: (itemId: string) => Promise<IpcResult<IpcVoid>>;
+        popupFolder: (folderId: string) => Promise<IpcResult<IpcVoid>>;
+        onCommand: (listener: (payload: ContextMenuDidSelectPayload) => void) => () => void;
       };
     };
   }
