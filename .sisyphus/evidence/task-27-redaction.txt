@@ -1,0 +1,24 @@
+# Task 27 - 脱敏日志（文件写入）证据
+
+## 覆盖目标
+
+- 目标函数：`appendMainLogLine()`
+- 行为：写入 `<root>/logs/main.log` 前强制调用 `redactForLogs()`
+- 脱敏范围：Authorization Bearer、token/access_token、Windows/Posix 绝对路径
+
+## 测试用例
+
+- 文件：`src/main/logging/fileLogs.test.ts`
+- 环境：Vitest Node（`// @vitest-environment node`）
+- 做法：在临时 storageRoot 下写入一行包含敏感内容的日志，再读回文件并断言：
+  - 不包含原始 token/Authorization/绝对路径
+  - 必须包含 `<redacted>` 与 `<path>`
+
+## npm test 输出节选
+
+```
+✓ src/main/logging/fileLogs.test.ts (1 test)
+
+Test Files  35 passed (35)
+Tests      105 passed (105)
+```

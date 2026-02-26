@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   ContextMenuDidSelectPayload,
+  DiagnosticsStatus,
   ShortcutId,
   ShortcutStatusEntry,
   ShortcutsStatus,
@@ -30,6 +31,7 @@ const ROUTES: RouteMeta[] = [
 type XinliuWindowApi = NonNullable<Window['xinliu']>['window'];
 type XinliuShortcutsApi = NonNullable<Window['xinliu']>['shortcuts'];
 type XinliuStorageRootApi = NonNullable<Window['xinliu']>['storageRoot'];
+type XinliuDiagnosticsApi = NonNullable<Window['xinliu']>['diagnostics'];
 type XinliuContextMenuApi = NonNullable<Window['xinliu']>['contextMenu'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
@@ -42,6 +44,10 @@ function getXinliuShortcutsApi(): XinliuShortcutsApi | undefined {
 
 function getXinliuStorageRootApi(): XinliuStorageRootApi | undefined {
   return window.xinliu?.storageRoot;
+}
+
+function getXinliuDiagnosticsApi(): XinliuDiagnosticsApi | undefined {
+  return window.xinliu?.diagnostics;
 }
 
 function getXinliuContextMenuApi(): XinliuContextMenuApi | undefined {
@@ -114,6 +120,37 @@ async function safeCallWindowAction(action: 'minimize' | 'toggleMaximize' | 'clo
     }
   } catch (e) {
     console.warn(`[titlebar] ${action} 异常：${String(e)}`);
+  }
+}
+
+async function safeCopyTextToClipboard(text: string): Promise<void> {
+  const raw = text.trim();
+  if (raw.length === 0) {
+    return;
+  }
+
+  try {
+    const clipboard = navigator.clipboard;
+    if (clipboard && typeof clipboard.writeText === 'function') {
+      await clipboard.writeText(raw);
+      return;
+    }
+  } catch {
+  }
+
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = raw;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    ta.style.left = '0';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch {
   }
 }
 
@@ -351,6 +388,9 @@ function SettingsContent(props: {
   storageRootStatus: StorageRootStatus | null;
   storageRootError: string | null;
   storageRootApiAvailable: boolean;
+  diagnosticsStatus: DiagnosticsStatus | null;
+  diagnosticsError: string | null;
+  diagnosticsApiAvailable: boolean;
   storageRootRestartRequired: boolean;
   storageRootLastMigration: (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null;
   onUpdateDraft: (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => void;
@@ -376,6 +416,11 @@ function SettingsContent(props: {
           lastMigration={props.storageRootLastMigration}
           onChooseAndMigrate={props.onChooseAndMigrateStorageRoot}
           onRestartNow={props.onRestartNow}
+        />
+        <SettingsDiagnosticsSection
+          status={props.diagnosticsStatus}
+          error={props.diagnosticsError}
+          apiAvailable={props.diagnosticsApiAvailable}
         />
         <SettingsShortcutsSection
           status={props.shortcutsStatus}
@@ -446,6 +491,104 @@ function SettingsStorageRootSection(props: {
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function SettingsDiagnosticsSection(props: {
+  status: DiagnosticsStatus | null;
+  error: string | null;
+  apiAvailable: boolean;
+}) {
+  const flowBaseUrl = props.status?.flowBaseUrl ?? '-';
+  const memosBaseUrl = props.status?.memosBaseUrl ?? '-';
+
+  const providerText =
+    props.status?.notesProvider === 'memos' && props.status?.notesProviderKind === 'direct'
+      ? 'Memos（直连）'
+      : props.status?.notesProvider === 'flow_notes'
+        ? 'Flow Notes（降级）'
+        : props.status?.notesProvider
+          ? String(props.status.notesProvider)
+          : '-';
+
+  const degradeReason =
+    props.status?.notesProviderKind === 'fallback'
+      ? (props.status.lastDegradeReason ?? '-')
+      : '-';
+
+  const memosRequestId = props.status?.lastRequestIds.memos_request_id ?? null;
+  const flowRequestId = props.status?.lastRequestIds.flow_request_id ?? null;
+
+  return (
+    <section className="settingsSection" data-testid="diagnostics-panel">
+      <div className="settingsSectionHeader">
+        <div>
+          <div className="settingsSectionTitle">诊断</div>
+          <div className="settingsSectionSub">
+            用于排障：不展示 token；日志会强制脱敏（Authorization/Token/绝对路径）
+          </div>
+        </div>
+      </div>
+
+      <div className="rightCardBody">
+        <div className="kvRow">
+          <div className="k">Flow Base URL</div>
+          <div className="v">{flowBaseUrl}</div>
+        </div>
+        <div className="kvRow">
+          <div className="k">Memos Base URL</div>
+          <div className="v">{memosBaseUrl}</div>
+        </div>
+        <div className="kvRow">
+          <div className="k">Notes Provider</div>
+          <div className="v">{providerText}</div>
+        </div>
+        <div className="kvRow">
+          <div className="k">最近一次降级原因</div>
+          <div className="v">{degradeReason}</div>
+        </div>
+
+        <div className="kvRow">
+          <div className="k">memos_request_id</div>
+          <div className="v">
+            <code data-testid="diagnostics-memos-request-id">{memosRequestId ?? '-'}</code>
+            <button
+              type="button"
+              className="btn btnGhost"
+              data-testid="diagnostics-copy-memos-request-id"
+              disabled={!props.apiAvailable || !memosRequestId}
+              onClick={() => void safeCopyTextToClipboard(memosRequestId ?? '')}
+              style={{ marginLeft: 8 }}
+            >
+              复制
+            </button>
+          </div>
+        </div>
+
+        <div className="kvRow">
+          <div className="k">flow_request_id</div>
+          <div className="v">
+            <code data-testid="diagnostics-flow-request-id">{flowRequestId ?? '-'}</code>
+            <button
+              type="button"
+              className="btn btnGhost"
+              data-testid="diagnostics-copy-flow-request-id"
+              disabled={!props.apiAvailable || !flowRequestId}
+              onClick={() => void safeCopyTextToClipboard(flowRequestId ?? '')}
+              style={{ marginLeft: 8 }}
+            >
+              复制
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {!props.apiAvailable ? (
+        <div className="callout calloutWarn">诊断 API 不可用（preload 未注入）</div>
+      ) : null}
+
+      {props.error ? <div className="callout calloutWarn">{props.error}</div> : null}
     </section>
   );
 }
@@ -548,6 +691,9 @@ function MainWindowApp() {
     (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null
   >(null);
 
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState<DiagnosticsStatus | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+
   useEffect(() => {
     const api = getXinliuContextMenuApi();
     const off = api?.onCommand?.((payload) => {
@@ -636,6 +782,25 @@ function MainWindowApp() {
     setStorageRootStatus(res.value);
   };
 
+  const refreshDiagnostics = async () => {
+    const api = getXinliuDiagnosticsApi();
+    if (!api) {
+      setDiagnosticsStatus(null);
+      setDiagnosticsError('诊断 API 不可用（preload 未注入）');
+      return;
+    }
+
+    const res = await api.getStatus();
+    if (!res.ok) {
+      setDiagnosticsStatus(null);
+      setDiagnosticsError(`${res.error.message}（${res.error.code}）`);
+      return;
+    }
+
+    setDiagnosticsError(null);
+    setDiagnosticsStatus(res.value);
+  };
+
   const updateDraft = (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => {
     setShortcutsDraft((prev) => {
       const current = prev[id] ?? { accelerator: '', enabled: true };
@@ -693,7 +858,7 @@ function MainWindowApp() {
 
   const openSettingsRoute = () => {
     setRoute('settings');
-    void Promise.all([refreshShortcuts(), refreshStorageRoot()]);
+    void Promise.all([refreshShortcuts(), refreshStorageRoot(), refreshDiagnostics()]);
   };
 
   const chooseAndMigrateStorageRoot = async () => {
@@ -827,6 +992,9 @@ function MainWindowApp() {
               storageRootStatus={storageRootStatus}
               storageRootError={storageRootError}
               storageRootApiAvailable={Boolean(getXinliuStorageRootApi())}
+              diagnosticsStatus={diagnosticsStatus}
+              diagnosticsError={diagnosticsError}
+              diagnosticsApiAvailable={Boolean(getXinliuDiagnosticsApi())}
               storageRootRestartRequired={storageRootRestartRequired}
               storageRootLastMigration={storageRootLastMigration}
               onUpdateDraft={updateDraft}

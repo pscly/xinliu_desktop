@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  DiagnosticsStatus,
   IpcResult,
   IpcVoid,
   ShortcutsStatus,
@@ -41,6 +42,9 @@ describe('<App />', () => {
     fireEvent.click(screen.getByTestId('nav-settings'));
     expect(screen.getAllByText('设置').length).toBeGreaterThan(0);
     expect(screen.getByTestId('settings-shortcuts')).toBeTruthy();
+    expect(screen.getByTestId('diagnostics-panel')).toBeTruthy();
+    expect(screen.getByTestId('diagnostics-copy-flow-request-id')).toBeTruthy();
+    expect(screen.getByTestId('diagnostics-copy-memos-request-id')).toBeTruthy();
     fireEvent.click(screen.getByTestId('nav-conflicts'));
     expect(screen.getAllByText('冲突').length).toBeGreaterThan(0);
   });
@@ -90,6 +94,20 @@ describe('<App />', () => {
         chooseAndMigrate: async () =>
           ({ ok: true, value: { kind: 'cancelled' } } satisfies IpcResult<{ kind: 'cancelled' }>),
         restartNow: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+      },
+      diagnostics: {
+        getStatus: async () =>
+          ({
+            ok: true,
+            value: {
+              flowBaseUrl: 'https://xl.pscly.cc',
+              memosBaseUrl: null,
+              notesProvider: null,
+              notesProviderKind: null,
+              lastDegradeReason: null,
+              lastRequestIds: { memos_request_id: null, flow_request_id: null },
+            } satisfies DiagnosticsStatus,
+          } satisfies IpcResult<DiagnosticsStatus>),
       },
       contextMenu: {
         popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
@@ -141,6 +159,20 @@ describe('<App />', () => {
         chooseAndMigrate: async () =>
           ({ ok: true, value: { kind: 'cancelled' } } satisfies IpcResult<{ kind: 'cancelled' }>),
         restartNow: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+      },
+      diagnostics: {
+        getStatus: async () =>
+          ({
+            ok: true,
+            value: {
+              flowBaseUrl: 'https://xl.pscly.cc',
+              memosBaseUrl: null,
+              notesProvider: null,
+              notesProviderKind: null,
+              lastDegradeReason: null,
+              lastRequestIds: { memos_request_id: null, flow_request_id: null },
+            } satisfies DiagnosticsStatus,
+          } satisfies IpcResult<DiagnosticsStatus>),
       },
       contextMenu: {
         popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
@@ -201,6 +233,20 @@ describe('<App />', () => {
           }>),
         chooseAndMigrate,
         restartNow,
+      },
+      diagnostics: {
+        getStatus: async () =>
+          ({
+            ok: true,
+            value: {
+              flowBaseUrl: 'https://xl.pscly.cc',
+              memosBaseUrl: null,
+              notesProvider: null,
+              notesProviderKind: null,
+              lastDegradeReason: null,
+              lastRequestIds: { memos_request_id: null, flow_request_id: null },
+            } satisfies DiagnosticsStatus,
+          } satisfies IpcResult<DiagnosticsStatus>),
       },
       contextMenu: {
         popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),

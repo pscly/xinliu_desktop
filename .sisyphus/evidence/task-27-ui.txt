@@ -1,0 +1,21 @@
+# Task 27 - 诊断面板（UI）证据
+
+## rg：诊断面板 data-testid（节选）
+
+```
+src/renderer/App.tsx:524:    <section className="settingsSection" data-testid="diagnostics-panel">
+src/renderer/App.tsx:555:            <code data-testid="diagnostics-memos-request-id">{memosRequestId ?? '-'}</code>
+src/renderer/App.tsx:559:              data-testid="diagnostics-copy-memos-request-id"
+src/renderer/App.tsx:572:            <code data-testid="diagnostics-flow-request-id">{flowRequestId ?? '-'}</code>
+src/renderer/App.tsx:576:              data-testid="diagnostics-copy-flow-request-id"
+```
+
+## npm test / typecheck 输出节选
+
+```
+Test Files  35 passed (35)
+Tests      105 passed (105)
+
+> xinliu-desktop@0.0.0 typecheck
+> tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+```

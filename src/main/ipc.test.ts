@@ -44,6 +44,16 @@ describe('src/main/ipc', () => {
         chooseAndMigrate: () => ({ kind: 'cancelled' }),
         restartNow: () => {},
       },
+      diagnostics: {
+        getStatus: () => ({
+          flowBaseUrl: null,
+          memosBaseUrl: null,
+          notesProvider: null,
+          notesProviderKind: null,
+          lastDegradeReason: null,
+          lastRequestIds: { memos_request_id: null, flow_request_id: null },
+        }),
+      },
       contextMenu: {
         popupMiddleItem: () => {},
         popupFolder: () => {},
@@ -57,6 +67,7 @@ describe('src/main/ipc', () => {
       ...Object.values(IPC_CHANNELS.quickCapture),
       ...Object.values(IPC_CHANNELS.shortcuts),
       ...Object.values(IPC_CHANNELS.storageRoot),
+      ...Object.values(IPC_CHANNELS.diagnostics),
       ...Object.values(IPC_CHANNELS.contextMenu),
     ].sort();
     expect(registered).toEqual(expected);
@@ -91,6 +102,16 @@ describe('src/main/ipc', () => {
         getStatus: () => ({ storageRootAbsPath: '/tmp/xinliu', isDefault: true }),
         chooseAndMigrate: () => ({ kind: 'cancelled' }),
         restartNow: () => {},
+      },
+      diagnostics: {
+        getStatus: () => ({
+          flowBaseUrl: null,
+          memosBaseUrl: null,
+          notesProvider: null,
+          notesProviderKind: null,
+          lastDegradeReason: null,
+          lastRequestIds: { memos_request_id: null, flow_request_id: null },
+        }),
       },
       contextMenu: {
         popupMiddleItem: () => {},
@@ -135,6 +156,16 @@ describe('src/main/ipc', () => {
         getStatus: () => ({ storageRootAbsPath: '/tmp/xinliu', isDefault: true }),
         chooseAndMigrate: () => ({ kind: 'cancelled' }),
         restartNow: () => {},
+      },
+      diagnostics: {
+        getStatus: () => ({
+          flowBaseUrl: null,
+          memosBaseUrl: null,
+          notesProvider: null,
+          notesProviderKind: null,
+          lastDegradeReason: null,
+          lastRequestIds: { memos_request_id: null, flow_request_id: null },
+        }),
       },
       contextMenu: {
         popupMiddleItem: () => {},

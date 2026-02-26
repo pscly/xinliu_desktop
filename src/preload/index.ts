@@ -5,6 +5,7 @@ import type {
   ContextMenuDidSelectPayload,
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
+  DiagnosticsStatus,
   IpcErrorCode,
   IpcResult,
   IpcVoid,
@@ -84,6 +85,10 @@ contextBridge.exposeInMainWorld('xinliu', {
         EMPTY_PAYLOAD
       ),
     restartNow: () => invokeIpc<IpcVoid>(IPC_CHANNELS.storageRoot.restartNow, EMPTY_PAYLOAD),
+  },
+  diagnostics: {
+    getStatus: () =>
+      invokeIpc<DiagnosticsStatus>(IPC_CHANNELS.diagnostics.getStatus, EMPTY_PAYLOAD),
   },
   contextMenu: {
     popupMiddleItem: (itemId: string) =>

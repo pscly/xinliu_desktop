@@ -2,6 +2,7 @@
 
 import type {
   ContextMenuDidSelectPayload,
+  DiagnosticsStatus,
   IpcResult,
   IpcVoid,
   ShortcutId,
@@ -42,6 +43,9 @@ declare global {
         getStatus: () => Promise<IpcResult<StorageRootStatus>>;
         chooseAndMigrate: () => Promise<IpcResult<StorageRootChooseAndMigrateResult>>;
         restartNow: () => Promise<IpcResult<IpcVoid>>;
+      };
+      diagnostics: {
+        getStatus: () => Promise<IpcResult<DiagnosticsStatus>>;
       };
       contextMenu: {
         popupMiddleItem: (itemId: string) => Promise<IpcResult<IpcVoid>>;

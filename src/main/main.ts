@@ -39,6 +39,7 @@ import {
 import { migrateStorageRoot } from './storageRoot/migrateStorageRoot';
 import { installMemoResProtocol } from './protocol/memoResProtocol';
 import { resolveMainDbFileAbsPath } from './db/paths';
+import { createDiagnosticsController } from './diagnostics/diagnosticsController';
 import {
   popupFolderContextMenu,
   popupMiddleItemContextMenu,
@@ -284,6 +285,8 @@ app.whenReady().then(async () => {
   shortcutsManager.registerAll();
   installShortcutsCleanupOnWillQuit(app, shortcutsManager);
 
+  const diagnostics = createDiagnosticsController();
+
   registerIpcHandlers(ipcMain, {
     getWindowForSender: (sender) =>
       BrowserWindow.fromWebContents(sender as WebContents),
@@ -361,6 +364,9 @@ app.whenReady().then(async () => {
         app.relaunch();
         app.exit(0);
       },
+    },
+    diagnostics: {
+      getStatus: () => diagnostics.getStatus(),
     },
     contextMenu: {
       popupMiddleItem: ({ win, itemId }) =>

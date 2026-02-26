@@ -2,6 +2,7 @@ import { EMPTY_PAYLOAD, IPC_CHANNELS } from '../shared/ipc';
 import type {
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
+  DiagnosticsStatus,
   EmptyPayload,
   IpcChannel,
   IpcErrorCode,
@@ -57,6 +58,9 @@ export interface RegisterIpcHandlersDeps {
       | StorageRootChooseAndMigrateResult
       | Promise<StorageRootChooseAndMigrateResult>;
     restartNow: () => void | Promise<void>;
+  };
+  diagnostics: {
+    getStatus: () => DiagnosticsStatus | Promise<DiagnosticsStatus>;
   };
   contextMenu: {
     popupMiddleItem: (options: {
@@ -582,6 +586,17 @@ export function registerIpcHandlers(
         await deps.storageRoot.restartNow();
         return null;
       },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.diagnostics.getStatus,
+    makeHandlerWithErrorMessage<DiagnosticsStatus>({
+      channel: IPC_CHANNELS.diagnostics.getStatus,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => deps.diagnostics.getStatus(),
     })
   );
 

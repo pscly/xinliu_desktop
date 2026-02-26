@@ -103,6 +103,11 @@
 - [2026-02-26] Task 20（全局快捷键）：必须为每条快捷键跟踪“上一次成功注册的 accelerator”，在用户修改 accelerator、禁用(enabled=false)、或把 accelerator 置空时，先注销旧 accelerator。否则会出现“旧快捷键残留仍可触发”的幽灵注册（globalShortcut 以 accelerator 作为 key，不会自动替你解绑旧值）。
 - [2026-02-26] Task 20（设置页可见性测试）：renderer(jsdom) 测试不引入 Electron runtime，做法是直接在测试中 stub `window.xinliu.shortcuts.getStatus()` 返回预置的 `ShortcutsStatus`（例如包含 `registrationState='failed'`），再渲染 `<App />` 并点击 `data-testid="nav-settings"` 切到设置页，断言 `data-testid="settings-shortcut-<id>-register-failed"` 存在，从而验证“注册失败可见退路”。
 
+- [2026-02-26] Task 27（诊断面板 + 脱敏日志）：
+  - 文件日志写入：main 侧实现 `appendMainLogLine({ storageRootAbsPath, line })`，日志目录必须从 `resolveStorageLayout(storageRootAbsPath).logsDirAbsPath` 推导，写入前强制调用 `redactForLogs()`（避免在 logger 内复制正则）。
+  - main-side 单测：凡涉及 `fs/os/path` 的测试文件，需用 `// @vitest-environment node` 强制 Node 环境；并优先做“写文件后读回”的端到端断言，避免只测纯函数。
+  - 诊断数据读取：通过 IPC 白名单新增只读 `xinliu:diagnostics:getStatus`，preload 仅暴露 `window.xinliu.diagnostics.getStatus()`；renderer 设置页以 `data-testid="diagnostics-..."` 提供可测契约（request_id 可复制）。
+
 ## [2026-02-25] - Memos API Client（Task 34）约定
 
 - API base path 固定为 `/api/v1`。在复用 `createHttpClient` 的情况下，推荐将实例 `baseUrl` 传入为“纯实例地址”（例如 `https://memos.example.com`），并在每个请求的 `pathname` 上显式带上 `/api/v1/...`（对齐现有 `FlowClient` 的写法）。

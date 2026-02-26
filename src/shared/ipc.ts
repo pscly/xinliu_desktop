@@ -24,6 +24,9 @@ export const IPC_CHANNELS = {
     chooseAndMigrate: `${IPC_NAMESPACE}:storageRoot:chooseAndMigrate`,
     restartNow: `${IPC_NAMESPACE}:storageRoot:restartNow`,
   },
+  diagnostics: {
+    getStatus: `${IPC_NAMESPACE}:diagnostics:getStatus`,
+  },
   contextMenu: {
     popupMiddleItem: `${IPC_NAMESPACE}:contextMenu:popupMiddleItem`,
     popupFolder: `${IPC_NAMESPACE}:contextMenu:popupFolder`,
@@ -51,6 +54,9 @@ export type IpcChannelShortcuts =
 export type IpcChannelStorageRoot =
   (typeof IPC_CHANNELS.storageRoot)[keyof typeof IPC_CHANNELS.storageRoot];
 
+export type IpcChannelDiagnostics =
+  (typeof IPC_CHANNELS.diagnostics)[keyof typeof IPC_CHANNELS.diagnostics];
+
 export type IpcChannelContextMenu =
   (typeof IPC_CHANNELS.contextMenu)[keyof typeof IPC_CHANNELS.contextMenu];
 
@@ -59,6 +65,7 @@ export type IpcChannel =
   | IpcChannelQuickCapture
   | IpcChannelShortcuts
   | IpcChannelStorageRoot
+  | IpcChannelDiagnostics
   | IpcChannelContextMenu;
 
 export type IpcErrorCode =
@@ -176,3 +183,24 @@ export type StorageRootChooseAndMigrateResult =
       };
       restartRequired: true;
     };
+
+export type DiagnosticsNotesProvider = 'memos' | 'flow_notes' | null;
+
+export type DiagnosticsNotesProviderKind = 'direct' | 'fallback' | null;
+
+export type DiagnosticsNotesDegradeReason =
+  | 'memos_base_url_invalid'
+  | 'memos_unauthorized'
+  | 'memos_network_or_timeout';
+
+export interface DiagnosticsStatus {
+  flowBaseUrl: string | null;
+  memosBaseUrl: string | null;
+  notesProvider: DiagnosticsNotesProvider;
+  notesProviderKind: DiagnosticsNotesProviderKind;
+  lastDegradeReason: DiagnosticsNotesDegradeReason | null;
+  lastRequestIds: {
+    memos_request_id: string | null;
+    flow_request_id: string | null;
+  };
+}
