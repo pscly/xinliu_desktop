@@ -1,5 +1,7 @@
 import { EMPTY_PAYLOAD, IPC_CHANNELS } from '../shared/ipc';
 import type {
+  ContextMenuPopupFolderPayload,
+  ContextMenuPopupMiddleItemPayload,
   EmptyPayload,
   IpcChannel,
   IpcErrorCode,
@@ -55,6 +57,16 @@ export interface RegisterIpcHandlersDeps {
       | StorageRootChooseAndMigrateResult
       | Promise<StorageRootChooseAndMigrateResult>;
     restartNow: () => void | Promise<void>;
+  };
+  contextMenu: {
+    popupMiddleItem: (options: {
+      win: BrowserWindowLike;
+      itemId: string;
+    }) => void | Promise<void>;
+    popupFolder: (options: {
+      win: BrowserWindowLike;
+      folderId: string;
+    }) => void | Promise<void>;
   };
   now?: () => number;
 }
@@ -147,6 +159,40 @@ function validateQuickCaptureSubmitPayload(
     return err('VALIDATION_ERROR', '参数不合法');
   }
   return ok({ content });
+}
+
+function validateContextMenuPopupMiddleItemPayload(
+  payload: unknown
+): IpcResult<ContextMenuPopupMiddleItemPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const itemId = payload['itemId'];
+  if (typeof itemId !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const trimmed = itemId.trim();
+  if (trimmed.length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ itemId: trimmed });
+}
+
+function validateContextMenuPopupFolderPayload(
+  payload: unknown
+): IpcResult<ContextMenuPopupFolderPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const folderId = payload['folderId'];
+  if (typeof folderId !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const trimmed = folderId.trim();
+  if (trimmed.length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ folderId: trimmed });
 }
 
 function createRateLimiter(options: {
@@ -289,6 +335,42 @@ function makeHandlerWithErrorMessage<T>(options: {
           ? (error as { message: string }).message
           : '操作失败';
       return err('INTERNAL_ERROR', message);
+    }
+  };
+}
+
+function makeWindowHandlerWithPayload<T>(options: {
+  channel: IpcChannel;
+  deps: RegisterIpcHandlersDeps;
+  rateLimiter: { allow: (key: string) => boolean };
+  validate: (payload: unknown) => IpcResult<unknown>;
+  run: (win: BrowserWindowLike, validatedPayload: unknown) => T | Promise<T>;
+}): IpcMainHandler {
+  return async (event, payload) => {
+    if (!options.rateLimiter.allow(options.channel)) {
+      return err('RATE_LIMITED', '操作过于频繁');
+    }
+
+    const validated = options.validate(payload);
+    if (!validated.ok) {
+      return validated;
+    }
+
+    let win: BrowserWindowLike | null = null;
+    try {
+      win = options.deps.getWindowForSender(event.sender);
+    } catch {
+      win = null;
+    }
+    if (!win) {
+      return err('NO_WINDOW', '未找到窗口');
+    }
+
+    try {
+      const value = await options.run(win, validated.value);
+      return ok(value);
+    } catch {
+      return err('INTERNAL_ERROR', '操作失败');
     }
   };
 }
@@ -502,6 +584,36 @@ export function registerIpcHandlers(
       },
     })
   );
+
+  ipcMain.handle(
+    IPC_CHANNELS.contextMenu.popupMiddleItem,
+    makeWindowHandlerWithPayload<IpcVoid>({
+      channel: IPC_CHANNELS.contextMenu.popupMiddleItem,
+      deps,
+      rateLimiter,
+      validate: validateContextMenuPopupMiddleItemPayload,
+      run: async (win, validatedPayload) => {
+        const v = validatedPayload as ContextMenuPopupMiddleItemPayload;
+        await deps.contextMenu.popupMiddleItem({ win, itemId: v.itemId });
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.contextMenu.popupFolder,
+    makeWindowHandlerWithPayload<IpcVoid>({
+      channel: IPC_CHANNELS.contextMenu.popupFolder,
+      deps,
+      rateLimiter,
+      validate: validateContextMenuPopupFolderPayload,
+      run: async (win, validatedPayload) => {
+        const v = validatedPayload as ContextMenuPopupFolderPayload;
+        await deps.contextMenu.popupFolder({ win, folderId: v.folderId });
+        return null;
+      },
+    })
+  );
 }
 
 export const __test__ = {
@@ -510,4 +622,6 @@ export const __test__ = {
   validateQuickCaptureSubmitPayload,
   validateShortcutsSetConfigPayload,
   validateShortcutsResetOnePayload,
+  validateContextMenuPopupMiddleItemPayload,
+  validateContextMenuPopupFolderPayload,
 };

@@ -39,6 +39,10 @@ import {
 import { migrateStorageRoot } from './storageRoot/migrateStorageRoot';
 import { installMemoResProtocol } from './protocol/memoResProtocol';
 import { resolveMainDbFileAbsPath } from './db/paths';
+import {
+  popupFolderContextMenu,
+  popupMiddleItemContextMenu,
+} from './menu/contextMenu';
 
 const closeToTray = createCloseToTrayController();
 
@@ -192,6 +196,41 @@ app.whenReady().then(async () => {
         }
       }
     },
+    reportCacheKeyAccessed: async (cacheKey) => {
+      const dbFileAbsPath = resolveMainDbFileAbsPath(storageRootStatus.storageRootAbsPath);
+
+      try {
+        await fs.stat(dbFileAbsPath);
+      } catch {
+        return;
+      }
+
+      let db: Database.Database | null = null;
+      try {
+        db = new Database(dbFileAbsPath, {
+          readonly: false,
+          fileMustExist: true,
+          timeout: 50,
+        });
+        db.prepare(
+          `
+            UPDATE memo_attachments
+            SET last_access_at_ms = @last_access_at_ms
+            WHERE cache_key = @cache_key
+          `
+        ).run({
+          cache_key: cacheKey,
+          last_access_at_ms: Date.now(),
+        });
+      } catch {
+        return;
+      } finally {
+        try {
+          db?.close();
+        } catch {
+        }
+      }
+    },
     readFile: (absPath) => fs.readFile(absPath),
     lstat: (absPath) => fs.lstat(absPath),
   });
@@ -322,6 +361,12 @@ app.whenReady().then(async () => {
         app.relaunch();
         app.exit(0);
       },
+    },
+    contextMenu: {
+      popupMiddleItem: ({ win, itemId }) =>
+        popupMiddleItemContextMenu({ win: win as BrowserWindow, itemId }),
+      popupFolder: ({ win, folderId }) =>
+        popupFolderContextMenu({ win: win as BrowserWindow, folderId }),
     },
   });
 
