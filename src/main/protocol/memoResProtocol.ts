@@ -15,6 +15,8 @@ export interface MemoResCoreDependencies {
   storageRootAbsPath: string;
   resolveCacheKey: (cacheKey: string) => Promise<string | null>;
 
+  reportCacheKeyAccessed?: (cacheKey: string) => Promise<void>;
+
   readFile: (absPath: string) => Promise<Buffer>;
   lstat: (absPath: string) => Promise<Stats>;
 }
@@ -226,6 +228,12 @@ export function createMemoResHandler(deps: MemoResCoreDependencies): (requestUrl
         return emptyResponse(404, { 'X-Content-Type-Options': 'nosniff' });
       }
       return emptyResponse(500, { 'X-Content-Type-Options': 'nosniff' });
+    }
+
+    try {
+      await deps.reportCacheKeyAccessed?.(cacheKey);
+    } catch (error) {
+      void error;
     }
 
     const ext = normalizeExtLowerNoDot(absPath);

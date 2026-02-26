@@ -26,9 +26,11 @@ describe('src/main/protocol/memoResProtocol', () => {
     await writeFileEnsuringDir(abs, Buffer.from('PNGDATA'));
 
     const resolveCacheKey = vi.fn(async () => relpath);
+    const reportCacheKeyAccessed = vi.fn(async () => undefined);
     const handler = createMemoResHandler({
       storageRootAbsPath: root,
       resolveCacheKey,
+      reportCacheKeyAccessed,
       readFile: (p) => fsp.readFile(p),
       lstat: (p) => fsp.lstat(p),
     });
@@ -40,6 +42,7 @@ describe('src/main/protocol/memoResProtocol', () => {
     expect(res.headers['Content-Type']).toBe('image/png');
     expect(res.headers['Content-Disposition']).toBe('inline');
     expect(resolveCacheKey).toHaveBeenCalledWith('att_abc');
+    expect(reportCacheKeyAccessed).toHaveBeenCalledWith('att_abc');
   });
 
   it('成功：支持 memo-res:///cacheKey（pathname 形态）', async () => {
