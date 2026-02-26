@@ -1,0 +1,55 @@
+Task 25 - cacheKey 不透明约束与映射证据
+
+结论：PASS
+
+## 合同要点
+
+- cacheKey 必须是不透明标识：不得把任何 relpath 直接塞进 `memo-res://` URL。
+- renderer 预览入口只允许 `memo-res://<cacheKey>`（cacheKey 仅允许 `[A-Za-z0-9_-]`）。
+- main 侧维护 `cacheKey -> (cache_relpath|local_relpath)` 映射，并且在 `memo-res` 成功读取后由 main 侧更新 LRU 的 `last_access_at_ms`。
+
+## 关键实现位置
+
+1) cacheKey 生成（不透明）：
+- `src/main/attachments/attachmentCache.ts` → `generateOpaqueAttachmentCacheKey(...)`（形态：`att_<uuid>`）
+
+2) DB 侧映射与不透明约束落地：
+- `src/main/db/migrations.ts` migration v6：
+  - 为 `memo_attachments` 增加 `last_access_at_ms/cache_size_bytes`
+  - 回填缺失 `cache_key`：`att_` + `lower(hex(randomblob(16)))`
+  - 建立 `uq_memo_attachments_cache_key`（partial unique）
+
+3) memo-res 成功读取后更新 last_access（main 侧维护，不接受 renderer 上报）：
+- `src/main/protocol/memoResProtocol.ts`：成功 `readFile` 后调用依赖注入的 `reportCacheKeyAccessed(cacheKey)`（best-effort）
+- `src/main/main.ts`：实现 `reportCacheKeyAccessed`，对 SQLite 执行：
+  `UPDATE memo_attachments SET last_access_at_ms = ? WHERE cache_key = ?`
+
+4) memo-res URL 形态约束（拒绝把路径塞进 URL）：
+- `src/main/protocol/memoResProtocol.ts`：解析时拒绝 `..`、`/`、`%`、`\\` 等（返回 400）
+
+## 关键断言（摘自单测）
+
+1) `memo-res` 协议对 cacheKey 的不透明约束：
+- `src/main/protocol/memoResProtocol.test.ts` 用例：`拒绝：cacheKey 不透明约束（含 /、..、% 等）必须 400`
+  - 例如：`memo-res://a/b`、`memo-res://a%2Fb` 等均返回 400
+
+2) cacheKey 生成不包含 relpath 且符合约束：
+- `src/main/attachments/attachmentCache.test.ts` 用例：`cacheKey：必须是不透明标识...`
+  - 断言 key 不包含 `/`、`%`、`attachments-cache` 等，且匹配 `/^[A-Za-z0-9_-]+$/`
+
+3) memo-res 成功读取后会触发 main 侧 touch（可测试）：
+- `src/main/protocol/memoResProtocol.test.ts`：成功读取用例中断言 `reportCacheKeyAccessed` 被调用
+
+## 验证命令与输出
+
+执行：
+
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build
+
+输出（节选）：
+
+ ✓ src/main/protocol/memoResProtocol.test.ts (6 tests)
+ ✓ src/main/attachments/attachmentCache.test.ts (3 tests)
+
+ Test Files  33 passed (33)
+      Tests  102 passed (102)

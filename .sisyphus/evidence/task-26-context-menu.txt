@@ -1,0 +1,46 @@
+Task 26 - 右键菜单（中栏条目 + 左栏 Folder 树）
+
+时间：2026-02-26
+
+目标：renderer 仅通过 window.xinliu.contextMenu.* 触发系统菜单；菜单选择通过 IPC 事件回传；菜单模板可在 Node/Vitest 纯函数环境测试。
+
+---
+
+1) 代码检索（renderer 右键入口 + IPC 调用）
+
+$ rg -n "contextmenu" src/renderer -S
+src/renderer/App.test.tsx:94:      contextMenu: {
+src/renderer/App.test.tsx:145:      contextMenu: {
+src/renderer/App.test.tsx:205:      contextMenu: {
+src/renderer/App.tsx:486:              onContextMenu={(e) => {
+src/renderer/App.tsx:794:                    onContextMenu={(e) => {
+src/renderer/vite-env.d.ts:46:      contextMenu: {
+
+说明：
+- 左栏 Folder 树：data-testid="folder-tree"，每个 folder 行在 onContextMenu 内 preventDefault + 调用 popupFolder(folderId)
+- 中栏列表：data-testid="middle-list"，每个条目行在 onContextMenu 内 preventDefault + 调用 popupMiddleItem(itemId)
+
+---
+
+2) 运行验证（Node 20.20.0）
+
+$ source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build
+Now using node v20.20.0 (npm v10.8.2)
+
+> xinliu-desktop@0.0.0 test
+> vitest run
+
+✓ src/main/menu/contextMenuTemplates.test.ts (2 tests)
+✓ src/main/ipc.test.ts (3 tests)
+✓ src/renderer/App.test.tsx (4 tests)
+
+Test Files  34 passed (34)
+Tests       104 passed (104)
+
+> xinliu-desktop@0.0.0 typecheck
+> tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+
+> xinliu-desktop@0.0.0 build
+> npm run build:electron && npm run build:renderer
+
+✓ built in 1.10s

@@ -162,3 +162,18 @@
 - [2026-02-26] Task 24（memo-res:// 协议 URL 解析坑）：同一个 scheme 在不同调用栈/构造方式下可能出现 `memo-res://<cacheKey>`（cacheKey 在 hostname）或 `memo-res:///cacheKey`（cacheKey 在 pathname）两种形态；实现解析时要同时兼容，并且在 hostname 形态下拒绝任何额外 path 段，避免把路径片段当作 key。
 
 - [2026-02-26] Task 24（拒绝 symlink/junction 的实用实现）：不要用 `realpath` 事后比对；更稳的是对“从 root 到目标路径”的每一段做 `lstat`，只要链路中任何一段 `isSymbolicLink()` 就拒绝（Windows junction/reparse point 通常也会命中）。测试在 Windows 上若无法创建 symlink，可用 `junction` 或对注入的 `lstat` 做 stub 回退，确保逻辑被覆盖。
+
+## [2026-02-26] - Task 25 附件缓存合同（LRU/配额/cacheKey）
+
+- cacheKey 必须“不透明”：推荐形态 `att_<uuid>` 或 SQL `att_` + `hex(randomblob(16))`；禁止把任何 relpath 直接塞进 `memo-res://`。
+- `memo_attachments.cache_key` 建议建立 partial unique index（`WHERE cache_key IS NOT NULL`），保证 `cacheKey -> relpath` 映射唯一。
+- LRU 元数据用独立列 `last_access_at_ms`（不要复用 `updated_at_ms`），避免“读一次就变脏”影响同步/脏检查。
+- `memo-res` 成功读取后由 main 侧 best-effort touch `last_access_at_ms`，renderer 不允许上报/伪造 LRU。
+- 配额驱逐的失败策略：删除某条缓存文件失败不得 throw，应继续尝试驱逐其他条目，并用 `overQuota/errors` 反馈（不阻断编辑）。
+
+## [2026-02-26] - Task 26 右键菜单（Context Menu）落地模式
+
+- 菜单模板必须可测试：在 main 层先抽“可序列化的纯模板结构”（例如 `{kind:'item'|'separator', label, command}`），Node/Vitest 只测这个模板；Electron `Menu` 的构建与 `popup()` 仅存在于 main runtime 适配层。
+- renderer 不创建系统菜单：只在 `onContextMenu` 中 `event.preventDefault()`，并调用 `window.xinliu.contextMenu.popupFolder(folderId)` / `popupMiddleItem(itemId)`。
+- 菜单选择的回传：main 在 `MenuItem.click` 时通过 `webContents.send(IPC_EVENTS.contextMenu.didSelect, {target,command})` 发事件；preload 暴露用例级订阅 `window.xinliu.contextMenu.onCommand(listener)`。
+- Vitest main-side 测试要强制 Node 环境：`// @vitest-environment node` 是必要指令（否则会走默认 jsdom，容易踩 Electron/runtime 相关坑）。

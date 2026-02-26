@@ -1,0 +1,37 @@
+Task 26 - IPC 动作链路（右键菜单命令发出 + 事件回传）
+
+时间：2026-02-26
+
+约束确认：renderer 不直接使用 Node/Electron API 创建系统菜单；所有动作触发必须走 IPC；main 侧统一返回 IpcResult。
+
+---
+
+1) IPC 白名单通道（静态可枚举）
+
+$ rg -n "IPC_CHANNELS\.contextMenu" src -S
+src/preload/index.ts:90:      invokeIpc<IpcVoid>(IPC_CHANNELS.contextMenu.popupMiddleItem, {
+src/preload/index.ts:94:      invokeIpc<IpcVoid>(IPC_CHANNELS.contextMenu.popupFolder, {
+src/shared/ipc.ts:55:  (typeof IPC_CHANNELS.contextMenu)[keyof typeof IPC_CHANNELS.contextMenu];
+src/main/ipc.ts:589:    IPC_CHANNELS.contextMenu.popupMiddleItem,
+src/main/ipc.ts:604:    IPC_CHANNELS.contextMenu.popupFolder,
+src/main/ipc.test.ts:60:      ...Object.values(IPC_CHANNELS.contextMenu),
+
+---
+
+2) 菜单选择事件回传（main -> renderer）
+
+$ rg -n "IPC_EVENTS\.contextMenu" src -S
+src/main/menu/contextMenu.ts:40:          options.win.webContents.send(IPC_EVENTS.contextMenu.didSelect, {
+src/main/menu/contextMenu.ts:62:          options.win.webContents.send(IPC_EVENTS.contextMenu.didSelect, {
+src/preload/index.ts:105:      ipcRenderer.on(IPC_EVENTS.contextMenu.didSelect, wrapped);
+src/preload/index.ts:107:        ipcRenderer.removeListener(IPC_EVENTS.contextMenu.didSelect, wrapped);
+
+说明：
+- renderer 只订阅 window.xinliu.contextMenu.onCommand(listener)
+- main 在 Electron MenuItem click 时 send IPC_EVENTS.contextMenu.didSelect，并带上 { target, command }
+
+---
+
+3) 命令枚举（shared 单一来源）
+
+ContextMenuCommand 来自：src/shared/ipc.ts -> CONTEXT_MENU_COMMANDS（const 对象，静态可枚举）

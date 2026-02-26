@@ -1,0 +1,47 @@
+Task 25 - 附件缓存配额(LRU) 证据
+
+结论：PASS
+
+## 覆盖点
+
+1) LRU 驱逐顺序：当 `attachments-cache/` 总缓存体积超过配额时，按 `memo_attachments.last_access_at_ms` 从旧到新驱逐；驱逐只清理 `cache_relpath/cache_size_bytes`，不影响 `local_relpath`（原件不参与 GC）。
+2) 不阻断编辑：驱逐过程中若某条缓存文件删除失败（例如权限问题），逻辑不得 throw，继续尝试驱逐后续条目；最终即便仍超限，也以 `overQuota=true` 的结果返回，不阻塞调用方。
+
+## 关键实现位置
+
+- LRU/配额实现：`src/main/attachments/attachmentCache.ts` → `enforceAttachmentCacheQuota(...)`
+- 单测：`src/main/attachments/attachmentCache.test.ts`
+
+## 关键断言（摘自单测）
+
+- 用例：`LRU：超限时按 last_access_at_ms 从旧到新驱逐 cache_relpath（不影响 local_relpath）`
+  - 预置 3 个缓存文件（120/140/160 bytes，total=420），配额 maxBytes=260
+  - 期望驱逐顺序：a1(最旧) → a2(次旧)，最终 bytesAfter=160
+  - 期望 DB：a1/a2 的 `cache_relpath/cache_size_bytes` 被清空；a3 保留；`local_relpath` 不变
+
+- 用例：`不阻断编辑：rm 失败时不得 throw，且继续尝试驱逐其他条目`
+  - mock a1 删除失败（抛错），仍可驱逐 a2 使 total 回到配额内
+  - 期望：`errors` 包含 `rm 失败: id=a1`，且函数整体不抛异常
+
+## 验证命令与输出
+
+执行：
+
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build
+
+输出（节选）：
+
+Now using node v20.20.0 (npm v10.8.2)
+> xinliu-desktop@0.0.0 test
+> vitest run
+
+ ✓ src/main/attachments/attachmentCache.test.ts (3 tests)
+
+ Test Files  33 passed (33)
+      Tests  102 passed (102)
+
+> xinliu-desktop@0.0.0 typecheck
+> tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+
+> xinliu-desktop@0.0.0 build
+> npm run build:electron && npm run build:renderer
