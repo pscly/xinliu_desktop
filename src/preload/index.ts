@@ -34,6 +34,8 @@ import type {
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
+  UpdaterStatus,
+  UpdaterStatusChangedPayload,
 } from '../shared/ipc';
 
 function ipcError<T>(code: IpcErrorCode, message: string): IpcResult<T> {
@@ -172,5 +174,25 @@ contextBridge.exposeInMainWorld('xinliu', {
       invokeIpc<FileAccessReadTextFileResult>(IPC_CHANNELS.fileAccess.readTextFile, payload),
     writeTextFile: (payload: FileAccessWriteTextFilePayload) =>
       invokeIpc<IpcVoid>(IPC_CHANNELS.fileAccess.writeTextFile, payload),
+  },
+  updater: {
+    getStatus: () => invokeIpc<UpdaterStatus>(IPC_CHANNELS.updater.getStatus, EMPTY_PAYLOAD),
+    checkForUpdates: () => invokeIpc<IpcVoid>(IPC_CHANNELS.updater.checkForUpdates, EMPTY_PAYLOAD),
+    installNow: () => invokeIpc<IpcVoid>(IPC_CHANNELS.updater.installNow, EMPTY_PAYLOAD),
+    deferInstall: () => invokeIpc<IpcVoid>(IPC_CHANNELS.updater.deferInstall, EMPTY_PAYLOAD),
+    onStatusChanged: (listener: (status: UpdaterStatus) => void) => {
+      const wrapped = (_event: unknown, payload: unknown) => {
+        try {
+          const p = payload as UpdaterStatusChangedPayload;
+          listener(p.status);
+        } catch (error) {
+          console.warn(`[updater] statusChanged listener 异常：${String(error)}`);
+        }
+      };
+      ipcRenderer.on(IPC_EVENTS.updater.statusChanged, wrapped);
+      return () => {
+        ipcRenderer.removeListener(IPC_EVENTS.updater.statusChanged, wrapped);
+      };
+    },
   },
 });

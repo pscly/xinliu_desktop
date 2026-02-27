@@ -1,0 +1,13 @@
+Task 30 - 自动更新（设置页 UI data-testid）证据
+
+要求：用 rg 证明关键 data-testid 存在（列出匹配行）。
+
+
+$ rg -n "data-testid=\"(settings-updater|check-updates|update-status|update-disabled-hint|update-error|update-downloaded|update-defer)\"" src/renderer/App.tsx -S
+625:    <section className="settingsSection" data-testid="settings-updater">
+640:            data-testid="check-updates"
+664:          <div className="v" data-testid="update-status">
+675:        <div className="callout calloutWarn" data-testid="update-disabled-hint">
+681:        <div className="callout calloutWarn" data-testid="update-downloaded">
+696:              data-testid="update-defer"
+707:          data-testid="update-error"

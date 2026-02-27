@@ -52,6 +52,12 @@ export const IPC_CHANNELS = {
     readTextFile: `${IPC_NAMESPACE}:fileAccess:readTextFile`,
     writeTextFile: `${IPC_NAMESPACE}:fileAccess:writeTextFile`,
   },
+  updater: {
+    getStatus: `${IPC_NAMESPACE}:updater:getStatus`,
+    checkForUpdates: `${IPC_NAMESPACE}:updater:checkForUpdates`,
+    installNow: `${IPC_NAMESPACE}:updater:installNow`,
+    deferInstall: `${IPC_NAMESPACE}:updater:deferInstall`,
+  },
 } as const;
 
 export const IPC_EVENTS = {
@@ -60,6 +66,9 @@ export const IPC_EVENTS = {
   },
   contextMenu: {
     didSelect: `${IPC_NAMESPACE}:contextMenu:didSelect`,
+  },
+  updater: {
+    statusChanged: `${IPC_NAMESPACE}:updater:statusChanged`,
   },
 } as const;
 
@@ -90,6 +99,8 @@ export type IpcChannelSearch = (typeof IPC_CHANNELS.search)[keyof typeof IPC_CHA
 export type IpcChannelFileAccess =
   (typeof IPC_CHANNELS.fileAccess)[keyof typeof IPC_CHANNELS.fileAccess];
 
+export type IpcChannelUpdater = (typeof IPC_CHANNELS.updater)[keyof typeof IPC_CHANNELS.updater];
+
 export type IpcChannel =
   | IpcChannelWindow
   | IpcChannelQuickCapture
@@ -100,7 +111,40 @@ export type IpcChannel =
   | IpcChannelContextMenu
   | IpcChannelNotes
   | IpcChannelSearch
-  | IpcChannelFileAccess;
+  | IpcChannelFileAccess
+  | IpcChannelUpdater;
+
+export type UpdaterState =
+  | 'disabled'
+  | 'idle'
+  | 'checking'
+  | 'update_available'
+  | 'no_update'
+  | 'downloading'
+  | 'downloaded'
+  | 'error';
+
+export interface UpdaterProgress {
+  percent01: number | null;
+  transferred: number | null;
+  total: number | null;
+  bytesPerSecond: number | null;
+}
+
+export interface UpdaterStatus {
+  state: UpdaterState;
+  currentVersion: string;
+  availableVersion: string | null;
+  progress: UpdaterProgress | null;
+  lastCheckedAtMs: number | null;
+  errorMessage: string | null;
+  releasesUrl: string;
+  deferred: boolean;
+}
+
+export interface UpdaterStatusChangedPayload {
+  status: UpdaterStatus;
+}
 
 export type IpcErrorCode =
   | 'VALIDATION_ERROR'

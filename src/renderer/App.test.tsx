@@ -14,6 +14,7 @@ import type {
   SearchRebuildIndexResult,
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
+  UpdaterStatus,
 } from '../shared/ipc';
 
 import { App } from './App';
@@ -134,6 +135,26 @@ function buildXinliuStub(overrides: {
           } satisfies SearchRebuildIndexResult,
         }) satisfies IpcResult<SearchRebuildIndexResult>,
     },
+    updater: {
+      getStatus: async () =>
+        ({
+          ok: true,
+          value: {
+            state: 'disabled',
+            currentVersion: '0.0.0',
+            availableVersion: null,
+            progress: null,
+            lastCheckedAtMs: null,
+            errorMessage: '自动更新仅在安装包中可用',
+            releasesUrl: 'https://example.com/releases',
+            deferred: false,
+          } satisfies UpdaterStatus,
+        }) satisfies IpcResult<UpdaterStatus>,
+      checkForUpdates: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      installNow: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      deferInstall: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      onStatusChanged: () => () => {},
+    },
   };
 }
 
@@ -167,12 +188,59 @@ describe('<App />', () => {
     expect(screen.getByTestId('close-behavior-hide')).toBeTruthy();
     expect(screen.getByTestId('close-behavior-quit')).toBeTruthy();
     expect(screen.getByTestId('close-to-tray-hint-reset')).toBeTruthy();
+    expect(screen.getByTestId('settings-updater')).toBeTruthy();
+    expect(screen.getByTestId('check-updates')).toBeTruthy();
     expect(screen.getByTestId('settings-shortcuts')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-panel')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-copy-flow-request-id')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-copy-memos-request-id')).toBeTruthy();
     fireEvent.click(screen.getByTestId('nav-conflicts'));
     expect(screen.getAllByText('冲突').length).toBeGreaterThan(0);
+  });
+
+  it('设置页：更新区块必须包含关键 data-testid（disabled 提示也要可定位）', async () => {
+    window.xinliu = buildXinliuStub({});
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('nav-settings'));
+
+    expect(await screen.findByTestId('settings-updater')).toBeTruthy();
+    expect(screen.getByTestId('check-updates')).toBeTruthy();
+    expect(screen.getByTestId('update-open-releases')).toBeTruthy();
+    expect(screen.getByTestId('update-current-version')).toBeTruthy();
+    expect(screen.getByTestId('update-status')).toBeTruthy();
+    expect(screen.getByTestId('update-disabled-hint')).toBeTruthy();
+
+    delete window.xinliu;
+  });
+
+  it('设置页：下载完成态必须出现“安装并重启/稍后再说”按钮', async () => {
+    const stub = buildXinliuStub({});
+    stub.updater.getStatus = async () =>
+      ({
+        ok: true,
+        value: {
+          state: 'downloaded',
+          currentVersion: '0.0.1',
+          availableVersion: '0.0.2',
+          progress: { percent01: 1, transferred: null, total: null, bytesPerSecond: null },
+          lastCheckedAtMs: 123,
+          errorMessage: null,
+          releasesUrl: 'https://example.com/releases',
+          deferred: false,
+        } satisfies UpdaterStatus,
+      }) satisfies IpcResult<UpdaterStatus>;
+
+    window.xinliu = stub;
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('nav-settings'));
+
+    expect(await screen.findByTestId('update-downloaded')).toBeTruthy();
+    expect(screen.getByTestId('update-install-now')).toBeTruthy();
+    expect(screen.getByTestId('update-defer')).toBeTruthy();
+
+    delete window.xinliu;
   });
 
   it('设置页：注册失败必须可见且可定位到对应条目', async () => {
@@ -294,6 +362,7 @@ describe('<App />', () => {
             } satisfies SearchRebuildIndexResult,
           }) satisfies IpcResult<SearchRebuildIndexResult>,
       },
+      updater: buildXinliuStub({}).updater,
     };
 
     render(<App />);
@@ -415,6 +484,7 @@ describe('<App />', () => {
             } satisfies SearchRebuildIndexResult,
           }) satisfies IpcResult<SearchRebuildIndexResult>,
       },
+      updater: buildXinliuStub({}).updater,
     };
 
     render(<App />);
@@ -544,6 +614,7 @@ describe('<App />', () => {
             } satisfies SearchRebuildIndexResult,
           }) satisfies IpcResult<SearchRebuildIndexResult>,
       },
+      updater: buildXinliuStub({}).updater,
     };
 
     render(<App />);

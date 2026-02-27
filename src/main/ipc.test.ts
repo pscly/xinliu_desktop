@@ -83,6 +83,21 @@ describe('src/main/ipc', () => {
         }),
         rebuildIndex: () => ({ ok: true, ftsAvailable: false, rebuilt: false, message: 'test' }),
       },
+      updater: {
+        getStatus: () => ({
+          state: 'disabled',
+          currentVersion: '0.0.0',
+          availableVersion: null,
+          progress: null,
+          lastCheckedAtMs: null,
+          errorMessage: '自动更新仅在安装包中可用',
+          releasesUrl: 'https://example.com/releases',
+          deferred: false,
+        }),
+        checkForUpdates: async () => {},
+        installNow: () => {},
+        deferInstall: () => {},
+      },
       now: () => 0,
     });
 
@@ -98,6 +113,7 @@ describe('src/main/ipc', () => {
       ...Object.values(IPC_CHANNELS.notes),
       ...Object.values(IPC_CHANNELS.search),
       ...Object.values(IPC_CHANNELS.fileAccess),
+      ...Object.values(IPC_CHANNELS.updater),
     ].sort();
     expect(registered).toEqual(expected);
 
@@ -169,6 +185,21 @@ describe('src/main/ipc', () => {
           items: [],
         }),
         rebuildIndex: () => ({ ok: true, ftsAvailable: false, rebuilt: false, message: 'test' }),
+      },
+      updater: {
+        getStatus: () => ({
+          state: 'disabled',
+          currentVersion: '0.0.0',
+          availableVersion: null,
+          progress: null,
+          lastCheckedAtMs: null,
+          errorMessage: '自动更新仅在安装包中可用',
+          releasesUrl: 'https://example.com/releases',
+          deferred: false,
+        }),
+        checkForUpdates: async () => {},
+        installNow: () => {},
+        deferInstall: () => {},
       },
       now: () => 0,
     });
@@ -248,6 +279,21 @@ describe('src/main/ipc', () => {
         }),
         rebuildIndex: () => ({ ok: true, ftsAvailable: false, rebuilt: false, message: 'test' }),
       },
+      updater: {
+        getStatus: () => ({
+          state: 'disabled',
+          currentVersion: '0.0.0',
+          availableVersion: null,
+          progress: null,
+          lastCheckedAtMs: null,
+          errorMessage: '自动更新仅在安装包中可用',
+          releasesUrl: 'https://example.com/releases',
+          deferred: false,
+        }),
+        checkForUpdates: async () => {},
+        installNow: () => {},
+        deferInstall: () => {},
+      },
       now: () => 0,
     });
 
@@ -325,6 +371,21 @@ describe('src/main/ipc', () => {
           items: [],
         }),
         rebuildIndex: () => ({ ok: true, ftsAvailable: false, rebuilt: false, message: 'test' }),
+      },
+      updater: {
+        getStatus: () => ({
+          state: 'disabled',
+          currentVersion: '0.0.0',
+          availableVersion: null,
+          progress: null,
+          lastCheckedAtMs: null,
+          errorMessage: '自动更新仅在安装包中可用',
+          releasesUrl: 'https://example.com/releases',
+          deferred: false,
+        }),
+        checkForUpdates: async () => {},
+        installNow: () => {},
+        deferInstall: () => {},
       },
       now: () => 0,
     });

@@ -28,6 +28,7 @@ import type {
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
+  UpdaterStatus,
 } from '../shared/ipc';
 
 declare global {
@@ -96,6 +97,13 @@ declare global {
         popupMiddleItem: (itemId: string) => Promise<IpcResult<IpcVoid>>;
         popupFolder: (folderId: string) => Promise<IpcResult<IpcVoid>>;
         onCommand: (listener: (payload: ContextMenuDidSelectPayload) => void) => () => void;
+      };
+      updater: {
+        getStatus: () => Promise<IpcResult<UpdaterStatus>>;
+        checkForUpdates: () => Promise<IpcResult<IpcVoid>>;
+        installNow: () => Promise<IpcResult<IpcVoid>>;
+        deferInstall: () => Promise<IpcResult<IpcVoid>>;
+        onStatusChanged: (listener: (status: UpdaterStatus) => void) => () => void;
       };
     };
   }

@@ -11,6 +11,7 @@ import type {
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
+  UpdaterStatus,
 } from '../shared/ipc';
 
 import { QuickCaptureWindow } from './QuickCaptureWindow';
@@ -39,6 +40,7 @@ type XinliuDiagnosticsApi = NonNullable<Window['xinliu']>['diagnostics'];
 type XinliuContextMenuApi = NonNullable<Window['xinliu']>['contextMenu'];
 type XinliuSearchApi = NonNullable<Window['xinliu']>['search'];
 type XinliuFileAccessApi = NonNullable<Window['xinliu']>['fileAccess'];
+type XinliuUpdaterApi = NonNullable<Window['xinliu']>['updater'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
   return window.xinliu?.window;
@@ -70,6 +72,10 @@ function getXinliuSearchApi(): XinliuSearchApi | undefined {
 
 function getXinliuFileAccessApi(): XinliuFileAccessApi | undefined {
   return window.xinliu?.fileAccess;
+}
+
+function getXinliuUpdaterApi(): XinliuUpdaterApi | undefined {
+  return window.xinliu?.updater;
 }
 
 async function safePopupMiddleItemMenu(itemId: string) {
@@ -417,6 +423,9 @@ function SettingsContent(props: {
   diagnosticsStatus: DiagnosticsStatus | null;
   diagnosticsError: string | null;
   diagnosticsApiAvailable: boolean;
+  updaterStatus: UpdaterStatus | null;
+  updaterError: string | null;
+  updaterApiAvailable: boolean;
   storageRootRestartRequired: boolean;
   storageRootLastMigration: (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null;
   onUpdateDraft: (
@@ -430,6 +439,9 @@ function SettingsContent(props: {
   onRestartNow: () => void;
   onSetCloseBehavior: (behavior: 'hide' | 'quit') => void;
   onResetCloseToTrayHint: () => void;
+  onCheckUpdates: () => void;
+  onInstallUpdateNow: () => void;
+  onDeferInstall: () => void;
 }) {
   return (
     <div className="contentPlaceholder">
@@ -454,6 +466,14 @@ function SettingsContent(props: {
           lastMigration={props.storageRootLastMigration}
           onChooseAndMigrate={props.onChooseAndMigrateStorageRoot}
           onRestartNow={props.onRestartNow}
+        />
+        <SettingsUpdaterSection
+          status={props.updaterStatus}
+          error={props.updaterError}
+          apiAvailable={props.updaterApiAvailable}
+          onCheckUpdates={props.onCheckUpdates}
+          onInstallUpdateNow={props.onInstallUpdateNow}
+          onDeferInstall={props.onDeferInstall}
         />
         <SettingsDiagnosticsSection
           status={props.diagnosticsStatus}
@@ -526,6 +546,185 @@ function SettingsStorageRootSection(props: {
           <div className="btnRow">
             <button type="button" className="btn" onClick={() => props.onRestartNow()}>
               立即重启
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SettingsUpdaterSection(props: {
+  status: UpdaterStatus | null;
+  error: string | null;
+  apiAvailable: boolean;
+  onCheckUpdates: () => void;
+  onInstallUpdateNow: () => void;
+  onDeferInstall: () => void;
+}) {
+  const releasesUrl =
+    props.status?.releasesUrl ?? 'https://github.com/pscly/xinliu_desktop/releases';
+  const state = props.status?.state ?? 'idle';
+  const currentVersion = props.status?.currentVersion ?? '-';
+  const availableVersion = props.status?.availableVersion;
+  const deferred = props.status?.deferred ?? false;
+
+  const openReleases = () => {
+    try {
+      window.open?.(releasesUrl);
+    } catch {}
+  };
+
+  const percentText = (() => {
+    const p = props.status?.progress?.percent01;
+    if (typeof p !== 'number' || !Number.isFinite(p)) {
+      return null;
+    }
+    const pct = Math.round(p * 100);
+    return `${pct}%`;
+  })();
+
+  const statusText = (() => {
+    if (state === 'disabled') {
+      return '开发模式：自动更新已禁用（仅安装包可用）';
+    }
+    if (state === 'idle') {
+      return '尚未检查';
+    }
+    if (state === 'checking') {
+      return '正在检查更新…';
+    }
+    if (state === 'no_update') {
+      return '已是最新版本';
+    }
+    if (state === 'update_available') {
+      return availableVersion
+        ? `发现新版本 ${availableVersion}，准备下载…`
+        : '发现新版本，准备下载…';
+    }
+    if (state === 'downloading') {
+      const base = availableVersion ? `正在后台下载 ${availableVersion}` : '正在后台下载更新';
+      return percentText ? `${base}（${percentText}）` : base;
+    }
+    if (state === 'downloaded') {
+      const base = availableVersion ? `新版本 ${availableVersion} 已下载` : '新版本已下载';
+      return deferred ? `${base}（已延后安装）` : base;
+    }
+    if (state === 'error') {
+      return '更新失败';
+    }
+    return String(state);
+  })();
+
+  const hintText = state === 'disabled' ? props.status?.errorMessage : null;
+  const errorText = props.error ?? props.status?.errorMessage;
+
+  const checkDisabled = state === 'checking' || state === 'downloading';
+
+  return (
+    <section className="settingsSection" data-testid="settings-updater">
+      <div className="settingsSectionHeader">
+        <div>
+          <div className="settingsSectionTitle">自动更新</div>
+          <div className="settingsSectionSub">
+            GitHub Releases（stable）；后台下载，用户触发安装
+          </div>
+        </div>
+
+        <div className="btnRow">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => props.onCheckUpdates()}
+            disabled={checkDisabled}
+            data-testid="check-updates"
+          >
+            检查更新
+          </button>
+          <button
+            type="button"
+            className="btn btnGhost"
+            onClick={() => openReleases()}
+            data-testid="update-open-releases"
+          >
+            打开 Releases
+          </button>
+        </div>
+      </div>
+
+      <div className="rightCardBody">
+        <div className="kvRow">
+          <div className="k">当前版本</div>
+          <div className="v" data-testid="update-current-version">
+            {currentVersion}
+          </div>
+        </div>
+        <div className="kvRow">
+          <div className="k">状态</div>
+          <div className="v" data-testid="update-status">
+            {statusText}
+          </div>
+        </div>
+      </div>
+
+      {!props.apiAvailable ? (
+        <div className="callout calloutWarn">自动更新 API 不可用（preload 未注入）</div>
+      ) : null}
+
+      {hintText ? (
+        <div className="callout calloutWarn" data-testid="update-disabled-hint">
+          {hintText}
+        </div>
+      ) : null}
+
+      {state === 'downloaded' ? (
+        <div className="callout calloutWarn" data-testid="update-downloaded">
+          <div>更新已下载完成。你可以选择现在安装并重启，或延后稍后再说。</div>
+          <div className="btnRow">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => props.onInstallUpdateNow()}
+              data-testid="update-install-now"
+            >
+              安装并重启
+            </button>
+            <button
+              type="button"
+              className="btn btnGhost"
+              onClick={() => props.onDeferInstall()}
+              data-testid="update-defer"
+            >
+              稍后再说
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {errorText ? (
+        <div
+          className={state === 'error' ? 'callout calloutBad' : 'callout calloutWarn'}
+          data-testid="update-error"
+        >
+          <div>{errorText}</div>
+          <div className="btnRow">
+            <button type="button" className="btn" onClick={() => props.onCheckUpdates()}>
+              重试
+            </button>
+            <button
+              type="button"
+              className="btn btnGhost"
+              onClick={() => openReleases()}
+              data-testid="update-open-releases-error"
+            >
+              打开 Releases
+            </button>
+            <button
+              type="button"
+              className="btn btnGhost"
+              onClick={() => void safeCopyTextToClipboard(String(errorText))}
+            >
+              复制错误
             </button>
           </div>
         </div>
@@ -988,10 +1187,24 @@ function MainWindowApp() {
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<DiagnosticsStatus | null>(null);
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
 
+  const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus | null>(null);
+  const [updaterError, setUpdaterError] = useState<string | null>(null);
+
   useEffect(() => {
     const api = getXinliuContextMenuApi();
     const off = api?.onCommand?.((payload) => {
       setLastContextMenuSelection(payload);
+    });
+    return () => {
+      off?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    const api = getXinliuUpdaterApi();
+    const off = api?.onStatusChanged?.((status) => {
+      setUpdaterStatus(status);
+      setUpdaterError(null);
     });
     return () => {
       off?.();
@@ -1197,6 +1410,25 @@ function MainWindowApp() {
     setCloseBehaviorStatus(res.value);
   };
 
+  const refreshUpdater = async () => {
+    const api = getXinliuUpdaterApi();
+    if (!api) {
+      setUpdaterStatus(null);
+      setUpdaterError('自动更新 API 不可用（preload 未注入）');
+      return;
+    }
+
+    const res = await api.getStatus();
+    if (!res.ok) {
+      setUpdaterStatus(null);
+      setUpdaterError(`${res.error.message}（${res.error.code}）`);
+      return;
+    }
+
+    setUpdaterError(null);
+    setUpdaterStatus(res.value);
+  };
+
   const updateDraft = (
     id: ShortcutId,
     patch: Partial<{ accelerator: string; enabled: boolean }>
@@ -1262,7 +1494,67 @@ function MainWindowApp() {
       refreshStorageRoot(),
       refreshDiagnostics(),
       refreshCloseBehavior(),
+      refreshUpdater(),
     ]);
+  };
+
+  const checkUpdates = async () => {
+    const api = getXinliuUpdaterApi();
+    const fn = api?.checkForUpdates;
+    if (typeof fn !== 'function') {
+      setUpdaterError('自动更新 API 不可用（preload 未注入）');
+      return;
+    }
+    try {
+      const res = await fn();
+      if (!res.ok) {
+        setUpdaterError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setUpdaterError(null);
+      void refreshUpdater();
+    } catch (e) {
+      setUpdaterError(`检查更新异常：${String(e)}`);
+    }
+  };
+
+  const installUpdateNow = async () => {
+    const api = getXinliuUpdaterApi();
+    const fn = api?.installNow;
+    if (typeof fn !== 'function') {
+      setUpdaterError('自动更新 API 不可用（preload 未注入）');
+      return;
+    }
+    try {
+      const res = await fn();
+      if (!res.ok) {
+        setUpdaterError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setUpdaterError(null);
+    } catch (e) {
+      setUpdaterError(`触发安装异常：${String(e)}`);
+    }
+  };
+
+  const deferInstall = async () => {
+    const api = getXinliuUpdaterApi();
+    const fn = api?.deferInstall;
+    if (typeof fn !== 'function') {
+      setUpdaterError('自动更新 API 不可用（preload 未注入）');
+      return;
+    }
+    try {
+      const res = await fn();
+      if (!res.ok) {
+        setUpdaterError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setUpdaterError(null);
+      void refreshUpdater();
+    } catch (e) {
+      setUpdaterError(`延后安装异常：${String(e)}`);
+    }
   };
 
   const setCloseBehavior = async (behavior: 'hide' | 'quit') => {
@@ -1441,6 +1733,9 @@ function MainWindowApp() {
               diagnosticsStatus={diagnosticsStatus}
               diagnosticsError={diagnosticsError}
               diagnosticsApiAvailable={Boolean(getXinliuDiagnosticsApi())}
+              updaterStatus={updaterStatus}
+              updaterError={updaterError}
+              updaterApiAvailable={Boolean(getXinliuUpdaterApi())}
               storageRootRestartRequired={storageRootRestartRequired}
               storageRootLastMigration={storageRootLastMigration}
               onUpdateDraft={updateDraft}
@@ -1451,6 +1746,9 @@ function MainWindowApp() {
               onRestartNow={() => void restartNow()}
               onSetCloseBehavior={(behavior) => void setCloseBehavior(behavior)}
               onResetCloseToTrayHint={() => void resetCloseToTrayHint()}
+              onCheckUpdates={() => void checkUpdates()}
+              onInstallUpdateNow={() => void installUpdateNow()}
+              onDeferInstall={() => void deferInstall()}
             />
           ) : (
             <DefaultRoutePlaceholder

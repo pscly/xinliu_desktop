@@ -1,0 +1,19 @@
+Task 30 - 自动更新（GitHub Releases stable）单测证据
+
+覆盖点（Vitest Node，禁止导入 Electron runtime / electron-updater 副作用对象）：
+- update-available：进入 state=update_available，并触发后台 download
+- download-progress：进入 state=downloading，并更新 progress.percent01/transferred/total/bytesPerSecond
+- update-downloaded：进入 state=downloaded，并将 progress.percent01=1
+- error：进入 state=error，错误可见；再次 check 可回到 state=checking（可重试）
+
+关键单测文件：
+- src/main/updater/updaterController.test.ts
+
+运行命令：
+- source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build
+
+PASS 关键行（摘要）：
+- Test Files  39 passed
+- Tests  125 passed
+- typecheck: PASS
+- build: PASS

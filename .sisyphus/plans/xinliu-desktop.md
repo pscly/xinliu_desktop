@@ -1204,7 +1204,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-35-no-degrade.txt
   ```
 
-- [ ] 30. 自动更新（GitHub Releases stable：检查/下载/延后安装/失败回退）
+- [x] 30. 自动更新（GitHub Releases stable：检查/下载/延后安装/失败回退）
 
   **What to do**:
   - 接入自动更新：启动后做一次轻量检查；设置页提供“手动检查更新”。

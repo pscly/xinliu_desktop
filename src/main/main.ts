@@ -42,6 +42,8 @@ import { createDiagnosticsController } from './diagnostics/diagnosticsController
 import { popupFolderContextMenu, popupMiddleItemContextMenu } from './menu/contextMenu';
 import { queryGlobalSearch, rebuildGlobalSearchIndex } from './search/globalSearch';
 import { createPathGate } from './pathGate/pathGate';
+import { createUpdaterController } from './updater/updaterController';
+import { createElectronUpdaterAdapter } from './updater/electronUpdaterAdapter';
 import {
   readCloseBehaviorStatus,
   writeCloseBehavior,
@@ -308,6 +310,21 @@ app.whenReady().then(async () => {
 
   const pathGate = createPathGate();
 
+  const releasesUrl = 'https://github.com/pscly/xinliu_desktop/releases';
+  const updater = createUpdaterController({
+    enabled: app.isPackaged,
+    currentVersion: app.getVersion(),
+    releasesUrl,
+    adapter: app.isPackaged ? createElectronUpdaterAdapter() : undefined,
+    onStatusChanged: (status) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        try {
+          win.webContents.send(IPC_EVENTS.updater.statusChanged, { status });
+        } catch {}
+      }
+    },
+  });
+
   const withMainDb: WithMainDb = <T>(run: (db: Database.Database) => T): T => {
     const dbFileAbsPath = resolveMainDbFileAbsPath(storageRootStatus.storageRootAbsPath);
     const { db } = openSqliteDatabase({
@@ -473,11 +490,34 @@ app.whenReady().then(async () => {
       query: (payload) => withMainDb((db) => queryGlobalSearch(db, payload)),
       rebuildIndex: () => withMainDb((db) => rebuildGlobalSearchIndex(db)),
     },
+    updater: {
+      getStatus: () => updater.getStatus(),
+      checkForUpdates: async () => {
+        await updater.checkForUpdates({ source: 'manual' });
+      },
+      installNow: () => updater.installNow(),
+      deferInstall: () => updater.deferInstall(),
+    },
   });
 
   ensureMainWindow();
 
-  const exitCleanupHooks: CleanupHook[] = [() => quickCaptureWindowManager.destroy()];
+  try {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(IPC_EVENTS.updater.statusChanged, { status: updater.getStatus() });
+    }
+  } catch {}
+
+  if (app.isPackaged) {
+    setTimeout(() => {
+      void updater.checkForUpdates({ source: 'startup' });
+    }, 1500);
+  }
+
+  const exitCleanupHooks: CleanupHook[] = [
+    () => quickCaptureWindowManager.destroy(),
+    () => updater.dispose(),
+  ];
 
   const onSyncNowMemos = async () => undefined;
   const onSyncNowFlow = async () => undefined;

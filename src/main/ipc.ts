@@ -37,6 +37,7 @@ import type {
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
+  UpdaterStatus,
 } from '../shared/ipc';
 
 import type { PathGate } from './pathGate/pathGate';
@@ -122,6 +123,12 @@ export interface RegisterIpcHandlersDeps {
   search: {
     query: (payload: SearchQueryPayload) => SearchQueryResult | Promise<SearchQueryResult>;
     rebuildIndex: () => SearchRebuildIndexResult | Promise<SearchRebuildIndexResult>;
+  };
+  updater: {
+    getStatus: () => UpdaterStatus | Promise<UpdaterStatus>;
+    checkForUpdates: () => void | Promise<void>;
+    installNow: () => void | Promise<void>;
+    deferInstall: () => void | Promise<void>;
   };
   now?: () => number;
 }
@@ -1108,6 +1115,59 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, deps: RegisterIpcHandl
       rateLimiter,
       validate: validateEmptyPayload,
       run: async () => deps.search.rebuildIndex(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.updater.getStatus,
+    makeHandler<UpdaterStatus>({
+      channel: IPC_CHANNELS.updater.getStatus,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => deps.updater.getStatus(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.updater.checkForUpdates,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.updater.checkForUpdates,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        await deps.updater.checkForUpdates();
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.updater.installNow,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.updater.installNow,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        await deps.updater.installNow();
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.updater.deferInstall,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.updater.deferInstall,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        await deps.updater.deferInstall();
+        return null;
+      },
     })
   );
 

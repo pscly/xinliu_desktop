@@ -229,6 +229,12 @@
 
 - [2026-02-27] Task 53（不得自动迁移回写）：复用 `memos.sync_status='LOCAL_ONLY'` 作为“禁止自动回写到 Memos”的持久化标记；在 `src/main/notes/noAutoBackwriteGuard.ts` 中当 Notes Router 最终 provider 为 `flow_notes` 时落盘该标记；并在 `src/main/memos/memosSyncJob.ts` 中对 `LOCAL_ONLY` 明确跳过（不得调用 CreateMemo/UpdateMemo），避免 FlowNotes 降级写入后 Memos 恢复产生隐式双写。
 
+- [2026-02-27] Task 30 自动更新（electron-updater，GitHub Releases stable）：
+  - 用“可依赖注入的 UpdaterController + AutoUpdaterAdapter”隔离 electron-updater 副作用，保证 Vitest(node) 单测可跑。
+  - IPC 合同新增 updater 通道必须同步更新 `src/shared/ipc.ts` 与 `src/main/ipc.test.ts` 的 expected 列表（静态可枚举）。
+  - main 启动后用 setTimeout 做轻量检查（不阻断编辑、不抢焦点）；renderer 设置页提供手动检查入口 `data-testid="check-updates"`。
+  - E2E（Linux + xvfb）用 Playwright `_electron.launch({ args: ['dist/main/main.js'] })` 启动，并将截图证据固定输出到 `.sisyphus/evidence/task-30-updater-e2e.png`。
+
 ## [2026-02-27] - Task 29 分享与导出（save dialog 授权 + 复制兜底）
 
 - UI 落点：`src/renderer/App.tsx` 右栏 `triptych-right` -> `rightStack` 内新增卡片 `data-testid="share-export"`。
@@ -250,3 +256,19 @@
 - 版本一致性（避免自动更新元数据错配）：在 workflow 中对 `package.json` 临时执行 `npm version --no-git-tag-version <tag去v>`，再执行 `npm run dist:win`，确保 installer 文件名与 `latest.yml` 内引用与 tag 对齐。
 - SHA-256 推荐在 Windows runner 生成：PowerShell `Get-FileHash -Algorithm SHA256`，输出文件名用 `<installer>.sha256`，内容格式写成 `<hash>  <filename>`（双空格），便于用户/脚本校验。
 - 发布 Release：使用 `softprops/action-gh-release` 直接用 `GITHUB_TOKEN` 创建 stable release（`prerelease: false`），并上传 `release/*.exe`、`release/latest.yml`、`release/*.sha256`、必要的 `release/*.blockmap`。
+
+## [2026-02-27] - Task 30 自动更新（GitHub Releases stable：检查/下载/延后安装/失败回退）
+
+- `electron-updater` 必须落到 `package-lock.json`：仅修改 import 不够，`npm run typecheck` 会报 `Cannot find module 'electron-updater'`；需要在 Node 20 环境执行一次 `npm install` 让 lock 与 node_modules 同步。
+- TypeScript 事件类型坑：`electron-updater` 的 `autoUpdater.on/removeListener` 事件名是受限字面量；适配层可用“显式事件名 union + listener as never”方式封装，避免 eventName=string 触发类型错误。
+- stable-only 双保险：adapter 层 `autoUpdater.allowPrerelease=false`；controller 层再用 `isSemverPrerelease()` 兜底忽略 `x.y.z-...` 的 prerelease，确保不下载 prerelease。
+- 启动轻量检查必须 gated：在 `app.on('ready')` 后仅当 `app.isPackaged===true` 才触发 `checkForUpdates({source:'startup'})`；开发态保持 `disabled` 文案，不把“仅安装包可用”当作 error callout。
+- 设置页更新区块要“可测”：关键按钮/状态/退路统一加 `data-testid`（例如 `check-updates/update-status/update-install-now/update-defer/update-open-releases`）。
+
+## [2026-02-27] - Task 30 E2E（Playwright + Electron，Linux xvfb）稳定断言模式
+
+- Electron E2E 下可能出现 `window.xinliu` 未注入（preload 加载失败/时序不稳定）导致更新区块状态长期停留在 `尚未检查`；因此测试断言应允许两种“可解释回退”：
+  - packaged 语义的禁用态：`update-status` 含 `安装包/禁用` 且 `update-disabled-hint` 含 `安装包`
+  - preload 未注入回退：`update-error` 含 `preload`
+- 断言实现建议用 `expect.poll()` 自己组合多个 locator 的 textContent/count，避免 `locator.textContent()` 在元素不存在时被动超时。
+- 截图证据要保证“失败也落盘”：把 `page.screenshot({ path })` 放到 `finally` 里 best-effort 执行，再关闭/kill Electron 进程。
