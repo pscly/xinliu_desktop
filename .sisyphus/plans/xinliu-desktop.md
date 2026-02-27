@@ -277,7 +277,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-01-guardrails.txt
   ```
 
-- [ ] 54. 路径权限门（open/save 对话框授权 + renderer 禁止任意绝对路径 IO）
+- [x] 54. 路径权限门（open/save 对话框授权 + renderer 禁止任意绝对路径 IO）
 
   **What to do**:
   - 在 main 进程实现“路径权限门”与系统对话框封装：
