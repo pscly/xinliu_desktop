@@ -1306,7 +1306,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-31-appid.txt
   ```
 
-- [ ] 32. GitHub Actions Release 工作流（tag -> build/test/package -> GitHub Release）
+- [x] 32. GitHub Actions Release 工作流（tag -> build/test/package -> GitHub Release）
 
   **What to do**:
   - 增加 release workflow：仅当 tag（例如 `v0.1.0`）触发；先跑 lint/test/typecheck/build，再在 Windows runner 打包 NSIS。
