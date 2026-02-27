@@ -1,0 +1,42 @@
+## Task 53 - “不得自动迁移回写”护栏（FlowNotes 降级写入后，Memos 恢复也不自动补写）证据
+
+### 场景
+
+- Memos 写入请求发生 TIMEOUT → Notes Router 降级到 FlowNotes（最终 provider=flow_notes）
+- 写入成功后落盘护栏：将对应本地 memo 标记为 `sync_status=LOCAL_ONLY`
+- 后续 Memos sync job 对 `LOCAL_ONLY` 必须跳过（不调用 CreateMemo/UpdateMemo），从而避免“恢复后自动补写/隐式双写”
+
+### 运行命令
+
+```bash
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm run typecheck
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm run build
+```
+
+### 关键断言点（来自单测）
+
+- `src/main/notes/noAutoBackwriteGuard.test.ts`：当 Notes Router 最终 `provider=flow_notes` 时，`persistNoAutoBackwriteGuard(...)` 必须把该 memo 落盘为 `sync_status=LOCAL_ONLY`。
+- `src/main/memos/memosSyncJob.ts`：当 `sync_status=LOCAL_ONLY` 时，`runMemosSyncOneMemoJob(...)` 必须返回 `{"kind":"skipped","reason":"local_only"}`，并且不调用 `createMemo/updateMemo`。
+
+### 关键输出（节选）
+
+```text
+  ✓ src/main/notes/noAutoBackwriteGuard.test.ts (1 test)
+  ✓ src/main/memos/memosSyncJob.test.ts (6 tests)
+
+  Test Files  38 passed (38)
+       Tests  116 passed (116)
+```
+
+```text
+> xinliu-desktop@0.0.0 typecheck
+> tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+```
+
+```text
+> xinliu-desktop@0.0.0 build
+> npm run build:electron && npm run build:renderer
+
+✓ built in
+```

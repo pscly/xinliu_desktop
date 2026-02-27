@@ -226,3 +226,5 @@
 - IPC 白名单测试要同步：新增 closeBehavior 通道后，`src/main/ipc.test.ts` 的 expected 列表必须追加 `...Object.values(IPC_CHANNELS.closeBehavior)`，否则会在“静态可枚举”断言处失败。
 
 - [2026-02-27] 计划状态同步：仅将 `.sisyphus/plans/xinliu-desktop.md` 的 Task 54 checkbox 从 `[ ]` 改为 `[x]`（不改 Task 55），用于 boulder/ground-truth 追踪；证据文件 `.sisyphus/evidence/task-54-path-gate.txt` 已存在且不重写；验证命令 `source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build` 已跑通。
+
+- [2026-02-27] Task 53（不得自动迁移回写）：复用 `memos.sync_status='LOCAL_ONLY'` 作为“禁止自动回写到 Memos”的持久化标记；在 `src/main/notes/noAutoBackwriteGuard.ts` 中当 Notes Router 最终 provider 为 `flow_notes` 时落盘该标记；并在 `src/main/memos/memosSyncJob.ts` 中对 `LOCAL_ONLY` 明确跳过（不得调用 CreateMemo/UpdateMemo），避免 FlowNotes 降级写入后 Memos 恢复产生隐式双写。
