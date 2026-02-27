@@ -1,0 +1,81 @@
+name: Package (Windows NSIS)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-win:
+    name: windows-latest / nsis
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js 20（启用 npm cache）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: 安装依赖（npm ci）
+        run: npm ci
+
+      - name: 预留：导入代码签名证书（可选，不提交证书/密钥）
+        if: ${{ secrets.WINDOWS_PFX_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'xinliu-codesign.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String('${{ secrets.WINDOWS_PFX_BASE64 }}'))
+          "CSC_LINK=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CSC_KEY_PASSWORD=${{ secrets.WINDOWS_PFX_PASSWORD }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: 打包（NSIS installer）
+        run: npm run dist:win
+
+      - name: 生成 SHA-256 校验文件（与 latest.yml 一起作为 artifact 上传）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseDir = Join-Path $PWD 'release'
+          if (-not (Test-Path $releaseDir)) {
+            throw "release/ 目录不存在：electron-builder 未按预期输出"
+          }
+
+          $latestYmlPath = Join-Path $releaseDir 'latest.yml'
+          if (-not (Test-Path $latestYmlPath)) {
+            throw "latest.yml 不存在：需要 electron-builder 生成 Windows 更新元数据"
+          }
+
+          $installer = Get-ChildItem -Path $releaseDir -Filter *.exe -File |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $installer) {
+            throw "未找到 NSIS installer（release/*.exe）"
+          }
+
+          $hash = Get-FileHash -Algorithm SHA256 -Path $installer.FullName
+          $shaPath = Join-Path $releaseDir ($installer.Name + '.sha256')
+          ($hash.Hash.ToLower() + '  ' + $installer.Name) | Out-File -FilePath $shaPath -Encoding ascii
+
+          Write-Host "生成校验文件：$shaPath"
+          Write-Host "release/ 产物列表："
+          Get-ChildItem -Path $releaseDir | Format-Table Name, Length
+
+      - name: 上传安装包与校验文件（artifacts）
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-nsis-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml
+            release/*.sha256
