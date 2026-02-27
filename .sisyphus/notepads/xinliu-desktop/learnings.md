@@ -243,3 +243,10 @@
 - Windows 更新元数据：NSIS 会生成 `release/latest.yml` + 对应的 `*.blockmap`（差分更新素材）；workflow 上传 artifacts 时应把 `installer.exe + installer.exe.blockmap + latest.yml` 一起带走。
 - SHA-256 校验文件推荐在 Windows runner 生成：PowerShell `Get-FileHash -Algorithm SHA256`，输出格式写成 `<hash>  <filename>`（双空格）便于用户/脚本校验。
 - Node 20 约束下的版本坑：`electron-builder@26` 会引入 `@electron/rebuild@4`，其 `engines.node>=22.12` 会在安装时报 EBADENGINE；固定到 `electron-builder@25.1.8` 可保持与 Node 20 兼容。
+
+## [2026-02-27] - Task 32 GitHub Actions Release（tag -> build/test/package -> GitHub Release）落地要点
+
+- 触发条件必须只对 tag 生效：`on.push.tags: ['v0.*']`，不要同时对 branch push 触发；发布权限需要 `permissions.contents: write`。
+- 版本一致性（避免自动更新元数据错配）：在 workflow 中对 `package.json` 临时执行 `npm version --no-git-tag-version <tag去v>`，再执行 `npm run dist:win`，确保 installer 文件名与 `latest.yml` 内引用与 tag 对齐。
+- SHA-256 推荐在 Windows runner 生成：PowerShell `Get-FileHash -Algorithm SHA256`，输出文件名用 `<installer>.sha256`，内容格式写成 `<hash>  <filename>`（双空格），便于用户/脚本校验。
+- 发布 Release：使用 `softprops/action-gh-release` 直接用 `GITHUB_TOKEN` 创建 stable release（`prerelease: false`），并上传 `release/*.exe`、`release/latest.yml`、`release/*.sha256`、必要的 `release/*.blockmap`。
