@@ -193,3 +193,5 @@
 - 测试技巧：
   - FTS 路径：往 memos 连续插入 25+ 条含关键词的数据，断言第一页 20 条 + hasMore=true，再断言第二页与第一页不重叠；再断言 snippet 含 `<mark>`（证明走了 FTS snippet）。
   - 降级路径：只 apply 到 v6（不建 FTS 表），或者 drop FTS 表，然后断言 mode='fallback' 且 ftsAvailable=false。
+
+- [2026-02-27] 计划状态同步：仅将 `.sisyphus/plans/xinliu-desktop.md` 的 Task 54 checkbox 从 `[ ]` 改为 `[x]`（不改 Task 55），用于 boulder/ground-truth 追踪；证据文件 `.sisyphus/evidence/task-54-path-gate.txt` 已存在且不重写；验证命令 `source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build` 已跑通。
