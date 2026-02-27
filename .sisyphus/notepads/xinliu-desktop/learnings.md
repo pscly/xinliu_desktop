@@ -235,3 +235,11 @@
 - 导出链路：renderer 只能先 `window.xinliu.fileAccess.showSaveDialog()` 拿到 `{grantId,filePath}` 后，再调用 `window.xinliu.fileAccess.writeTextFile({grantId,filePath,content})`；对话框取消（kind=cancelled）必须不写文件。
 - 测试策略：Vitest + RTL 通过 stub `window.xinliu.fileAccess.*`，用 `mock.invocationCallOrder` 断言调用顺序，并覆盖“取消不写/写入失败显示兜底”。
 - 失败兜底：复用 `safeCopyTextToClipboard()`，并提供 `data-testid="export-copy"` 的“复制文本”按钮。
+
+## [2026-02-27] - Task 31 NSIS 打包（electron-builder）+ SHA-256
+
+- electron-builder Windows-only 最小稳定配置：`build.win.target=["nsis"]` + `build.directories.output="release"` + 固定 `artifactName`，CI 才能稳定定位 `release/*.exe` 与 `release/latest.yml`。
+- better-sqlite3 属于 native addon：必须配置 `build.asarUnpack=["**/*.node"]`，否则打包后运行期可能因 `.node` 被打进 asar 而加载失败。
+- Windows 更新元数据：NSIS 会生成 `release/latest.yml` + 对应的 `*.blockmap`（差分更新素材）；workflow 上传 artifacts 时应把 `installer.exe + installer.exe.blockmap + latest.yml` 一起带走。
+- SHA-256 校验文件推荐在 Windows runner 生成：PowerShell `Get-FileHash -Algorithm SHA256`，输出格式写成 `<hash>  <filename>`（双空格）便于用户/脚本校验。
+- Node 20 约束下的版本坑：`electron-builder@26` 会引入 `@electron/rebuild@4`，其 `engines.node>=22.12` 会在安装时报 EBADENGINE；固定到 `electron-builder@25.1.8` 可保持与 Node 20 兼容。
