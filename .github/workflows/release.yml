@@ -1,0 +1,115 @@
+name: Release (Windows NSIS)
+
+on:
+  push:
+    tags:
+      - 'v0.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-win:
+    name: windows-latest / tag -> build -> release
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js 20（启用 npm cache）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: 将 package.json version 临时对齐到 tag（避免 latest.yml/installer 命名不一致）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag
+          if ($ver.StartsWith('v')) {
+            $ver = $ver.Substring(1)
+          }
+
+          if (-not ($ver -match '^0\.[0-9]+\.[0-9]+$')) {
+            throw "tag 版本格式不符合预期：$tag（期望 v0.x.y，且不含 prerelease/build 元信息）"
+          }
+
+          Write-Host "tag=$tag version=$ver"
+          npm version --no-git-tag-version $ver
+
+      - name: 安装依赖（npm ci）
+        run: npm ci
+
+      - name: 代码风格检查（lint）
+        run: npm run lint
+
+      - name: 单元测试（test）
+        run: npm run test
+
+      - name: 类型检查（typecheck）
+        run: npm run typecheck
+
+      - name: 构建（build）
+        run: npm run build
+
+      - name: 预留：导入代码签名证书（可选，不提交证书/密钥）
+        if: ${{ secrets.WINDOWS_PFX_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'xinliu-codesign.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String('${{ secrets.WINDOWS_PFX_BASE64 }}'))
+          "CSC_LINK=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CSC_KEY_PASSWORD=${{ secrets.WINDOWS_PFX_PASSWORD }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: 打包（NSIS installer）
+        run: npm run dist:win
+
+      - name: 生成 SHA-256 校验文件（release/*.sha256）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseDir = Join-Path $PWD 'release'
+          if (-not (Test-Path $releaseDir)) {
+            throw "release/ 目录不存在：electron-builder 未按预期输出"
+          }
+
+          $latestYmlPath = Join-Path $releaseDir 'latest.yml'
+          if (-not (Test-Path $latestYmlPath)) {
+            throw "latest.yml 不存在：需要 electron-builder 生成 Windows 更新元数据"
+          }
+
+          $installers = Get-ChildItem -Path $releaseDir -Filter *.exe -File |
+            Sort-Object Name
+          if (-not $installers) {
+            throw "未找到 NSIS installer（release/*.exe）"
+          }
+
+          foreach ($installer in $installers) {
+            $hash = Get-FileHash -Algorithm SHA256 -Path $installer.FullName
+            $shaPath = Join-Path $releaseDir ($installer.Name + '.sha256')
+            ($hash.Hash.ToLower() + '  ' + $installer.Name) | Out-File -FilePath $shaPath -Encoding ascii
+            Write-Host "生成校验文件：$shaPath"
+          }
+
+          Write-Host "release/ 产物列表："
+          Get-ChildItem -Path $releaseDir | Format-Table Name, Length
+
+      - name: 发布 GitHub Release（stable）并上传附件
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/*.exe
+            release/*.sha256
+            release/latest.yml
+            release/*.blockmap
