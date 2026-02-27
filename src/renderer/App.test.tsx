@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -21,6 +21,121 @@ import { App } from './App';
 afterEach(() => {
   cleanup();
 });
+
+function buildXinliuStub(overrides: {
+  showSaveDialog?: NonNullable<NonNullable<Window['xinliu']>['fileAccess']>['showSaveDialog'];
+  writeTextFile?: NonNullable<NonNullable<Window['xinliu']>['fileAccess']>['writeTextFile'];
+}): NonNullable<Window['xinliu']> {
+  return {
+    versions: { electron: '0', chrome: '0', node: '0' },
+    window: {
+      minimize: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      toggleMaximize: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      close: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      isMaximized: async () => ({ ok: true, value: false }) satisfies IpcResult<boolean>,
+    },
+    quickCapture: {
+      open: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      hide: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      submit: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      cancel: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+    },
+    shortcuts: {
+      getStatus: async () =>
+        ({ ok: true, value: { entries: [] } }) satisfies IpcResult<ShortcutsStatus>,
+      setConfig: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      resetAll: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      resetOne: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      onFocusSearch: () => () => {},
+    },
+    fileAccess: {
+      showOpenDialog: async () =>
+        ({
+          ok: true,
+          value: { kind: 'cancelled' },
+        }) satisfies IpcResult<FileAccessShowOpenDialogResult>,
+      showSaveDialog:
+        overrides.showSaveDialog ??
+        (async () =>
+          ({
+            ok: true,
+            value: { kind: 'cancelled' },
+          }) satisfies IpcResult<FileAccessShowSaveDialogResult>),
+      readTextFile: async () =>
+        ({ ok: true, value: { content: '' } }) satisfies IpcResult<FileAccessReadTextFileResult>,
+      writeTextFile:
+        overrides.writeTextFile ??
+        (async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>),
+    },
+    storageRoot: {
+      getStatus: async () =>
+        ({
+          ok: true,
+          value: { storageRootAbsPath: '/tmp/xinliu', isDefault: true },
+        }) satisfies IpcResult<{
+          storageRootAbsPath: string;
+          isDefault: boolean;
+        }>,
+      chooseAndMigrate: async () =>
+        ({ ok: true, value: { kind: 'cancelled' } }) satisfies IpcResult<{ kind: 'cancelled' }>,
+      restartNow: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+    },
+    closeBehavior: {
+      getStatus: async () =>
+        ({
+          ok: true,
+          value: { behavior: 'hide', closeToTrayHintShown: false } satisfies CloseBehaviorStatus,
+        }) satisfies IpcResult<CloseBehaviorStatus>,
+      setBehavior: async (_payload: CloseBehaviorSetPayload) =>
+        ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      resetCloseToTrayHint: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+    },
+    diagnostics: {
+      getStatus: async () =>
+        ({
+          ok: true,
+          value: {
+            flowBaseUrl: 'https://xl.pscly.cc',
+            memosBaseUrl: null,
+            notesProvider: null,
+            notesProviderKind: null,
+            lastDegradeReason: null,
+            lastRequestIds: { memos_request_id: null, flow_request_id: null },
+          } satisfies DiagnosticsStatus,
+        }) satisfies IpcResult<DiagnosticsStatus>,
+    },
+    contextMenu: {
+      popupMiddleItem: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      popupFolder: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      onCommand: () => () => {},
+    },
+    search: {
+      query: async () =>
+        ({
+          ok: true,
+          value: {
+            mode: 'fallback',
+            ftsAvailable: false,
+            degradedReason: 'test',
+            page: 0,
+            pageSize: 20,
+            hasMore: false,
+            items: [],
+          } satisfies SearchQueryResult,
+        }) satisfies IpcResult<SearchQueryResult>,
+      rebuildIndex: async () =>
+        ({
+          ok: true,
+          value: {
+            ok: true,
+            ftsAvailable: false,
+            rebuilt: false,
+            message: 'test',
+          } satisfies SearchRebuildIndexResult,
+        }) satisfies IpcResult<SearchRebuildIndexResult>,
+    },
+  };
+}
 
 describe('<App />', () => {
   it('可以在不依赖 Electron 的情况下渲染', () => {
@@ -442,6 +557,109 @@ describe('<App />', () => {
     expect(await screen.findByTestId('settings-restart-required')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '立即重启' }));
     expect(restartNow).toHaveBeenCalledTimes(1);
+
+    delete window.xinliu;
+  });
+
+  it('分享/导出：必须先 showSaveDialog 再 writeTextFile（纯文本）', async () => {
+    const showSaveDialog = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: {
+            kind: 'granted',
+            grantId: 'grant_1',
+            filePath: '/tmp/xinliu-export.txt',
+            fileName: 'xinliu-export.txt',
+          },
+        }) satisfies IpcResult<FileAccessShowSaveDialogResult>
+    );
+
+    const writeTextFile = vi.fn(
+      async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>
+    );
+
+    window.xinliu = buildXinliuStub({ showSaveDialog, writeTextFile });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '导出纯文本' }));
+
+    await waitFor(() => {
+      expect(showSaveDialog).toHaveBeenCalledTimes(1);
+      expect(writeTextFile).toHaveBeenCalledTimes(1);
+    });
+
+    expect(showSaveDialog.mock.invocationCallOrder[0]).toBeLessThan(
+      writeTextFile.mock.invocationCallOrder[0]
+    );
+
+    expect(writeTextFile).toHaveBeenCalledWith({
+      grantId: 'grant_1',
+      filePath: '/tmp/xinliu-export.txt',
+      content: expect.stringContaining('心流'),
+    });
+
+    delete window.xinliu;
+  });
+
+  it('分享/导出：取消保存对话框后不得写文件', async () => {
+    const showSaveDialog = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: { kind: 'cancelled' },
+        }) satisfies IpcResult<FileAccessShowSaveDialogResult>
+    );
+    const writeTextFile = vi.fn(
+      async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>
+    );
+
+    window.xinliu = buildXinliuStub({ showSaveDialog, writeTextFile });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '导出纯文本' }));
+
+    await waitFor(() => {
+      expect(showSaveDialog).toHaveBeenCalledTimes(1);
+    });
+
+    expect(writeTextFile).toHaveBeenCalledTimes(0);
+
+    delete window.xinliu;
+  });
+
+  it('分享/导出：写入失败时必须提供复制兜底按钮', async () => {
+    const showSaveDialog = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: {
+            kind: 'granted',
+            grantId: 'grant_1',
+            filePath: '/tmp/xinliu-export.txt',
+            fileName: 'xinliu-export.txt',
+          },
+        }) satisfies IpcResult<FileAccessShowSaveDialogResult>
+    );
+
+    const writeTextFile = vi.fn(
+      async () =>
+        ({
+          ok: false,
+          error: { code: 'PERMISSION_DENIED', message: '写入被拒绝' },
+        }) satisfies IpcResult<IpcVoid>
+    );
+
+    window.xinliu = buildXinliuStub({ showSaveDialog, writeTextFile });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '导出纯文本' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/PERMISSION_DENIED/)).toBeTruthy();
+    });
+
+    expect(screen.getByTestId('export-copy')).toBeTruthy();
 
     delete window.xinliu;
   });

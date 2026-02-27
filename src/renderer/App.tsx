@@ -38,6 +38,7 @@ type XinliuCloseBehaviorApi = NonNullable<Window['xinliu']>['closeBehavior'];
 type XinliuDiagnosticsApi = NonNullable<Window['xinliu']>['diagnostics'];
 type XinliuContextMenuApi = NonNullable<Window['xinliu']>['contextMenu'];
 type XinliuSearchApi = NonNullable<Window['xinliu']>['search'];
+type XinliuFileAccessApi = NonNullable<Window['xinliu']>['fileAccess'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
   return window.xinliu?.window;
@@ -65,6 +66,10 @@ function getXinliuContextMenuApi(): XinliuContextMenuApi | undefined {
 
 function getXinliuSearchApi(): XinliuSearchApi | undefined {
   return window.xinliu?.search;
+}
+
+function getXinliuFileAccessApi(): XinliuFileAccessApi | undefined {
+  return window.xinliu?.fileAccess;
 }
 
 async function safePopupMiddleItemMenu(itemId: string) {
@@ -957,6 +962,10 @@ function MainWindowApp() {
   const [route, setRoute] = useState<RouteKey>('notes');
   const routeMeta = useMemo(() => ROUTES.find((r) => r.key === route)!, [route]);
 
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportLastFormat, setExportLastFormat] = useState<'text' | 'markdown'>('text');
+
   const [lastContextMenuSelection, setLastContextMenuSelection] =
     useState<ContextMenuDidSelectPayload | null>(null);
 
@@ -1024,6 +1033,87 @@ function MainWindowApp() {
     }
     return [];
   }, [route]);
+
+  const exportPlainText = useMemo(() => {
+    const lines: string[] = [];
+    lines.push('心流 · 导出（纯文本，占位）');
+    lines.push(`路由：${routeMeta.label}（${routeMeta.key}）`);
+    lines.push('');
+    lines.push('条目（占位）：');
+    for (const item of demoMiddleItems) {
+      lines.push(`- ${item.title}`);
+    }
+    return `${lines.join('\n')}\n`;
+  }, [demoMiddleItems, routeMeta.key, routeMeta.label]);
+
+  const exportMarkdown = useMemo(() => {
+    const lines: string[] = [];
+    lines.push('# 心流导出');
+    lines.push('');
+    lines.push(`- 路由：${routeMeta.label}（${routeMeta.key}）`);
+    lines.push('');
+    lines.push('## 条目（占位）');
+    for (const item of demoMiddleItems) {
+      lines.push(`- ${item.title}`);
+    }
+    return `${lines.join('\n')}\n`;
+  }, [demoMiddleItems, routeMeta.key, routeMeta.label]);
+
+  const exportContentForCopy = exportLastFormat === 'markdown' ? exportMarkdown : exportPlainText;
+
+  const runExport = useCallback(
+    async (format: 'text' | 'markdown') => {
+      setExportLastFormat(format);
+
+      const api = getXinliuFileAccessApi();
+      const showSaveDialog = api?.showSaveDialog;
+      const writeTextFile = api?.writeTextFile;
+
+      if (typeof showSaveDialog !== 'function' || typeof writeTextFile !== 'function') {
+        setExportError('导出能力不可用（preload 未注入）');
+        return;
+      }
+
+      const content = format === 'markdown' ? exportMarkdown : exportPlainText;
+      const defaultPath = format === 'markdown' ? 'xinliu-export.md' : 'xinliu-export.txt';
+      const filters =
+        format === 'markdown'
+          ? [{ name: 'Markdown', extensions: ['md', 'markdown'] }]
+          : [{ name: 'Text', extensions: ['txt'] }];
+
+      setExportBusy(true);
+      setExportError(null);
+      try {
+        const picked = await showSaveDialog({
+          title: format === 'markdown' ? '导出 Markdown' : '导出纯文本',
+          defaultPath,
+          filters,
+        });
+        if (!picked.ok) {
+          setExportError(`${picked.error.message}（${picked.error.code}）`);
+          return;
+        }
+        if (picked.value.kind === 'cancelled') {
+          return;
+        }
+
+        const writeRes = await writeTextFile({
+          grantId: picked.value.grantId,
+          filePath: picked.value.filePath,
+          content,
+        });
+        if (!writeRes.ok) {
+          setExportError(`${writeRes.error.message}（${writeRes.error.code}）`);
+          return;
+        }
+      } catch (e) {
+        setExportError(`导出异常：${String(e)}`);
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [exportMarkdown, exportPlainText]
+  );
 
   const refreshShortcuts = async () => {
     const api = getXinliuShortcutsApi();
@@ -1379,6 +1469,44 @@ function MainWindowApp() {
 
           <div className="rightStack">
             <GlobalSearchBox />
+
+            <div className="rightCard" data-testid="share-export">
+              <div className="rightCardTitle">分享 / 导出</div>
+              <div className="rightCardBody">
+                <div className="fine">
+                  导出当前页面的可读文本（当前为占位内容；后续接入编辑器/选中条目）。
+                </div>
+
+                <div className="btnRow" style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    className="btnSmall"
+                    onClick={() => void runExport('text')}
+                    disabled={exportBusy}
+                  >
+                    {exportBusy ? '导出中…' : '导出纯文本'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btnSmall"
+                    onClick={() => void runExport('markdown')}
+                    disabled={exportBusy}
+                  >
+                    {exportBusy ? '导出中…' : '导出 Markdown'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btnSmall"
+                    data-testid="export-copy"
+                    onClick={() => void safeCopyTextToClipboard(exportContentForCopy)}
+                  >
+                    复制文本
+                  </button>
+                </div>
+
+                {exportError ? <div className="callout calloutWarn">{exportError}</div> : null}
+              </div>
+            </div>
 
             <div className="rightCard">
               <div className="rightCardTitle">调试信息</div>

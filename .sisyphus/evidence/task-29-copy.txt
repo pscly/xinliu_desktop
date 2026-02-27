@@ -1,0 +1,7 @@
+Task 29 - 复制兜底按钮证据
+
+命令：
+  rg -n "data-testid=\"export-copy\"" src/renderer -S
+
+命中：
+  src/renderer/App.tsx:1500:                    data-testid="export-copy"

@@ -1,0 +1,20 @@
+Task 29 - 分享与导出（系统保存对话框授权 + 失败可复制兜底）证据
+
+验证命令（全部 PASS）：
+  source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build
+
+关键测试用例（src/renderer/App.test.tsx）：
+
+1) <App /> > 分享/导出：必须先 showSaveDialog 再 writeTextFile（纯文本）
+   - 断言 showSaveDialog 被调用 1 次
+   - 断言 writeTextFile 被调用 1 次
+   - 断言调用顺序：showSaveDialog 在 writeTextFile 之前（mock.invocationCallOrder）
+   - 断言 writeTextFile 入参必须使用对话框返回的 grantId + filePath（而不是任意路径）
+
+2) <App /> > 分享/导出：取消保存对话框后不得写文件
+   - showSaveDialog 返回 kind=cancelled
+   - 断言 writeTextFile 调用次数为 0
+
+3) <App /> > 分享/导出：写入失败时必须提供复制兜底按钮
+   - writeTextFile 返回 ok=false（示例：PERMISSION_DENIED）
+   - 断言右栏仍存在复制兜底按钮 data-testid="export-copy"

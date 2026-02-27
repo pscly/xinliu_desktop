@@ -1501,7 +1501,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-28-no-storm.txt
   ```
 
-- [ ] 29. 分享与导出（系统保存对话框授权 + 失败可复制兜底）
+- [x] 29. 分享与导出（系统保存对话框授权 + 失败可复制兜底）
 
   **What to do**:
   - 右栏提供“分享/导出”面板：至少支持导出为纯文本/Markdown。
