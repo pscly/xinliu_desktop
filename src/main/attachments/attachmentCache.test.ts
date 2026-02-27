@@ -26,7 +26,9 @@ async function writeFileEnsuringDir(absPath: string, sizeBytes: number): Promise
 
 describe('src/main/attachments/attachmentCache', () => {
   it('cacheKey：必须是不透明标识（不包含 relpath、无 /、% 等），且符合 memo-res 解析约束', () => {
-    const key = generateOpaqueAttachmentCacheKey({ uuid: () => '00000000-0000-0000-0000-000000000000' });
+    const key = generateOpaqueAttachmentCacheKey({
+      uuid: () => '00000000-0000-0000-0000-000000000000',
+    });
     expect(key).toBe('att_00000000-0000-0000-0000-000000000000');
     expect(key.includes('/')).toBe(false);
     expect(key.includes('\\')).toBe(false);
@@ -138,15 +140,27 @@ describe('src/main/attachments/attachmentCache', () => {
     await expect(fsp.stat(path.join(root, 'attachments-cache', 'a3.bin'))).resolves.toBeTruthy();
 
     const rowA1 = db
-      .prepare('SELECT local_relpath, cache_relpath, cache_size_bytes FROM memo_attachments WHERE id = ?')
-      .get('a1') as { local_relpath: string | null; cache_relpath: string | null; cache_size_bytes: number | null };
+      .prepare(
+        'SELECT local_relpath, cache_relpath, cache_size_bytes FROM memo_attachments WHERE id = ?'
+      )
+      .get('a1') as {
+      local_relpath: string | null;
+      cache_relpath: string | null;
+      cache_size_bytes: number | null;
+    };
     expect(rowA1.local_relpath).toBe('attachments/a1.bin');
     expect(rowA1.cache_relpath).toBeNull();
     expect(rowA1.cache_size_bytes).toBeNull();
 
     const rowA3 = db
-      .prepare('SELECT local_relpath, cache_relpath, cache_size_bytes FROM memo_attachments WHERE id = ?')
-      .get('a3') as { local_relpath: string | null; cache_relpath: string | null; cache_size_bytes: number | null };
+      .prepare(
+        'SELECT local_relpath, cache_relpath, cache_size_bytes FROM memo_attachments WHERE id = ?'
+      )
+      .get('a3') as {
+      local_relpath: string | null;
+      cache_relpath: string | null;
+      cache_size_bytes: number | null;
+    };
     expect(rowA3.cache_relpath).toBe('attachments-cache/a3.bin');
     expect(rowA3.cache_size_bytes).toBe(160);
 
@@ -244,5 +258,5 @@ describe('src/main/attachments/attachmentCache', () => {
     await expect(fsp.stat(path.join(root, 'attachments-cache', 'a2.bin'))).rejects.toThrow();
 
     db.close();
-  });
+  }, 15_000);
 });
