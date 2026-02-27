@@ -1256,7 +1256,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-30-updater-e2e.png
   ```
 
-- [ ] 31. NSIS 安装包打包（electron-builder）+ Release 校验文件（SHA-256）
+- [x] 31. NSIS 安装包打包（electron-builder）+ Release 校验文件（SHA-256）
 
   **What to do**:
   - 接入 electron-builder，目标 NSIS（只做 Windows）。
