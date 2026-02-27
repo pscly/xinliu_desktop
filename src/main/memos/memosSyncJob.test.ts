@@ -115,7 +115,10 @@ function insertAttachment(
   });
 }
 
-function readMemo(db: Database.Database, localUuid: string): {
+function readMemo(
+  db: Database.Database,
+  localUuid: string
+): {
   local_uuid: string;
   server_memo_id: string | null;
   server_memo_name: string | null;
@@ -267,6 +270,69 @@ describe('src/main/memos/memosSyncJob', () => {
     }
   });
 
+  it('sync_status=LOCAL_ONLY 时不得自动回写到 Memos（跳过 create/update）', async () => {
+    const dir = makeTempDir();
+    const dbFileAbsPath = path.join(dir, 'xinliu.sqlite3');
+    const { db } = openSqliteDatabase({ dbFileAbsPath });
+
+    try {
+      applyMigrations(db);
+      const nowMs = 1700000000000;
+
+      insertMemo(db, {
+        localUuid: 'memo_local_only_1',
+        serverMemoId: null,
+        serverMemoName: null,
+        content: 'local_only_content',
+        visibility: 'PRIVATE',
+        syncStatus: MEMOS_SYNC_STATUS.localOnly,
+        createdAtMs: nowMs,
+        updatedAtMs: nowMs,
+      });
+
+      const createMemo = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        requestId: 'cli',
+        responseRequestIdHeader: 'srv',
+        value: { name: 'memos/1', content: 'server', visibility: 'PRIVATE' },
+      }));
+
+      const memosClient = {
+        createMemo,
+        updateMemo: vi.fn(async () => {
+          throw new Error('unexpected');
+        }),
+        setMemoAttachments: vi.fn(async () => {
+          throw new Error('unexpected');
+        }),
+        createAttachment: vi.fn(async () => {
+          throw new Error('unexpected');
+        }),
+        getMemo: vi.fn(),
+        listMemos: vi.fn(),
+        deleteMemo: vi.fn(),
+        getAttachment: vi.fn(),
+        updateAttachment: vi.fn(),
+        deleteAttachment: vi.fn(),
+        listMemoAttachments: vi.fn(),
+      } as unknown as MemosClient;
+
+      const out = await runMemosSyncOneMemoJob({
+        db,
+        memosClient,
+        storageRootAbsPath: dir,
+        memoLocalUuid: 'memo_local_only_1',
+        nowMs: () => nowMs + 1,
+      });
+
+      expect(out).toEqual({ kind: 'skipped', reason: 'local_only' });
+      expect(createMemo).toHaveBeenCalledTimes(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it('附件上传顺序必须是 CreateAttachment* -> SetMemoAttachments', async () => {
     const dir = makeTempDir();
     const dbFileAbsPath = path.join(dir, 'xinliu.sqlite3');
@@ -325,18 +391,23 @@ describe('src/main/memos/memosSyncJob', () => {
             value: { name: `attachments/${String(args.attachmentId)}` },
           };
         }),
-        setMemoAttachments: vi.fn(async (args: { memoName: string; attachments: Array<{ name?: string }> }) => {
-          seq.push('SetMemoAttachments');
-          expect(args.memoName).toBe('memos/1');
-          expect(args.attachments.map((a) => a.name)).toEqual(['attachments/att_a', 'attachments/att_b']);
-          return {
-            ok: true,
-            status: 200,
-            requestId: 'cli',
-            responseRequestIdHeader: 'srv',
-            value: null,
-          };
-        }),
+        setMemoAttachments: vi.fn(
+          async (args: { memoName: string; attachments: Array<{ name?: string }> }) => {
+            seq.push('SetMemoAttachments');
+            expect(args.memoName).toBe('memos/1');
+            expect(args.attachments.map((a) => a.name)).toEqual([
+              'attachments/att_a',
+              'attachments/att_b',
+            ]);
+            return {
+              ok: true,
+              status: 200,
+              requestId: 'cli',
+              responseRequestIdHeader: 'srv',
+              value: null,
+            };
+          }
+        ),
         getMemo: vi.fn(),
         listMemos: vi.fn(),
         deleteMemo: vi.fn(),

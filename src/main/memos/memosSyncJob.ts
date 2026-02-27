@@ -116,7 +116,10 @@ function readLocalMemo(db: Database.Database, localUuid: string): LocalMemoRow |
   return row ?? null;
 }
 
-function listLocalMemoAttachments(db: Database.Database, memoLocalUuid: string): LocalMemoAttachmentRow[] {
+function listLocalMemoAttachments(
+  db: Database.Database,
+  memoLocalUuid: string
+): LocalMemoAttachmentRow[] {
   return db
     .prepare(
       `
@@ -165,7 +168,12 @@ function markMemoSyncStatus(
 
 function writeMemoServerIds(
   db: Database.Database,
-  args: { localUuid: string; serverMemoName: string | null; serverMemoId: string | null; nowMs: number }
+  args: {
+    localUuid: string;
+    serverMemoName: string | null;
+    serverMemoId: string | null;
+    nowMs: number;
+  }
 ): void {
   db.prepare(
     `
@@ -223,7 +231,8 @@ export function mergePulledServerMemoIntoLocalMemo(args: MergePulledServerMemoIn
     const serverName = typeof args.serverMemo.name === 'string' ? args.serverMemo.name : null;
     const serverId = serverName ? parseMemoIdFromName(serverName) : null;
     const protect =
-      local.sync_status === MEMOS_SYNC_STATUS.dirty || local.sync_status === MEMOS_SYNC_STATUS.syncing;
+      local.sync_status === MEMOS_SYNC_STATUS.dirty ||
+      local.sync_status === MEMOS_SYNC_STATUS.syncing;
 
     if (protect) {
       writeMemoServerIds(args.db, {
@@ -238,10 +247,13 @@ export function mergePulledServerMemoIntoLocalMemo(args: MergePulledServerMemoIn
     const nextContent =
       typeof args.serverMemo.content === 'string' ? args.serverMemo.content : local.content;
     const nextVisibility =
-      typeof args.serverMemo.visibility === 'string' ? args.serverMemo.visibility : local.visibility;
+      typeof args.serverMemo.visibility === 'string'
+        ? args.serverMemo.visibility
+        : local.visibility;
 
-    args.db.prepare(
-      `
+    args.db
+      .prepare(
+        `
         UPDATE memos
         SET
           server_memo_name = COALESCE(@server_memo_name, server_memo_name),
@@ -251,14 +263,15 @@ export function mergePulledServerMemoIntoLocalMemo(args: MergePulledServerMemoIn
           updated_at_ms = @updated_at_ms
         WHERE local_uuid = @local_uuid
       `
-    ).run({
-      local_uuid: localUuid,
-      server_memo_name: serverName,
-      server_memo_id: serverId,
-      content: nextContent,
-      visibility: nextVisibility,
-      updated_at_ms: nowMs,
-    });
+      )
+      .run({
+        local_uuid: localUuid,
+        server_memo_name: serverName,
+        server_memo_id: serverId,
+        content: nextContent,
+        visibility: nextVisibility,
+        updated_at_ms: nowMs,
+      });
   });
 }
 
@@ -324,7 +337,7 @@ export interface RunMemosSyncOneMemoJobOptions {
 
 export type RunMemosSyncOneMemoJobOutcome =
   | { kind: 'synced'; localUuid: string; serverMemoName: string | null }
-  | { kind: 'skipped'; reason: 'not_found' | 'already_synced' }
+  | { kind: 'skipped'; reason: 'not_found' | 'already_synced' | 'local_only' }
   | { kind: 'failed'; localUuid: string; message: string };
 
 async function defaultLoadAttachmentContentBase64(args: { absPath: string }): Promise<string> {
@@ -392,7 +405,11 @@ function buildMemoPayloadFromLocal(row: LocalMemoRow): Memo {
 }
 
 function shouldSync(row: LocalMemoRow): boolean {
-  return row.sync_status !== MEMOS_SYNC_STATUS.synced;
+  return (
+    row.sync_status === MEMOS_SYNC_STATUS.dirty ||
+    row.sync_status === MEMOS_SYNC_STATUS.syncing ||
+    row.sync_status === MEMOS_SYNC_STATUS.failed
+  );
 }
 
 export async function runMemosSyncOneMemoJob(
@@ -404,6 +421,9 @@ export async function runMemosSyncOneMemoJob(
   const local = readLocalMemo(options.db, localUuid);
   if (!local) {
     return { kind: 'skipped', reason: 'not_found' };
+  }
+  if (local.sync_status === MEMOS_SYNC_STATUS.localOnly) {
+    return { kind: 'skipped', reason: 'local_only' };
   }
   if (!shouldSync(local)) {
     return { kind: 'skipped', reason: 'already_synced' };
@@ -453,7 +473,8 @@ export async function runMemosSyncOneMemoJob(
       });
     });
 
-    const memoName = serverMemoName ?? memoNameFromLocalRow(readLocalMemo(options.db, localUuid) ?? local);
+    const memoName =
+      serverMemoName ?? memoNameFromLocalRow(readLocalMemo(options.db, localUuid) ?? local);
 
     const loadAttachmentContentBase64 =
       options.loadAttachmentContentBase64 ?? defaultLoadAttachmentContentBase64;
