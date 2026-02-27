@@ -316,7 +316,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-54-path-gate.txt
   ```
 
-- [ ] 55. 关闭行为设置（默认关闭到托盘；可切换为真正退出）
+- [x] 55. 关闭行为设置（默认关闭到托盘；可切换为真正退出）
 
   **What to do**:
   - 设置页提供关闭行为配置：
