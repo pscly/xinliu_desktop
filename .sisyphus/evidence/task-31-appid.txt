@@ -1,0 +1,9 @@
+Task 31 - appId 稳定性证据（cc.pscly.xinliu.desktop）
+
+rg -n "cc\.pscly\.xinliu\.desktop" -S .
+./package.json:22:    "appId": "cc.pscly.xinliu.desktop",
+./src/shared/appMeta.ts:3:export const APP_ID = 'cc.pscly.xinliu.desktop';
+./src/main/auth/tokenStore.test.ts:16:      service: 'cc.pscly.xinliu.desktop',
+./src/main/auth/tokenStore.test.ts:27:      'cc.pscly.xinliu.desktop',
+./src/main/auth/tokenStore.test.ts:32:      'cc.pscly.xinliu.desktop',
+./src/main/auth/tokenStore.test.ts:39:      service: 'cc.pscly.xinliu.desktop',

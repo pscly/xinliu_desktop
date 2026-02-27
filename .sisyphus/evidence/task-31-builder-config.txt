@@ -1,0 +1,63 @@
+Task 31 - electron-builder(NSIS) 配置证据
+
+1) rg -n "electron-builder" package.json
+19:     "dist:win": "npm run build && electron-builder --win --x64 --publish never"
+62:     "electron-builder": "25.1.8",
+
+2) rg -n "nsis" -S .
+./PLAN.md:41:- MUST: GitHub Actions 发布 Windows installer/exe, 目标为 NSIS。
+./PLAN.md:696:- MUST: 产物以 NSIS 安装包为主。
+./PLAN.md:697:- MUST: Windows 自动更新使用 NSIS 目标的更新链路, 不采用不受支持的更新目标。
+./tsconfig.json:6:    "forceConsistentCasingInFileNames": true,
+./package.json:40:        "nsis"
+./package.json:44:    "nsis": {
+
+3) 关键配置片段（package.json#build）
+  "build": {
+    "appId": "cc.pscly.xinliu.desktop",
+    "directories": {
+      "output": "release"
+    },
+    "artifactName": "xinliu-desktop-${version}-setup-${arch}.${ext}",
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "executableName": "xinliu-desktop",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "pscly",
+        "repo": "xinliu_desktop"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/tray.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "心流"
+    }
+  }
+
+4) workflow 触发方式与工件上传（.github/workflows/package.yml）
+
+rg -n "workflow_dispatch|upload-artifact|release/|latest\\.yml|Get-FileHash|sha256" -S .github/workflows/package.yml
+4:  workflow_dispatch:
+42:      - name: 生成 SHA-256 校验文件（与 latest.yml 一起作为 artifact 上传）
+48:            throw "release/ 目录不存在：electron-builder 未按预期输出"
+51:          $latestYmlPath = Join-Path $releaseDir 'latest.yml'
+53:            throw "latest.yml 不存在：需要 electron-builder 生成 Windows 更新元数据"
+61:            throw "未找到 NSIS installer（release/*.exe）"
+64:          $hash = Get-FileHash -Algorithm SHA256 -Path $installer.FullName
+65:          $shaPath = Join-Path $releaseDir ($installer.Name + '.sha256')
+73:        uses: actions/upload-artifact@v4
+78:            release/*.exe
+79:            release/*.exe.blockmap
+80:            release/latest.yml
+81:            release/*.sha256
