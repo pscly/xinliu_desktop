@@ -2,7 +2,12 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  CloseBehaviorSetPayload,
+  CloseBehaviorStatus,
   DiagnosticsStatus,
+  FileAccessReadTextFileResult,
+  FileAccessShowOpenDialogResult,
+  FileAccessShowSaveDialogResult,
   IpcResult,
   IpcVoid,
   SearchQueryResult,
@@ -43,6 +48,10 @@ describe('<App />', () => {
 
     fireEvent.click(screen.getByTestId('nav-settings'));
     expect(screen.getAllByText('设置').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('settings-close-behavior')).toBeTruthy();
+    expect(screen.getByTestId('close-behavior-hide')).toBeTruthy();
+    expect(screen.getByTestId('close-behavior-quit')).toBeTruthy();
+    expect(screen.getByTestId('close-to-tray-hint-reset')).toBeTruthy();
     expect(screen.getByTestId('settings-shortcuts')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-panel')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-copy-flow-request-id')).toBeTruthy();
@@ -69,33 +78,62 @@ describe('<App />', () => {
     window.xinliu = {
       versions: { electron: '0', chrome: '0', node: '0' },
       window: {
-        minimize: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        toggleMaximize: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        close: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        isMaximized: async () => ({ ok: true, value: false } satisfies IpcResult<boolean>),
+        minimize: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        toggleMaximize: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        close: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        isMaximized: async () => ({ ok: true, value: false }) satisfies IpcResult<boolean>,
       },
       quickCapture: {
-        open: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        hide: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        submit: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        cancel: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        open: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        hide: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        submit: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        cancel: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       shortcuts: {
-        getStatus: async () => ({ ok: true, value: fakeShortcutsStatus } satisfies IpcResult<ShortcutsStatus>),
-        setConfig: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        resetAll: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        resetOne: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        getStatus: async () =>
+          ({ ok: true, value: fakeShortcutsStatus }) satisfies IpcResult<ShortcutsStatus>,
+        setConfig: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        resetAll: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        resetOne: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
         onFocusSearch: () => () => {},
+      },
+      fileAccess: {
+        showOpenDialog: async () =>
+          ({
+            ok: true,
+            value: { kind: 'cancelled' },
+          }) satisfies IpcResult<FileAccessShowOpenDialogResult>,
+        showSaveDialog: async () =>
+          ({
+            ok: true,
+            value: { kind: 'cancelled' },
+          }) satisfies IpcResult<FileAccessShowSaveDialogResult>,
+        readTextFile: async () =>
+          ({ ok: true, value: { content: '' } }) satisfies IpcResult<FileAccessReadTextFileResult>,
+        writeTextFile: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       storageRoot: {
         getStatus: async () =>
-          ({ ok: true, value: { storageRootAbsPath: '/tmp/xinliu', isDefault: true } } satisfies IpcResult<{
+          ({
+            ok: true,
+            value: { storageRootAbsPath: '/tmp/xinliu', isDefault: true },
+          }) satisfies IpcResult<{
             storageRootAbsPath: string;
             isDefault: boolean;
-          }>),
+          }>,
         chooseAndMigrate: async () =>
-          ({ ok: true, value: { kind: 'cancelled' } } satisfies IpcResult<{ kind: 'cancelled' }>),
-        restartNow: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+          ({ ok: true, value: { kind: 'cancelled' } }) satisfies IpcResult<{ kind: 'cancelled' }>,
+        restartNow: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      },
+      closeBehavior: {
+        getStatus: async () =>
+          ({
+            ok: true,
+            value: { behavior: 'hide', closeToTrayHintShown: false } satisfies CloseBehaviorStatus,
+          }) satisfies IpcResult<CloseBehaviorStatus>,
+        setBehavior: async (_payload: CloseBehaviorSetPayload) =>
+          ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        resetCloseToTrayHint: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       diagnostics: {
         getStatus: async () =>
@@ -109,11 +147,11 @@ describe('<App />', () => {
               lastDegradeReason: null,
               lastRequestIds: { memos_request_id: null, flow_request_id: null },
             } satisfies DiagnosticsStatus,
-          } satisfies IpcResult<DiagnosticsStatus>),
+          }) satisfies IpcResult<DiagnosticsStatus>,
       },
       contextMenu: {
-        popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        popupFolder: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        popupMiddleItem: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        popupFolder: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
         onCommand: () => () => {},
       },
       search: {
@@ -129,7 +167,7 @@ describe('<App />', () => {
               hasMore: false,
               items: [],
             } satisfies SearchQueryResult,
-          } satisfies IpcResult<SearchQueryResult>),
+          }) satisfies IpcResult<SearchQueryResult>,
         rebuildIndex: async () =>
           ({
             ok: true,
@@ -139,7 +177,7 @@ describe('<App />', () => {
               rebuilt: false,
               message: 'test',
             } satisfies SearchRebuildIndexResult,
-          } satisfies IpcResult<SearchRebuildIndexResult>),
+          }) satisfies IpcResult<SearchRebuildIndexResult>,
       },
     };
 
@@ -147,45 +185,76 @@ describe('<App />', () => {
 
     fireEvent.click(screen.getByTestId('nav-settings'));
 
-    expect(await screen.findByTestId('settings-shortcut-openQuickCapture-register-failed')).toBeTruthy();
+    expect(
+      await screen.findByTestId('settings-shortcut-openQuickCapture-register-failed')
+    ).toBeTruthy();
 
     delete window.xinliu;
   });
 
   it('应用内按钮兜底：点击快捕按钮会调用 quickCapture.open', () => {
-    const open = async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>);
+    const open = async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>;
     const spy = vi.fn(open);
 
     window.xinliu = {
       versions: { electron: '0', chrome: '0', node: '0' },
       window: {
-        minimize: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        toggleMaximize: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        close: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        isMaximized: async () => ({ ok: true, value: false } satisfies IpcResult<boolean>),
+        minimize: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        toggleMaximize: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        close: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        isMaximized: async () => ({ ok: true, value: false }) satisfies IpcResult<boolean>,
       },
       quickCapture: {
         open: spy,
-        hide: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        submit: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        cancel: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        hide: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        submit: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        cancel: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       shortcuts: {
-        getStatus: async () => ({ ok: true, value: { entries: [] } } satisfies IpcResult<ShortcutsStatus>),
-        setConfig: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        resetAll: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        resetOne: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        getStatus: async () =>
+          ({ ok: true, value: { entries: [] } }) satisfies IpcResult<ShortcutsStatus>,
+        setConfig: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        resetAll: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        resetOne: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
         onFocusSearch: () => () => {},
+      },
+      fileAccess: {
+        showOpenDialog: async () =>
+          ({
+            ok: true,
+            value: { kind: 'cancelled' },
+          }) satisfies IpcResult<FileAccessShowOpenDialogResult>,
+        showSaveDialog: async () =>
+          ({
+            ok: true,
+            value: { kind: 'cancelled' },
+          }) satisfies IpcResult<FileAccessShowSaveDialogResult>,
+        readTextFile: async () =>
+          ({ ok: true, value: { content: '' } }) satisfies IpcResult<FileAccessReadTextFileResult>,
+        writeTextFile: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       storageRoot: {
         getStatus: async () =>
-          ({ ok: true, value: { storageRootAbsPath: '/tmp/xinliu', isDefault: true } } satisfies IpcResult<{
+          ({
+            ok: true,
+            value: { storageRootAbsPath: '/tmp/xinliu', isDefault: true },
+          }) satisfies IpcResult<{
             storageRootAbsPath: string;
             isDefault: boolean;
-          }>),
+          }>,
         chooseAndMigrate: async () =>
-          ({ ok: true, value: { kind: 'cancelled' } } satisfies IpcResult<{ kind: 'cancelled' }>),
-        restartNow: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+          ({ ok: true, value: { kind: 'cancelled' } }) satisfies IpcResult<{ kind: 'cancelled' }>,
+        restartNow: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      },
+      closeBehavior: {
+        getStatus: async () =>
+          ({
+            ok: true,
+            value: { behavior: 'hide', closeToTrayHintShown: false } satisfies CloseBehaviorStatus,
+          }) satisfies IpcResult<CloseBehaviorStatus>,
+        setBehavior: async (_payload: CloseBehaviorSetPayload) =>
+          ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        resetCloseToTrayHint: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       diagnostics: {
         getStatus: async () =>
@@ -199,11 +268,11 @@ describe('<App />', () => {
               lastDegradeReason: null,
               lastRequestIds: { memos_request_id: null, flow_request_id: null },
             } satisfies DiagnosticsStatus,
-          } satisfies IpcResult<DiagnosticsStatus>),
+          }) satisfies IpcResult<DiagnosticsStatus>,
       },
       contextMenu: {
-        popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        popupFolder: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        popupMiddleItem: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        popupFolder: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
         onCommand: () => () => {},
       },
       search: {
@@ -219,7 +288,7 @@ describe('<App />', () => {
               hasMore: false,
               items: [],
             } satisfies SearchQueryResult,
-          } satisfies IpcResult<SearchQueryResult>),
+          }) satisfies IpcResult<SearchQueryResult>,
         rebuildIndex: async () =>
           ({
             ok: true,
@@ -229,7 +298,7 @@ describe('<App />', () => {
               rebuilt: false,
               message: 'test',
             } satisfies SearchRebuildIndexResult,
-          } satisfies IpcResult<SearchRebuildIndexResult>),
+          }) satisfies IpcResult<SearchRebuildIndexResult>,
       },
     };
 
@@ -242,49 +311,79 @@ describe('<App />', () => {
   });
 
   it('设置页：迁移成功后必须提示重启且可立即重启', async () => {
-    const chooseAndMigrate = vi.fn(async () =>
-      ({
-        ok: true,
-        value: {
-          kind: 'migrated',
-          oldStorageRootAbsPath: '/tmp/xinliu-old',
-          newStorageRootAbsPath: '/tmp/xinliu-new',
-          moved: { db: true, attachmentsCache: true, logs: true },
-          restartRequired: true,
-        },
-      } satisfies IpcResult<StorageRootChooseAndMigrateResult>)
+    const chooseAndMigrate = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: {
+            kind: 'migrated',
+            oldStorageRootAbsPath: '/tmp/xinliu-old',
+            newStorageRootAbsPath: '/tmp/xinliu-new',
+            moved: { db: true, attachmentsCache: true, logs: true },
+            restartRequired: true,
+          },
+        }) satisfies IpcResult<StorageRootChooseAndMigrateResult>
     );
-    const restartNow = vi.fn(async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>));
+    const restartNow = vi.fn(async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>);
 
     window.xinliu = {
       versions: { electron: '0', chrome: '0', node: '0' },
       window: {
-        minimize: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        toggleMaximize: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        close: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        isMaximized: async () => ({ ok: true, value: false } satisfies IpcResult<boolean>),
+        minimize: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        toggleMaximize: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        close: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        isMaximized: async () => ({ ok: true, value: false }) satisfies IpcResult<boolean>,
       },
       quickCapture: {
-        open: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        hide: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        submit: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        cancel: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        open: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        hide: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        submit: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        cancel: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       shortcuts: {
-        getStatus: async () => ({ ok: true, value: { entries: [] } } satisfies IpcResult<ShortcutsStatus>),
-        setConfig: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        resetAll: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        resetOne: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        getStatus: async () =>
+          ({ ok: true, value: { entries: [] } }) satisfies IpcResult<ShortcutsStatus>,
+        setConfig: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        resetAll: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        resetOne: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
         onFocusSearch: () => () => {},
+      },
+      fileAccess: {
+        showOpenDialog: async () =>
+          ({
+            ok: true,
+            value: { kind: 'cancelled' },
+          }) satisfies IpcResult<FileAccessShowOpenDialogResult>,
+        showSaveDialog: async () =>
+          ({
+            ok: true,
+            value: { kind: 'cancelled' },
+          }) satisfies IpcResult<FileAccessShowSaveDialogResult>,
+        readTextFile: async () =>
+          ({ ok: true, value: { content: '' } }) satisfies IpcResult<FileAccessReadTextFileResult>,
+        writeTextFile: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       storageRoot: {
         getStatus: async () =>
-          ({ ok: true, value: { storageRootAbsPath: '/tmp/xinliu', isDefault: true } } satisfies IpcResult<{
+          ({
+            ok: true,
+            value: { storageRootAbsPath: '/tmp/xinliu', isDefault: true },
+          }) satisfies IpcResult<{
             storageRootAbsPath: string;
             isDefault: boolean;
-          }>),
+          }>,
         chooseAndMigrate,
         restartNow,
+      },
+      closeBehavior: {
+        getStatus: async () =>
+          ({
+            ok: true,
+            value: { behavior: 'hide', closeToTrayHintShown: false } satisfies CloseBehaviorStatus,
+          }) satisfies IpcResult<CloseBehaviorStatus>,
+        setBehavior: async (_payload: CloseBehaviorSetPayload) =>
+          ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        resetCloseToTrayHint: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       diagnostics: {
         getStatus: async () =>
@@ -298,11 +397,11 @@ describe('<App />', () => {
               lastDegradeReason: null,
               lastRequestIds: { memos_request_id: null, flow_request_id: null },
             } satisfies DiagnosticsStatus,
-          } satisfies IpcResult<DiagnosticsStatus>),
+          }) satisfies IpcResult<DiagnosticsStatus>,
       },
       contextMenu: {
-        popupMiddleItem: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
-        popupFolder: async () => ({ ok: true, value: null } satisfies IpcResult<IpcVoid>),
+        popupMiddleItem: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        popupFolder: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
         onCommand: () => () => {},
       },
       search: {
@@ -318,7 +417,7 @@ describe('<App />', () => {
               hasMore: false,
               items: [],
             } satisfies SearchQueryResult,
-          } satisfies IpcResult<SearchQueryResult>),
+          }) satisfies IpcResult<SearchQueryResult>,
         rebuildIndex: async () =>
           ({
             ok: true,
@@ -328,7 +427,7 @@ describe('<App />', () => {
               rebuilt: false,
               message: 'test',
             } satisfies SearchRebuildIndexResult,
-          } satisfies IpcResult<SearchRebuildIndexResult>),
+          }) satisfies IpcResult<SearchRebuildIndexResult>,
       },
     };
 

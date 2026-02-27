@@ -2,13 +2,28 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 import { EMPTY_PAYLOAD, IPC_CHANNELS, IPC_EVENTS } from '../shared/ipc';
 import type {
+  CloseBehaviorSetPayload,
+  CloseBehaviorStatus,
   ContextMenuDidSelectPayload,
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
   DiagnosticsStatus,
+  FileAccessReadTextFilePayload,
+  FileAccessReadTextFileResult,
+  FileAccessShowOpenDialogPayload,
+  FileAccessShowOpenDialogResult,
+  FileAccessShowSaveDialogPayload,
+  FileAccessShowSaveDialogResult,
+  FileAccessWriteTextFilePayload,
   IpcErrorCode,
   IpcResult,
   IpcVoid,
+  NotesDeleteResult,
+  NotesHardDeleteResult,
+  NotesIdPayload,
+  NotesListItemsPayload,
+  NotesListItemsResult,
+  NotesRestoreResult,
   QuickCaptureSubmitPayload,
   ShortcutId,
   SearchQueryPayload,
@@ -45,8 +60,7 @@ contextBridge.exposeInMainWorld('xinliu', {
   },
   window: {
     minimize: () => invokeIpc<IpcVoid>(IPC_CHANNELS.window.minimize, EMPTY_PAYLOAD),
-    toggleMaximize: () =>
-      invokeIpc<IpcVoid>(IPC_CHANNELS.window.toggleMaximize, EMPTY_PAYLOAD),
+    toggleMaximize: () => invokeIpc<IpcVoid>(IPC_CHANNELS.window.toggleMaximize, EMPTY_PAYLOAD),
     close: () => invokeIpc<IpcVoid>(IPC_CHANNELS.window.close, EMPTY_PAYLOAD),
     isMaximized: () => invokeIpc<boolean>(IPC_CHANNELS.window.isMaximized, EMPTY_PAYLOAD),
   },
@@ -54,17 +68,20 @@ contextBridge.exposeInMainWorld('xinliu', {
     open: () => invokeIpc<IpcVoid>(IPC_CHANNELS.quickCapture.open, EMPTY_PAYLOAD),
     hide: () => invokeIpc<IpcVoid>(IPC_CHANNELS.quickCapture.hide, EMPTY_PAYLOAD),
     submit: (content: string) =>
-      invokeIpc<IpcVoid>(IPC_CHANNELS.quickCapture.submit, { content } satisfies QuickCaptureSubmitPayload),
+      invokeIpc<IpcVoid>(IPC_CHANNELS.quickCapture.submit, {
+        content,
+      } satisfies QuickCaptureSubmitPayload),
     cancel: () => invokeIpc<IpcVoid>(IPC_CHANNELS.quickCapture.cancel, EMPTY_PAYLOAD),
   },
   shortcuts: {
-    getStatus: () =>
-      invokeIpc<ShortcutsStatus>(IPC_CHANNELS.shortcuts.getStatus, EMPTY_PAYLOAD),
+    getStatus: () => invokeIpc<ShortcutsStatus>(IPC_CHANNELS.shortcuts.getStatus, EMPTY_PAYLOAD),
     setConfig: (payload: ShortcutsSetConfigPayload) =>
       invokeIpc<IpcVoid>(IPC_CHANNELS.shortcuts.setConfig, payload),
     resetAll: () => invokeIpc<IpcVoid>(IPC_CHANNELS.shortcuts.resetAll, EMPTY_PAYLOAD),
     resetOne: (id: ShortcutId) =>
-      invokeIpc<IpcVoid>(IPC_CHANNELS.shortcuts.resetOne, { id } satisfies ShortcutsResetOnePayload),
+      invokeIpc<IpcVoid>(IPC_CHANNELS.shortcuts.resetOne, {
+        id,
+      } satisfies ShortcutsResetOnePayload),
     onFocusSearch: (listener: () => void) => {
       const wrapped = () => {
         try {
@@ -88,6 +105,14 @@ contextBridge.exposeInMainWorld('xinliu', {
         EMPTY_PAYLOAD
       ),
     restartNow: () => invokeIpc<IpcVoid>(IPC_CHANNELS.storageRoot.restartNow, EMPTY_PAYLOAD),
+  },
+  closeBehavior: {
+    getStatus: () =>
+      invokeIpc<CloseBehaviorStatus>(IPC_CHANNELS.closeBehavior.getStatus, EMPTY_PAYLOAD),
+    setBehavior: (payload: CloseBehaviorSetPayload) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.closeBehavior.setBehavior, payload),
+    resetCloseToTrayHint: () =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.closeBehavior.resetCloseToTrayHint, EMPTY_PAYLOAD),
   },
   diagnostics: {
     getStatus: () =>
@@ -116,10 +141,36 @@ contextBridge.exposeInMainWorld('xinliu', {
       };
     },
   },
+  notes: {
+    listItems: (payload: NotesListItemsPayload) =>
+      invokeIpc<NotesListItemsResult>(
+        IPC_CHANNELS.notes.listItems,
+        payload satisfies NotesListItemsPayload
+      ),
+    delete: (payload: NotesIdPayload) =>
+      invokeIpc<NotesDeleteResult>(IPC_CHANNELS.notes.delete, payload satisfies NotesIdPayload),
+    restore: (payload: NotesIdPayload) =>
+      invokeIpc<NotesRestoreResult>(IPC_CHANNELS.notes.restore, payload satisfies NotesIdPayload),
+    hardDelete: (payload: NotesIdPayload) =>
+      invokeIpc<NotesHardDeleteResult>(
+        IPC_CHANNELS.notes.hardDelete,
+        payload satisfies NotesIdPayload
+      ),
+  },
   search: {
     query: (payload: SearchQueryPayload) =>
       invokeIpc<SearchQueryResult>(IPC_CHANNELS.search.query, payload),
     rebuildIndex: () =>
       invokeIpc<SearchRebuildIndexResult>(IPC_CHANNELS.search.rebuildIndex, EMPTY_PAYLOAD),
+  },
+  fileAccess: {
+    showOpenDialog: (payload?: FileAccessShowOpenDialogPayload) =>
+      invokeIpc<FileAccessShowOpenDialogResult>(IPC_CHANNELS.fileAccess.showOpenDialog, payload),
+    showSaveDialog: (payload?: FileAccessShowSaveDialogPayload) =>
+      invokeIpc<FileAccessShowSaveDialogResult>(IPC_CHANNELS.fileAccess.showSaveDialog, payload),
+    readTextFile: (payload: FileAccessReadTextFilePayload) =>
+      invokeIpc<FileAccessReadTextFileResult>(IPC_CHANNELS.fileAccess.readTextFile, payload),
+    writeTextFile: (payload: FileAccessWriteTextFilePayload) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.fileAccess.writeTextFile, payload),
   },
 });

@@ -1,13 +1,32 @@
+import path from 'node:path';
+
 import { EMPTY_PAYLOAD, IPC_CHANNELS } from '../shared/ipc';
 import type {
+  CloseBehavior,
+  CloseBehaviorSetPayload,
+  CloseBehaviorStatus,
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
   DiagnosticsStatus,
   EmptyPayload,
+  FileAccessReadTextFilePayload,
+  FileAccessReadTextFileResult,
+  FileAccessShowOpenDialogPayload,
+  FileAccessShowOpenDialogResult,
+  FileAccessShowSaveDialogPayload,
+  FileAccessShowSaveDialogResult,
+  FileAccessWriteTextFilePayload,
+  FileDialogFilter,
   IpcChannel,
   IpcErrorCode,
   IpcResult,
   IpcVoid,
+  NotesDeleteResult,
+  NotesHardDeleteResult,
+  NotesIdPayload,
+  NotesListItemsPayload,
+  NotesListItemsResult,
+  NotesRestoreResult,
   QuickCaptureSubmitPayload,
   SearchQueryPayload,
   SearchQueryResult,
@@ -19,6 +38,8 @@ import type {
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
 } from '../shared/ipc';
+
+import type { PathGate } from './pathGate/pathGate';
 
 export interface IpcMainInvokeEventLike {
   sender: unknown;
@@ -62,18 +83,41 @@ export interface RegisterIpcHandlersDeps {
       | Promise<StorageRootChooseAndMigrateResult>;
     restartNow: () => void | Promise<void>;
   };
+  closeBehavior: {
+    getStatus: () => CloseBehaviorStatus | Promise<CloseBehaviorStatus>;
+    setBehavior: (payload: CloseBehaviorSetPayload) => void | Promise<void>;
+    resetCloseToTrayHint: () => void | Promise<void>;
+  };
   diagnostics: {
     getStatus: () => DiagnosticsStatus | Promise<DiagnosticsStatus>;
   };
+  pathGate: PathGate;
+  fileAccess: {
+    showOpenDialog: (options: {
+      win: unknown;
+      title: string | null;
+      filters: FileDialogFilter[] | null;
+    }) => Promise<{ canceled: boolean; filePaths: string[] }>;
+    showSaveDialog: (options: {
+      win: unknown;
+      title: string | null;
+      defaultPath: string | null;
+      filters: FileDialogFilter[] | null;
+    }) => Promise<{ canceled: boolean; filePath: string | undefined }>;
+    readTextFile: (fileAbsPath: string) => Promise<string>;
+    writeTextFile: (fileAbsPath: string, content: string) => Promise<void>;
+  };
+  notes?: {
+    listItems: (
+      payload: NotesListItemsPayload
+    ) => NotesListItemsResult | Promise<NotesListItemsResult>;
+    delete: (payload: NotesIdPayload) => NotesDeleteResult | Promise<NotesDeleteResult>;
+    restore: (payload: NotesIdPayload) => NotesRestoreResult | Promise<NotesRestoreResult>;
+    hardDelete: (payload: NotesIdPayload) => NotesHardDeleteResult | Promise<NotesHardDeleteResult>;
+  };
   contextMenu: {
-    popupMiddleItem: (options: {
-      win: BrowserWindowLike;
-      itemId: string;
-    }) => void | Promise<void>;
-    popupFolder: (options: {
-      win: BrowserWindowLike;
-      folderId: string;
-    }) => void | Promise<void>;
+    popupMiddleItem: (options: { win: BrowserWindowLike; itemId: string }) => void | Promise<void>;
+    popupFolder: (options: { win: BrowserWindowLike; folderId: string }) => void | Promise<void>;
   };
   search: {
     query: (payload: SearchQueryPayload) => SearchQueryResult | Promise<SearchQueryResult>;
@@ -114,13 +158,192 @@ function validateEmptyPayload(payload: unknown): IpcResult<EmptyPayload> {
   return ok(EMPTY_PAYLOAD);
 }
 
+function normalizeDialogAbsFilePath(input: string): string | null {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (path.isAbsolute(trimmed)) {
+    return path.resolve(trimmed);
+  }
+  if (path.win32.isAbsolute(trimmed)) {
+    return path.win32.normalize(trimmed);
+  }
+  return null;
+}
+
+function basenameForAbsPath(absPath: string): string {
+  if (path.win32.isAbsolute(absPath)) {
+    return path.win32.basename(absPath);
+  }
+  return path.basename(absPath);
+}
+
+function normalizeOptionalStringField(value: unknown): IpcResult<string | null> {
+  if (value === undefined || value === null) {
+    return ok(null);
+  }
+  if (typeof value !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const trimmed = value.trim();
+  return ok(trimmed.length > 0 ? trimmed : null);
+}
+
+function validateFileDialogFilters(value: unknown): IpcResult<FileDialogFilter[] | null> {
+  if (value === undefined || value === null) {
+    return ok(null);
+  }
+  if (!Array.isArray(value)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const normalized: FileDialogFilter[] = [];
+  for (const item of value) {
+    if (!isPlainObject(item)) {
+      return err('VALIDATION_ERROR', '参数不合法');
+    }
+    const name = item['name'];
+    const extensions = item['extensions'];
+    if (typeof name !== 'string' || !Array.isArray(extensions)) {
+      return err('VALIDATION_ERROR', '参数不合法');
+    }
+    const nameTrimmed = name.trim();
+    if (nameTrimmed.length === 0) {
+      return err('VALIDATION_ERROR', '参数不合法');
+    }
+
+    const exts: string[] = [];
+    for (const ext of extensions) {
+      if (typeof ext !== 'string') {
+        return err('VALIDATION_ERROR', '参数不合法');
+      }
+      const extTrimmed = ext.trim();
+      if (extTrimmed.length === 0) {
+        return err('VALIDATION_ERROR', '参数不合法');
+      }
+      exts.push(extTrimmed);
+    }
+
+    normalized.push({ name: nameTrimmed, extensions: exts });
+  }
+  return ok(normalized);
+}
+
+function validateFileAccessShowOpenDialogPayload(
+  payload: unknown
+): IpcResult<FileAccessShowOpenDialogPayload> {
+  if (payload === undefined) {
+    return ok({ title: null, filters: null });
+  }
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const titleRes = normalizeOptionalStringField(payload['title']);
+  if (!titleRes.ok) {
+    return titleRes;
+  }
+
+  const filtersRes = validateFileDialogFilters(payload['filters']);
+  if (!filtersRes.ok) {
+    return filtersRes;
+  }
+
+  return ok({ title: titleRes.value, filters: filtersRes.value });
+}
+
+function validateFileAccessShowSaveDialogPayload(
+  payload: unknown
+): IpcResult<FileAccessShowSaveDialogPayload> {
+  if (payload === undefined) {
+    return ok({ title: null, defaultPath: null, filters: null });
+  }
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const titleRes = normalizeOptionalStringField(payload['title']);
+  if (!titleRes.ok) {
+    return titleRes;
+  }
+
+  const defaultPathRes = normalizeOptionalStringField(payload['defaultPath']);
+  if (!defaultPathRes.ok) {
+    return defaultPathRes;
+  }
+
+  const filtersRes = validateFileDialogFilters(payload['filters']);
+  if (!filtersRes.ok) {
+    return filtersRes;
+  }
+
+  return ok({
+    title: titleRes.value,
+    defaultPath: defaultPathRes.value,
+    filters: filtersRes.value,
+  });
+}
+
+function validateFileAccessReadTextFilePayload(
+  payload: unknown
+): IpcResult<FileAccessReadTextFilePayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const grantId = payload['grantId'];
+  const filePath = payload['filePath'];
+  if (typeof grantId !== 'string' || typeof filePath !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const grantIdTrimmed = grantId.trim();
+  const filePathTrimmed = filePath.trim();
+  if (grantIdTrimmed.length === 0 || filePathTrimmed.length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ grantId: grantIdTrimmed, filePath: filePathTrimmed });
+}
+
+function validateFileAccessWriteTextFilePayload(
+  payload: unknown
+): IpcResult<FileAccessWriteTextFilePayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const grantId = payload['grantId'];
+  const filePath = payload['filePath'];
+  const content = payload['content'];
+  if (typeof grantId !== 'string' || typeof filePath !== 'string' || typeof content !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const grantIdTrimmed = grantId.trim();
+  const filePathTrimmed = filePath.trim();
+  if (grantIdTrimmed.length === 0 || filePathTrimmed.length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ grantId: grantIdTrimmed, filePath: filePathTrimmed, content });
+}
+
 function validateShortcutId(value: unknown): value is ShortcutId {
   return value === 'openQuickCapture' || value === 'openMainAndFocusSearch';
 }
 
-function validateShortcutsSetConfigPayload(
-  payload: unknown
-): IpcResult<ShortcutsSetConfigPayload> {
+function validateCloseBehavior(value: unknown): value is CloseBehavior {
+  return value === 'hide' || value === 'quit';
+}
+
+function validateCloseBehaviorSetPayload(payload: unknown): IpcResult<CloseBehaviorSetPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const behavior = payload['behavior'];
+  if (!validateCloseBehavior(behavior)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ behavior });
+}
+
+function validateShortcutsSetConfigPayload(payload: unknown): IpcResult<ShortcutsSetConfigPayload> {
   if (!isPlainObject(payload)) {
     return err('VALIDATION_ERROR', '参数不合法');
   }
@@ -146,9 +369,7 @@ function validateShortcutsSetConfigPayload(
   return ok({ id, accelerator: trimmed, enabled });
 }
 
-function validateShortcutsResetOnePayload(
-  payload: unknown
-): IpcResult<ShortcutsResetOnePayload> {
+function validateShortcutsResetOnePayload(payload: unknown): IpcResult<ShortcutsResetOnePayload> {
   if (!isPlainObject(payload)) {
     return err('VALIDATION_ERROR', '参数不合法');
   }
@@ -159,9 +380,7 @@ function validateShortcutsResetOnePayload(
   return ok({ id });
 }
 
-function validateQuickCaptureSubmitPayload(
-  payload: unknown
-): IpcResult<QuickCaptureSubmitPayload> {
+function validateQuickCaptureSubmitPayload(payload: unknown): IpcResult<QuickCaptureSubmitPayload> {
   if (!isPlainObject(payload)) {
     return err('VALIDATION_ERROR', '参数不合法');
   }
@@ -231,11 +450,57 @@ function validateSearchQueryPayload(payload: unknown): IpcResult<SearchQueryPayl
   return ok({ query: trimmed, page: pageInt, pageSize: pageSizeInt });
 }
 
-function createRateLimiter(options: {
-  windowMs: number;
-  max: number;
-  now: () => number;
-}) {
+function validateNotesListItemsPayload(payload: unknown): IpcResult<NotesListItemsPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const scope = payload['scope'];
+  const page = payload['page'];
+  const pageSize = payload['pageSize'];
+
+  if (scope !== 'timeline' && scope !== 'inbox' && scope !== 'trash') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (typeof page !== 'number' || !Number.isFinite(page) || !Number.isInteger(page) || page < 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (
+    typeof pageSize !== 'number' ||
+    !Number.isFinite(pageSize) ||
+    !Number.isInteger(pageSize) ||
+    pageSize < 0 ||
+    pageSize > 200
+  ) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  return ok({ scope, page, pageSize });
+}
+
+function validateNotesIdPayload(payload: unknown): IpcResult<NotesIdPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const id = payload['id'];
+  const provider = payload['provider'];
+
+  if (typeof id !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const trimmed = id.trim();
+  if (trimmed.length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (provider !== 'memos' && provider !== 'flow_notes') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  return ok({ id: trimmed, provider });
+}
+
+function createRateLimiter(options: { windowMs: number; max: number; now: () => number }) {
   const buckets = new Map<string, { resetAt: number; count: number }>();
 
   const allow = (key: string) => {
@@ -257,10 +522,7 @@ function createRateLimiter(options: {
   return { allow };
 }
 
-function toIpcResult<T>(
-  input: unknown,
-  fallbackMessage: string
-): IpcResult<T> {
+function toIpcResult<T>(input: unknown, fallbackMessage: string): IpcResult<T> {
   if (
     typeof input === 'object' &&
     input !== null &&
@@ -411,10 +673,69 @@ function makeWindowHandlerWithPayload<T>(options: {
   };
 }
 
-export function registerIpcHandlers(
-  ipcMain: IpcMainLike,
-  deps: RegisterIpcHandlersDeps
-): void {
+function makeHandlerIpcResult<T>(options: {
+  channel: IpcChannel;
+  deps: RegisterIpcHandlersDeps;
+  rateLimiter: { allow: (key: string) => boolean };
+  validate: (payload: unknown) => IpcResult<unknown>;
+  run: (validatedPayload: unknown) => IpcResult<T> | Promise<IpcResult<T>>;
+}): IpcMainHandler {
+  return async (_event, payload) => {
+    if (!options.rateLimiter.allow(options.channel)) {
+      return err('RATE_LIMITED', '操作过于频繁');
+    }
+
+    const validated = options.validate(payload);
+    if (!validated.ok) {
+      return validated;
+    }
+
+    try {
+      const result = await options.run(validated.value);
+      return toIpcResult<T>(result, '操作失败');
+    } catch {
+      return err('INTERNAL_ERROR', '操作失败');
+    }
+  };
+}
+
+function makeWindowHandlerWithPayloadIpcResult<T>(options: {
+  channel: IpcChannel;
+  deps: RegisterIpcHandlersDeps;
+  rateLimiter: { allow: (key: string) => boolean };
+  validate: (payload: unknown) => IpcResult<unknown>;
+  run: (win: BrowserWindowLike, validatedPayload: unknown) => IpcResult<T> | Promise<IpcResult<T>>;
+}): IpcMainHandler {
+  return async (event, payload) => {
+    if (!options.rateLimiter.allow(options.channel)) {
+      return err('RATE_LIMITED', '操作过于频繁');
+    }
+
+    const validated = options.validate(payload);
+    if (!validated.ok) {
+      return validated;
+    }
+
+    let win: BrowserWindowLike | null = null;
+    try {
+      win = options.deps.getWindowForSender(event.sender);
+    } catch {
+      win = null;
+    }
+    if (!win) {
+      return err('NO_WINDOW', '未找到窗口');
+    }
+
+    try {
+      const result = await options.run(win, validated.value);
+      return toIpcResult<T>(result, '操作失败');
+    } catch {
+      return err('INTERNAL_ERROR', '操作失败');
+    }
+  };
+}
+
+export function registerIpcHandlers(ipcMain: IpcMainLike, deps: RegisterIpcHandlersDeps): void {
   const rateLimiter = createRateLimiter({
     windowMs: 1000,
     max: 60,
@@ -622,6 +943,45 @@ export function registerIpcHandlers(
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.closeBehavior.getStatus,
+    makeHandler<CloseBehaviorStatus>({
+      channel: IPC_CHANNELS.closeBehavior.getStatus,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => deps.closeBehavior.getStatus(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.closeBehavior.setBehavior,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.closeBehavior.setBehavior,
+      deps,
+      rateLimiter,
+      validate: validateCloseBehaviorSetPayload,
+      run: async (validatedPayload) => {
+        await deps.closeBehavior.setBehavior(validatedPayload as CloseBehaviorSetPayload);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.closeBehavior.resetCloseToTrayHint,
+    makeHandler<IpcVoid>({
+      channel: IPC_CHANNELS.closeBehavior.resetCloseToTrayHint,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        await deps.closeBehavior.resetCloseToTrayHint();
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.diagnostics.getStatus,
     makeHandlerWithErrorMessage<DiagnosticsStatus>({
       channel: IPC_CHANNELS.diagnostics.getStatus,
@@ -629,6 +989,70 @@ export function registerIpcHandlers(
       rateLimiter,
       validate: validateEmptyPayload,
       run: async () => deps.diagnostics.getStatus(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.notes.listItems,
+    makeHandlerWithErrorMessage<NotesListItemsResult>({
+      channel: IPC_CHANNELS.notes.listItems,
+      deps,
+      rateLimiter,
+      validate: validateNotesListItemsPayload,
+      run: async (validatedPayload) => {
+        if (!deps.notes) {
+          throw new Error('Notes 未实现');
+        }
+        return deps.notes.listItems(validatedPayload as NotesListItemsPayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.notes.delete,
+    makeHandlerWithErrorMessage<NotesDeleteResult>({
+      channel: IPC_CHANNELS.notes.delete,
+      deps,
+      rateLimiter,
+      validate: validateNotesIdPayload,
+      run: async (validatedPayload) => {
+        if (!deps.notes) {
+          throw new Error('Notes 未实现');
+        }
+        return deps.notes.delete(validatedPayload as NotesIdPayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.notes.restore,
+    makeHandlerWithErrorMessage<NotesRestoreResult>({
+      channel: IPC_CHANNELS.notes.restore,
+      deps,
+      rateLimiter,
+      validate: validateNotesIdPayload,
+      run: async (validatedPayload) => {
+        if (!deps.notes) {
+          throw new Error('Notes 未实现');
+        }
+        return deps.notes.restore(validatedPayload as NotesIdPayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.notes.hardDelete,
+    makeHandlerWithErrorMessage<NotesHardDeleteResult>({
+      channel: IPC_CHANNELS.notes.hardDelete,
+      deps,
+      rateLimiter,
+      validate: validateNotesIdPayload,
+      run: async (validatedPayload) => {
+        if (!deps.notes) {
+          throw new Error('Notes 未实现');
+        }
+        return deps.notes.hardDelete(validatedPayload as NotesIdPayload);
+      },
     })
   );
 
@@ -686,6 +1110,135 @@ export function registerIpcHandlers(
       run: async () => deps.search.rebuildIndex(),
     })
   );
+
+  ipcMain.handle(
+    IPC_CHANNELS.fileAccess.showOpenDialog,
+    makeWindowHandlerWithPayloadIpcResult<FileAccessShowOpenDialogResult>({
+      channel: IPC_CHANNELS.fileAccess.showOpenDialog,
+      deps,
+      rateLimiter,
+      validate: validateFileAccessShowOpenDialogPayload,
+      run: async (win, validatedPayload) => {
+        const v = validatedPayload as FileAccessShowOpenDialogPayload;
+        const picked = await deps.fileAccess.showOpenDialog({
+          win,
+          title: v.title ?? null,
+          filters: v.filters ?? null,
+        });
+
+        if (picked.canceled || picked.filePaths.length === 0) {
+          return ok({ kind: 'cancelled' });
+        }
+
+        const rawPicked = typeof picked.filePaths[0] === 'string' ? picked.filePaths[0] : '';
+        const fileAbsPath = normalizeDialogAbsFilePath(rawPicked);
+        if (!fileAbsPath) {
+          return err('INTERNAL_ERROR', '创建授权失败');
+        }
+
+        const grant = deps.pathGate.createGrant('read', fileAbsPath);
+        if (!grant) {
+          return err('INTERNAL_ERROR', '创建授权失败');
+        }
+
+        return ok({
+          kind: 'granted',
+          grantId: grant.grantId,
+          filePath: fileAbsPath,
+          fileName: basenameForAbsPath(fileAbsPath),
+        });
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.fileAccess.showSaveDialog,
+    makeWindowHandlerWithPayloadIpcResult<FileAccessShowSaveDialogResult>({
+      channel: IPC_CHANNELS.fileAccess.showSaveDialog,
+      deps,
+      rateLimiter,
+      validate: validateFileAccessShowSaveDialogPayload,
+      run: async (win, validatedPayload) => {
+        const v = validatedPayload as FileAccessShowSaveDialogPayload;
+        const picked = await deps.fileAccess.showSaveDialog({
+          win,
+          title: v.title ?? null,
+          defaultPath: v.defaultPath ?? null,
+          filters: v.filters ?? null,
+        });
+
+        const rawPath = typeof picked.filePath === 'string' ? picked.filePath : '';
+        if (picked.canceled || rawPath.trim().length === 0) {
+          return ok({ kind: 'cancelled' });
+        }
+
+        const fileAbsPath = normalizeDialogAbsFilePath(rawPath);
+        if (!fileAbsPath) {
+          return err('INTERNAL_ERROR', '创建授权失败');
+        }
+
+        const grant = deps.pathGate.createGrant('write', fileAbsPath);
+        if (!grant) {
+          return err('INTERNAL_ERROR', '创建授权失败');
+        }
+
+        return ok({
+          kind: 'granted',
+          grantId: grant.grantId,
+          filePath: fileAbsPath,
+          fileName: basenameForAbsPath(fileAbsPath),
+        });
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.fileAccess.readTextFile,
+    makeHandlerIpcResult<FileAccessReadTextFileResult>({
+      channel: IPC_CHANNELS.fileAccess.readTextFile,
+      deps,
+      rateLimiter,
+      validate: validateFileAccessReadTextFilePayload,
+      run: async (validatedPayload) => {
+        const v = validatedPayload as FileAccessReadTextFilePayload;
+        const outcome = deps.pathGate.consumeGrant({
+          grantId: v.grantId,
+          kind: 'read',
+          fileAbsPath: v.filePath,
+        });
+        if (!outcome.ok) {
+          return err('PERMISSION_DENIED', '未授权或已失效');
+        }
+
+        const content = await deps.fileAccess.readTextFile(outcome.grantedFileAbsPath);
+        return ok({ content });
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.fileAccess.writeTextFile,
+    makeHandlerIpcResult<IpcVoid>({
+      channel: IPC_CHANNELS.fileAccess.writeTextFile,
+      deps,
+      rateLimiter,
+      validate: validateFileAccessWriteTextFilePayload,
+      run: async (validatedPayload) => {
+        const v = validatedPayload as FileAccessWriteTextFilePayload;
+        const outcome = deps.pathGate.consumeGrant({
+          grantId: v.grantId,
+          kind: 'write',
+          fileAbsPath: v.filePath,
+        });
+        if (!outcome.ok) {
+          return err('PERMISSION_DENIED', '未授权或已失效');
+        }
+
+        await deps.fileAccess.writeTextFile(outcome.grantedFileAbsPath, v.content);
+        return ok(null);
+      },
+    })
+  );
 }
 
 export const __test__ = {
@@ -697,4 +1250,6 @@ export const __test__ = {
   validateContextMenuPopupMiddleItemPayload,
   validateContextMenuPopupFolderPayload,
   validateSearchQueryPayload,
+  validateNotesListItemsPayload,
+  validateNotesIdPayload,
 };

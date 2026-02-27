@@ -1,10 +1,25 @@
 /// <reference types="vite/client" />
 
 import type {
+  CloseBehaviorSetPayload,
+  CloseBehaviorStatus,
   ContextMenuDidSelectPayload,
   DiagnosticsStatus,
+  FileAccessReadTextFilePayload,
+  FileAccessReadTextFileResult,
+  FileAccessShowOpenDialogPayload,
+  FileAccessShowOpenDialogResult,
+  FileAccessShowSaveDialogPayload,
+  FileAccessShowSaveDialogResult,
+  FileAccessWriteTextFilePayload,
   IpcResult,
   IpcVoid,
+  NotesDeleteResult,
+  NotesHardDeleteResult,
+  NotesIdPayload,
+  NotesListItemsPayload,
+  NotesListItemsResult,
+  NotesRestoreResult,
   SearchQueryPayload,
   SearchQueryResult,
   SearchRebuildIndexResult,
@@ -47,12 +62,35 @@ declare global {
         chooseAndMigrate: () => Promise<IpcResult<StorageRootChooseAndMigrateResult>>;
         restartNow: () => Promise<IpcResult<IpcVoid>>;
       };
+      closeBehavior: {
+        getStatus: () => Promise<IpcResult<CloseBehaviorStatus>>;
+        setBehavior: (payload: CloseBehaviorSetPayload) => Promise<IpcResult<IpcVoid>>;
+        resetCloseToTrayHint: () => Promise<IpcResult<IpcVoid>>;
+      };
       diagnostics: {
         getStatus: () => Promise<IpcResult<DiagnosticsStatus>>;
+      };
+      notes?: {
+        listItems: (payload: NotesListItemsPayload) => Promise<IpcResult<NotesListItemsResult>>;
+        delete: (payload: NotesIdPayload) => Promise<IpcResult<NotesDeleteResult>>;
+        restore: (payload: NotesIdPayload) => Promise<IpcResult<NotesRestoreResult>>;
+        hardDelete: (payload: NotesIdPayload) => Promise<IpcResult<NotesHardDeleteResult>>;
       };
       search: {
         query: (payload: SearchQueryPayload) => Promise<IpcResult<SearchQueryResult>>;
         rebuildIndex: () => Promise<IpcResult<SearchRebuildIndexResult>>;
+      };
+      fileAccess: {
+        showOpenDialog: (
+          payload?: FileAccessShowOpenDialogPayload
+        ) => Promise<IpcResult<FileAccessShowOpenDialogResult>>;
+        showSaveDialog: (
+          payload?: FileAccessShowSaveDialogPayload
+        ) => Promise<IpcResult<FileAccessShowSaveDialogResult>>;
+        readTextFile: (
+          payload: FileAccessReadTextFilePayload
+        ) => Promise<IpcResult<FileAccessReadTextFileResult>>;
+        writeTextFile: (payload: FileAccessWriteTextFilePayload) => Promise<IpcResult<IpcVoid>>;
       };
       contextMenu: {
         popupMiddleItem: (itemId: string) => Promise<IpcResult<IpcVoid>>;

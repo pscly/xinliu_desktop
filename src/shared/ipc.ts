@@ -24,6 +24,11 @@ export const IPC_CHANNELS = {
     chooseAndMigrate: `${IPC_NAMESPACE}:storageRoot:chooseAndMigrate`,
     restartNow: `${IPC_NAMESPACE}:storageRoot:restartNow`,
   },
+  closeBehavior: {
+    getStatus: `${IPC_NAMESPACE}:closeBehavior:getStatus`,
+    setBehavior: `${IPC_NAMESPACE}:closeBehavior:setBehavior`,
+    resetCloseToTrayHint: `${IPC_NAMESPACE}:closeBehavior:resetCloseToTrayHint`,
+  },
   diagnostics: {
     getStatus: `${IPC_NAMESPACE}:diagnostics:getStatus`,
   },
@@ -31,9 +36,21 @@ export const IPC_CHANNELS = {
     popupMiddleItem: `${IPC_NAMESPACE}:contextMenu:popupMiddleItem`,
     popupFolder: `${IPC_NAMESPACE}:contextMenu:popupFolder`,
   },
+  notes: {
+    listItems: `${IPC_NAMESPACE}:notes:listItems`,
+    delete: `${IPC_NAMESPACE}:notes:delete`,
+    restore: `${IPC_NAMESPACE}:notes:restore`,
+    hardDelete: `${IPC_NAMESPACE}:notes:hardDelete`,
+  },
   search: {
     query: `${IPC_NAMESPACE}:search:query`,
     rebuildIndex: `${IPC_NAMESPACE}:search:rebuildIndex`,
+  },
+  fileAccess: {
+    showOpenDialog: `${IPC_NAMESPACE}:fileAccess:showOpenDialog`,
+    showSaveDialog: `${IPC_NAMESPACE}:fileAccess:showSaveDialog`,
+    readTextFile: `${IPC_NAMESPACE}:fileAccess:readTextFile`,
+    writeTextFile: `${IPC_NAMESPACE}:fileAccess:writeTextFile`,
   },
 } as const;
 
@@ -46,8 +63,7 @@ export const IPC_EVENTS = {
   },
 } as const;
 
-export type IpcChannelWindow =
-  (typeof IPC_CHANNELS.window)[keyof typeof IPC_CHANNELS.window];
+export type IpcChannelWindow = (typeof IPC_CHANNELS.window)[keyof typeof IPC_CHANNELS.window];
 
 export type IpcChannelQuickCapture =
   (typeof IPC_CHANNELS.quickCapture)[keyof typeof IPC_CHANNELS.quickCapture];
@@ -58,28 +74,39 @@ export type IpcChannelShortcuts =
 export type IpcChannelStorageRoot =
   (typeof IPC_CHANNELS.storageRoot)[keyof typeof IPC_CHANNELS.storageRoot];
 
+export type IpcChannelCloseBehavior =
+  (typeof IPC_CHANNELS.closeBehavior)[keyof typeof IPC_CHANNELS.closeBehavior];
+
 export type IpcChannelDiagnostics =
   (typeof IPC_CHANNELS.diagnostics)[keyof typeof IPC_CHANNELS.diagnostics];
 
 export type IpcChannelContextMenu =
   (typeof IPC_CHANNELS.contextMenu)[keyof typeof IPC_CHANNELS.contextMenu];
 
-export type IpcChannelSearch =
-  (typeof IPC_CHANNELS.search)[keyof typeof IPC_CHANNELS.search];
+export type IpcChannelNotes = (typeof IPC_CHANNELS.notes)[keyof typeof IPC_CHANNELS.notes];
+
+export type IpcChannelSearch = (typeof IPC_CHANNELS.search)[keyof typeof IPC_CHANNELS.search];
+
+export type IpcChannelFileAccess =
+  (typeof IPC_CHANNELS.fileAccess)[keyof typeof IPC_CHANNELS.fileAccess];
 
 export type IpcChannel =
   | IpcChannelWindow
   | IpcChannelQuickCapture
   | IpcChannelShortcuts
   | IpcChannelStorageRoot
+  | IpcChannelCloseBehavior
   | IpcChannelDiagnostics
   | IpcChannelContextMenu
-  | IpcChannelSearch;
+  | IpcChannelNotes
+  | IpcChannelSearch
+  | IpcChannelFileAccess;
 
 export type IpcErrorCode =
   | 'VALIDATION_ERROR'
   | 'RATE_LIMITED'
   | 'NO_WINDOW'
+  | 'PERMISSION_DENIED'
   | 'INTERNAL_ERROR';
 
 export interface IpcError {
@@ -113,8 +140,7 @@ export const CONTEXT_MENU_COMMANDS = {
   move: 'move',
 } as const;
 
-export type ContextMenuCommand =
-  (typeof CONTEXT_MENU_COMMANDS)[keyof typeof CONTEXT_MENU_COMMANDS];
+export type ContextMenuCommand = (typeof CONTEXT_MENU_COMMANDS)[keyof typeof CONTEXT_MENU_COMMANDS];
 
 export interface ContextMenuPopupMiddleItemPayload {
   itemId: string;
@@ -176,6 +202,66 @@ export interface StorageRootStatus {
   isDefault: boolean;
 }
 
+export type CloseBehavior = 'hide' | 'quit';
+
+export interface CloseBehaviorStatus {
+  behavior: CloseBehavior;
+  closeToTrayHintShown: boolean;
+}
+
+export interface CloseBehaviorSetPayload {
+  behavior: CloseBehavior;
+}
+
+export interface FileDialogFilter {
+  name: string;
+  extensions: string[];
+}
+
+export interface FileAccessShowOpenDialogPayload {
+  title?: string | null;
+  filters?: FileDialogFilter[] | null;
+}
+
+export type FileAccessShowOpenDialogResult =
+  | { kind: 'cancelled' }
+  | {
+      kind: 'granted';
+      grantId: string;
+      filePath: string;
+      fileName: string;
+    };
+
+export interface FileAccessShowSaveDialogPayload {
+  title?: string | null;
+  defaultPath?: string | null;
+  filters?: FileDialogFilter[] | null;
+}
+
+export type FileAccessShowSaveDialogResult =
+  | { kind: 'cancelled' }
+  | {
+      kind: 'granted';
+      grantId: string;
+      filePath: string;
+      fileName: string;
+    };
+
+export interface FileAccessReadTextFilePayload {
+  grantId: string;
+  filePath: string;
+}
+
+export interface FileAccessReadTextFileResult {
+  content: string;
+}
+
+export interface FileAccessWriteTextFilePayload {
+  grantId: string;
+  filePath: string;
+  content: string;
+}
+
 export type GlobalSearchEntityKind =
   | 'memo'
   | 'note'
@@ -232,6 +318,50 @@ export type StorageRootChooseAndMigrateResult =
       };
       restartRequired: true;
     };
+
+export type NotesScope = 'timeline' | 'inbox' | 'trash';
+
+export type NotesProvider = 'memos' | 'flow_notes';
+
+export type NotesSyncStatus =
+  | 'LOCAL_ONLY'
+  | 'DIRTY'
+  | 'SYNCING'
+  | 'SYNCED'
+  | 'FAILED'
+  | 'UNKNOWN'
+  | null;
+
+export interface NotesListItemsPayload {
+  scope: NotesScope;
+  page: number;
+  pageSize: number;
+}
+
+export interface NotesIdPayload {
+  id: string;
+  provider: NotesProvider;
+}
+
+export interface NotesListItem {
+  id: string;
+  provider: NotesProvider;
+  title: string;
+  preview: string;
+  updatedAtMs: number;
+  syncStatus: NotesSyncStatus;
+}
+
+export interface NotesListItemsResult {
+  items: NotesListItem[];
+  hasMore: boolean;
+}
+
+export type NotesDeleteResult = IpcVoid;
+
+export type NotesRestoreResult = IpcVoid;
+
+export type NotesHardDeleteResult = IpcVoid;
 
 export type DiagnosticsNotesProvider = 'memos' | 'flow_notes' | null;
 

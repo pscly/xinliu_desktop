@@ -1,3 +1,5 @@
+import type { CloseBehavior } from '../../shared/ipc';
+
 export interface CloseEventLike {
   preventDefault: () => void;
 }
@@ -9,11 +11,19 @@ export interface CloseToTrayWindowLike {
 export interface CloseToTrayController {
   requestExit: () => void;
   isExitRequested: () => boolean;
+
+  setCloseBehavior: (behavior: CloseBehavior) => void;
+  getCloseBehavior: () => CloseBehavior;
+
+  setCloseToTrayHintShown: (shown: boolean) => void;
+  resetCloseToTrayHint: () => void;
+
   handleWindowClose: (
     event: CloseEventLike,
     win: CloseToTrayWindowLike,
     options?: {
       onFirstCloseToTrayHint?: () => void | Promise<void>;
+      onCloseToQuit?: () => void | Promise<void>;
     }
   ) => void;
 }
@@ -21,14 +31,38 @@ export interface CloseToTrayController {
 export function createCloseToTrayController(): CloseToTrayController {
   let exitRequested = false;
   let hintedOnce = false;
+  let closeBehavior: CloseBehavior = 'hide';
 
   return {
     requestExit: () => {
       exitRequested = true;
     },
     isExitRequested: () => exitRequested,
+    setCloseBehavior: (behavior) => {
+      closeBehavior = behavior;
+    },
+    getCloseBehavior: () => closeBehavior,
+    setCloseToTrayHintShown: (shown) => {
+      hintedOnce = shown;
+    },
+    resetCloseToTrayHint: () => {
+      hintedOnce = false;
+    },
     handleWindowClose: (event, win, options) => {
       if (exitRequested) {
+        return;
+      }
+
+      if (closeBehavior === 'quit') {
+        exitRequested = true;
+        const onCloseToQuit = options?.onCloseToQuit;
+        if (!onCloseToQuit) {
+          return;
+        }
+        try {
+          const result = onCloseToQuit();
+          void Promise.resolve(result);
+        } catch {}
         return;
       }
 
@@ -47,8 +81,7 @@ export function createCloseToTrayController(): CloseToTrayController {
       try {
         const result = hint();
         void Promise.resolve(result);
-      } catch {
-      }
+      } catch {}
     },
   };
 }

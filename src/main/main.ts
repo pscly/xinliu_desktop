@@ -32,23 +32,27 @@ import {
   runCleanupHooks,
 } from './tray/trayManager';
 
-import {
-  readStorageRootStatus,
-  writeStorageRootConfig,
-} from './storageRoot/storageRootConfig';
+import { readStorageRootStatus, writeStorageRootConfig } from './storageRoot/storageRootConfig';
 import { migrateStorageRoot } from './storageRoot/migrateStorageRoot';
 import { installMemoResProtocol } from './protocol/memoResProtocol';
 import { resolveMainDbFileAbsPath } from './db/paths';
 import { openSqliteDatabase, closeSqliteDatabase } from './db/sqlite';
 import { applyMigrations } from './db/migrations';
 import { createDiagnosticsController } from './diagnostics/diagnosticsController';
-import {
-  popupFolderContextMenu,
-  popupMiddleItemContextMenu,
-} from './menu/contextMenu';
+import { popupFolderContextMenu, popupMiddleItemContextMenu } from './menu/contextMenu';
 import { queryGlobalSearch, rebuildGlobalSearchIndex } from './search/globalSearch';
+import { createPathGate } from './pathGate/pathGate';
+import {
+  readCloseBehaviorStatus,
+  writeCloseBehavior,
+  writeCloseToTrayHintShown,
+} from './userSettings/closeBehaviorSettings';
 
 const closeToTray = createCloseToTrayController();
+
+type WithMainDb = <T>(run: (db: Database.Database) => T) => T;
+
+let withMainDbRef: WithMainDb | null = null;
 
 let mainWindow: BrowserWindow | null = null;
 let trayManager: ReturnType<typeof installTrayManager> | null = null;
@@ -83,11 +87,23 @@ function createMainWindow(): BrowserWindow {
   void win.loadFile(indexHtmlPath);
 
   win.on('close', (event) => {
-    closeToTray.handleWindowClose(event, {
-      hide: () => win.hide(),
-    }, {
-      onFirstCloseToTrayHint: () => showFirstCloseToTrayHintOncePerRun(),
-    });
+    closeToTray.handleWindowClose(
+      event,
+      {
+        hide: () => win.hide(),
+      },
+      {
+        onCloseToQuit: () => app.quit(),
+        onFirstCloseToTrayHint: () => {
+          try {
+            withMainDbRef?.((db) => writeCloseToTrayHintShown(db, true));
+          } catch (error) {
+            console.warn(String(error));
+          }
+          showFirstCloseToTrayHintOncePerRun();
+        },
+      }
+    );
   });
 
   win.on('closed', () => {
@@ -178,7 +194,9 @@ app.whenReady().then(async () => {
               LIMIT 1
             `
           )
-          .get(cacheKey) as { cache_relpath?: string | null; local_relpath?: string | null } | undefined;
+          .get(cacheKey) as
+          | { cache_relpath?: string | null; local_relpath?: string | null }
+          | undefined;
 
         const cacheRelpath = typeof row?.cache_relpath === 'string' ? row.cache_relpath.trim() : '';
         if (cacheRelpath.length > 0) {
@@ -196,8 +214,7 @@ app.whenReady().then(async () => {
       } finally {
         try {
           db?.close();
-        } catch {
-        }
+        } catch {}
       }
     },
     reportCacheKeyAccessed: async (cacheKey) => {
@@ -231,8 +248,7 @@ app.whenReady().then(async () => {
       } finally {
         try {
           db?.close();
-        } catch {
-        }
+        } catch {}
       }
     },
     readFile: (absPath) => fs.readFile(absPath),
@@ -290,7 +306,9 @@ app.whenReady().then(async () => {
 
   const diagnostics = createDiagnosticsController();
 
-  const withMainDb = <T>(run: (db: Database.Database) => T): T => {
+  const pathGate = createPathGate();
+
+  const withMainDb: WithMainDb = <T>(run: (db: Database.Database) => T): T => {
     const dbFileAbsPath = resolveMainDbFileAbsPath(storageRootStatus.storageRootAbsPath);
     const { db } = openSqliteDatabase({
       dbFileAbsPath,
@@ -304,9 +322,22 @@ app.whenReady().then(async () => {
     }
   };
 
+  withMainDbRef = withMainDb;
+
+  const initialCloseBehaviorStatus = (() => {
+    try {
+      return withMainDb((db) => readCloseBehaviorStatus(db));
+    } catch (error) {
+      console.warn(String(error));
+      return { behavior: 'hide' as const, closeToTrayHintShown: false };
+    }
+  })();
+
+  closeToTray.setCloseBehavior(initialCloseBehaviorStatus.behavior);
+  closeToTray.setCloseToTrayHintShown(initialCloseBehaviorStatus.closeToTrayHintShown);
+
   registerIpcHandlers(ipcMain, {
-    getWindowForSender: (sender) =>
-      BrowserWindow.fromWebContents(sender as WebContents),
+    getWindowForSender: (sender) => BrowserWindow.fromWebContents(sender as WebContents),
     quickCapture: {
       open: () => quickCaptureController.open(),
       hide: () => quickCaptureController.hide(),
@@ -382,8 +413,55 @@ app.whenReady().then(async () => {
         app.exit(0);
       },
     },
+    closeBehavior: {
+      getStatus: () => {
+        try {
+          return withMainDb((db) => readCloseBehaviorStatus(db));
+        } catch (error) {
+          console.warn(String(error));
+          return { behavior: 'hide', closeToTrayHintShown: false };
+        }
+      },
+      setBehavior: ({ behavior }) => {
+        try {
+          withMainDb((db) => writeCloseBehavior(db, behavior));
+        } catch (error) {
+          console.warn(String(error));
+        }
+        closeToTray.setCloseBehavior(behavior);
+      },
+      resetCloseToTrayHint: () => {
+        try {
+          withMainDb((db) => writeCloseToTrayHintShown(db, false));
+        } catch (error) {
+          console.warn(String(error));
+        }
+        closeToTray.resetCloseToTrayHint();
+      },
+    },
     diagnostics: {
       getStatus: () => diagnostics.getStatus(),
+    },
+    pathGate,
+    fileAccess: {
+      showOpenDialog: async ({ win, title, filters }) => {
+        const picked = await dialog.showOpenDialog(win as BrowserWindow, {
+          title: title ?? undefined,
+          filters: filters ?? undefined,
+          properties: ['openFile'],
+        });
+        return { canceled: picked.canceled, filePaths: picked.filePaths };
+      },
+      showSaveDialog: async ({ win, title, defaultPath, filters }) => {
+        const picked = await dialog.showSaveDialog(win as BrowserWindow, {
+          title: title ?? undefined,
+          defaultPath: defaultPath ?? undefined,
+          filters: filters ?? undefined,
+        });
+        return { canceled: picked.canceled, filePath: picked.filePath };
+      },
+      readTextFile: (fileAbsPath) => fs.readFile(fileAbsPath, 'utf-8'),
+      writeTextFile: (fileAbsPath, content) => fs.writeFile(fileAbsPath, content, 'utf-8'),
     },
     contextMenu: {
       popupMiddleItem: ({ win, itemId }) =>
@@ -399,9 +477,7 @@ app.whenReady().then(async () => {
 
   ensureMainWindow();
 
-  const exitCleanupHooks: CleanupHook[] = [
-    () => quickCaptureWindowManager.destroy(),
-  ];
+  const exitCleanupHooks: CleanupHook[] = [() => quickCaptureWindowManager.destroy()];
 
   const onSyncNowMemos = async () => undefined;
   const onSyncNowFlow = async () => undefined;
@@ -415,8 +491,7 @@ app.whenReady().then(async () => {
       return {
         setToolTip: (tooltip) => tray.setToolTip(tooltip),
         setContextMenu: (menu) => tray.setContextMenu(menu as Menu | null),
-        on: (eventName, listener) =>
-          tray.on(eventName as never, listener as never),
+        on: (eventName, listener) => tray.on(eventName as never, listener as never),
         destroy: () => tray.destroy(),
       };
     },

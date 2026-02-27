@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
+  CloseBehaviorStatus,
   ContextMenuDidSelectPayload,
   DiagnosticsStatus,
   SearchQueryResult,
@@ -33,6 +34,7 @@ const ROUTES: RouteMeta[] = [
 type XinliuWindowApi = NonNullable<Window['xinliu']>['window'];
 type XinliuShortcutsApi = NonNullable<Window['xinliu']>['shortcuts'];
 type XinliuStorageRootApi = NonNullable<Window['xinliu']>['storageRoot'];
+type XinliuCloseBehaviorApi = NonNullable<Window['xinliu']>['closeBehavior'];
 type XinliuDiagnosticsApi = NonNullable<Window['xinliu']>['diagnostics'];
 type XinliuContextMenuApi = NonNullable<Window['xinliu']>['contextMenu'];
 type XinliuSearchApi = NonNullable<Window['xinliu']>['search'];
@@ -47,6 +49,10 @@ function getXinliuShortcutsApi(): XinliuShortcutsApi | undefined {
 
 function getXinliuStorageRootApi(): XinliuStorageRootApi | undefined {
   return window.xinliu?.storageRoot;
+}
+
+function getXinliuCloseBehaviorApi(): XinliuCloseBehaviorApi | undefined {
+  return window.xinliu?.closeBehavior;
 }
 
 function getXinliuDiagnosticsApi(): XinliuDiagnosticsApi | undefined {
@@ -142,8 +148,7 @@ async function safeCopyTextToClipboard(text: string): Promise<void> {
       await clipboard.writeText(raw);
       return;
     }
-  } catch {
-  }
+  } catch {}
 
   try {
     const ta = document.createElement('textarea');
@@ -157,8 +162,7 @@ async function safeCopyTextToClipboard(text: string): Promise<void> {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-  } catch {
-  }
+  } catch {}
 }
 
 function Icon({ name }: { name: 'min' | 'max' | 'close' }) {
@@ -295,10 +299,7 @@ function ShortcutStatusBadge({ entry }: { entry: ShortcutStatusEntry }) {
         : 'badge';
 
   return (
-    <span
-      className={cls}
-      data-testid={`settings-shortcut-${entry.id}-status`}
-    >
+    <span className={cls} data-testid={`settings-shortcut-${entry.id}-status`}>
       {text}
     </span>
   );
@@ -308,7 +309,10 @@ function SettingsShortcutsSection(props: {
   status: ShortcutsStatus | null;
   error: string | null;
   draft: Record<string, { accelerator: string; enabled: boolean }>;
-  onUpdateDraft: (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => void;
+  onUpdateDraft: (
+    id: ShortcutId,
+    patch: Partial<{ accelerator: string; enabled: boolean }>
+  ) => void;
   onSaveOne: (id: ShortcutId) => void;
   onResetOne: (id: ShortcutId) => void;
   onResetAll: () => void;
@@ -329,7 +333,10 @@ function SettingsShortcutsSection(props: {
 
       <div className="settingsList">
         {(props.status?.entries ?? []).map((entry) => {
-          const current = props.draft[entry.id] ?? { accelerator: entry.accelerator, enabled: entry.enabled };
+          const current = props.draft[entry.id] ?? {
+            accelerator: entry.accelerator,
+            enabled: entry.enabled,
+          };
 
           return (
             <div
@@ -375,7 +382,11 @@ function SettingsShortcutsSection(props: {
                   <button type="button" className="btn" onClick={() => props.onSaveOne(entry.id)}>
                     保存
                   </button>
-                  <button type="button" className="btn btnGhost" onClick={() => props.onResetOne(entry.id)}>
+                  <button
+                    type="button"
+                    className="btn btnGhost"
+                    onClick={() => props.onResetOne(entry.id)}
+                  >
                     默认
                   </button>
                 </div>
@@ -395,17 +406,25 @@ function SettingsContent(props: {
   storageRootStatus: StorageRootStatus | null;
   storageRootError: string | null;
   storageRootApiAvailable: boolean;
+  closeBehaviorStatus: CloseBehaviorStatus | null;
+  closeBehaviorError: string | null;
+  closeBehaviorApiAvailable: boolean;
   diagnosticsStatus: DiagnosticsStatus | null;
   diagnosticsError: string | null;
   diagnosticsApiAvailable: boolean;
   storageRootRestartRequired: boolean;
   storageRootLastMigration: (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null;
-  onUpdateDraft: (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => void;
+  onUpdateDraft: (
+    id: ShortcutId,
+    patch: Partial<{ accelerator: string; enabled: boolean }>
+  ) => void;
   onSaveOne: (id: ShortcutId) => void;
   onResetOne: (id: ShortcutId) => void;
   onResetAll: () => void;
   onChooseAndMigrateStorageRoot: () => void;
   onRestartNow: () => void;
+  onSetCloseBehavior: (behavior: 'hide' | 'quit') => void;
+  onResetCloseToTrayHint: () => void;
 }) {
   return (
     <div className="contentPlaceholder">
@@ -415,6 +434,13 @@ function SettingsContent(props: {
       </div>
 
       <div className="settingsStack">
+        <SettingsCloseBehaviorSection
+          status={props.closeBehaviorStatus}
+          error={props.closeBehaviorError}
+          apiAvailable={props.closeBehaviorApiAvailable}
+          onSetBehavior={props.onSetCloseBehavior}
+          onResetHint={props.onResetCloseToTrayHint}
+        />
         <SettingsStorageRootSection
           status={props.storageRootStatus}
           error={props.storageRootError}
@@ -488,7 +514,8 @@ function SettingsStorageRootSection(props: {
           <div>目录迁移已完成。为确保所有文件句柄正确释放，请重启应用后继续使用。</div>
           {props.lastMigration ? (
             <div className="fine">
-              迁移：{props.lastMigration.oldStorageRootAbsPath} → {props.lastMigration.newStorageRootAbsPath}
+              迁移：{props.lastMigration.oldStorageRootAbsPath} →{' '}
+              {props.lastMigration.newStorageRootAbsPath}
             </div>
           ) : null}
           <div className="btnRow">
@@ -498,6 +525,86 @@ function SettingsStorageRootSection(props: {
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function SettingsCloseBehaviorSection(props: {
+  status: CloseBehaviorStatus | null;
+  error: string | null;
+  apiAvailable: boolean;
+  onSetBehavior: (behavior: 'hide' | 'quit') => void;
+  onResetHint: () => void;
+}) {
+  const current = props.status?.behavior ?? 'hide';
+  const hintShown = props.status?.closeToTrayHintShown ?? false;
+
+  return (
+    <section className="settingsSection" data-testid="settings-close-behavior">
+      <div className="settingsSectionHeader">
+        <div>
+          <div className="settingsSectionTitle">关闭行为</div>
+          <div className="settingsSectionSub">点击窗口关闭按钮时的动作：隐藏到托盘，或真正退出</div>
+        </div>
+      </div>
+
+      <div className="rightCardBody">
+        <div className="kvRow">
+          <div className="k">当前行为</div>
+          <div className="v">{current === 'quit' ? '真正退出' : '关闭到托盘'}</div>
+        </div>
+
+        <div className="kvRow">
+          <div className="k">选择</div>
+          <div className="v">
+            <label style={{ marginRight: 12 }}>
+              <input
+                type="radio"
+                name="closeBehavior"
+                checked={current === 'hide'}
+                onChange={() => props.onSetBehavior('hide')}
+                disabled={!props.apiAvailable}
+                data-testid="close-behavior-hide"
+              />{' '}
+              关闭到托盘
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="closeBehavior"
+                checked={current === 'quit'}
+                onChange={() => props.onSetBehavior('quit')}
+                disabled={!props.apiAvailable}
+                data-testid="close-behavior-quit"
+              />{' '}
+              真正退出
+            </label>
+          </div>
+        </div>
+
+        <div className="kvRow">
+          <div className="k">首次关闭提示</div>
+          <div className="v">
+            {hintShown ? '已展示' : '未展示'}
+            <button
+              type="button"
+              className="btn btnGhost"
+              style={{ marginLeft: 8 }}
+              onClick={() => props.onResetHint()}
+              disabled={!props.apiAvailable}
+              data-testid="close-to-tray-hint-reset"
+            >
+              重置
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {!props.apiAvailable ? (
+        <div className="callout calloutWarn">关闭行为 API 不可用（preload 未注入）</div>
+      ) : null}
+
+      {props.error ? <div className="callout calloutWarn">{props.error}</div> : null}
     </section>
   );
 }
@@ -520,9 +627,7 @@ function SettingsDiagnosticsSection(props: {
           : '-';
 
   const degradeReason =
-    props.status?.notesProviderKind === 'fallback'
-      ? (props.status.lastDegradeReason ?? '-')
-      : '-';
+    props.status?.notesProviderKind === 'fallback' ? (props.status.lastDegradeReason ?? '-') : '-';
 
   const memosRequestId = props.status?.lastRequestIds.memos_request_id ?? null;
   const flowRequestId = props.status?.lastRequestIds.flow_request_id ?? null;
@@ -621,7 +726,9 @@ function DefaultRoutePlaceholder(props: {
         </div>
         <div className="contentCard">
           <div className="contentCardTitle">下一步</div>
-          <div className="contentCardBody">按路由逐个落地 Notes/Collections/Todo/设置/冲突页面。</div>
+          <div className="contentCardBody">
+            按路由逐个落地 Notes/Collections/Todo/设置/冲突页面。
+          </div>
         </div>
       </div>
 
@@ -701,42 +808,42 @@ function GlobalSearchBox() {
 
   const runQuery = useCallback(
     async (options: { query: string; page: number; append: boolean }) => {
-    const api = getXinliuSearchApi();
-    const fn = api?.query;
-    if (typeof fn !== 'function') {
-      setError('搜索能力不可用（preload 未注入）');
-      setItems([]);
-      setLastResult(null);
-      return;
-    }
-
-    const q = options.query.trim();
-    if (q.length === 0) {
-      setError(null);
-      setItems([]);
-      setLastResult(null);
-      return;
-    }
-
-      setLoading(true);
-      setError(null);
-      try {
-      const res = await fn({ query: q, page: options.page, pageSize: 20 });
-      if (!res.ok) {
-        setError(`搜索失败：${res.error.code}`);
+      const api = getXinliuSearchApi();
+      const fn = api?.query;
+      if (typeof fn !== 'function') {
+        setError('搜索能力不可用（preload 未注入）');
         setItems([]);
         setLastResult(null);
         return;
       }
-      setLastResult(res.value);
-      setItems((prev) => (options.append ? [...prev, ...res.value.items] : res.value.items));
-    } catch (e) {
-      setError(`搜索异常：${String(e)}`);
-      setItems([]);
-      setLastResult(null);
-    } finally {
-      setLoading(false);
-    }
+
+      const q = options.query.trim();
+      if (q.length === 0) {
+        setError(null);
+        setItems([]);
+        setLastResult(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fn({ query: q, page: options.page, pageSize: 20 });
+        if (!res.ok) {
+          setError(`搜索失败：${res.error.code}`);
+          setItems([]);
+          setLastResult(null);
+          return;
+        }
+        setLastResult(res.value);
+        setItems((prev) => (options.append ? [...prev, ...res.value.items] : res.value.items));
+      } catch (e) {
+        setError(`搜索异常：${String(e)}`);
+        setItems([]);
+        setLastResult(null);
+      } finally {
+        setLoading(false);
+      }
     },
     []
   );
@@ -814,9 +921,7 @@ function GlobalSearchBox() {
         {items.length > 0 ? (
           <ul className="searchResults">
             {items.map((item) => {
-              const secondary = item.matchSnippet?.trim().length
-                ? item.matchSnippet
-                : item.preview;
+              const secondary = item.matchSnippet?.trim().length ? item.matchSnippet : item.preview;
               return (
                 <li key={`${item.kind}:${item.id}`} className="searchResultRow">
                   <div className="searchResultTop">
@@ -868,6 +973,9 @@ function MainWindowApp() {
     (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null
   >(null);
 
+  const [closeBehaviorStatus, setCloseBehaviorStatus] = useState<CloseBehaviorStatus | null>(null);
+  const [closeBehaviorError, setCloseBehaviorError] = useState<string | null>(null);
+
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<DiagnosticsStatus | null>(null);
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
 
@@ -898,9 +1006,7 @@ function MainWindowApp() {
       ];
     }
     if (route === 'collections') {
-      return [
-        { id: 'col_1', title: '示例条目：收藏夹', sub: '右键：打开 / 移动到 / 删除 / 导出' },
-      ];
+      return [{ id: 'col_1', title: '示例条目：收藏夹', sub: '右键：打开 / 移动到 / 删除 / 导出' }];
     }
     if (route === 'todo') {
       return [
@@ -909,7 +1015,11 @@ function MainWindowApp() {
     }
     if (route === 'conflicts') {
       return [
-        { id: 'conflict_1', title: '示例冲突：标题不一致', sub: '右键：打开 / 移动到 / 删除 / 导出' },
+        {
+          id: 'conflict_1',
+          title: '示例冲突：标题不一致',
+          sub: '右键：打开 / 移动到 / 删除 / 导出',
+        },
       ];
     }
     return [];
@@ -978,7 +1088,29 @@ function MainWindowApp() {
     setDiagnosticsStatus(res.value);
   };
 
-  const updateDraft = (id: ShortcutId, patch: Partial<{ accelerator: string; enabled: boolean }>) => {
+  const refreshCloseBehavior = async () => {
+    const api = getXinliuCloseBehaviorApi();
+    if (!api) {
+      setCloseBehaviorStatus(null);
+      setCloseBehaviorError('关闭行为 API 不可用（preload 未注入）');
+      return;
+    }
+
+    const res = await api.getStatus();
+    if (!res.ok) {
+      setCloseBehaviorStatus(null);
+      setCloseBehaviorError(`${res.error.message}（${res.error.code}）`);
+      return;
+    }
+
+    setCloseBehaviorError(null);
+    setCloseBehaviorStatus(res.value);
+  };
+
+  const updateDraft = (
+    id: ShortcutId,
+    patch: Partial<{ accelerator: string; enabled: boolean }>
+  ) => {
     setShortcutsDraft((prev) => {
       const current = prev[id] ?? { accelerator: '', enabled: true };
       return { ...prev, [id]: { ...current, ...patch } };
@@ -1035,7 +1167,52 @@ function MainWindowApp() {
 
   const openSettingsRoute = () => {
     setRoute('settings');
-    void Promise.all([refreshShortcuts(), refreshStorageRoot(), refreshDiagnostics()]);
+    void Promise.all([
+      refreshShortcuts(),
+      refreshStorageRoot(),
+      refreshDiagnostics(),
+      refreshCloseBehavior(),
+    ]);
+  };
+
+  const setCloseBehavior = async (behavior: 'hide' | 'quit') => {
+    const api = getXinliuCloseBehaviorApi();
+    const fn = api?.setBehavior;
+    if (typeof fn !== 'function') {
+      setCloseBehaviorError('关闭行为 API 不可用（preload 未注入）');
+      return;
+    }
+    try {
+      const res = await fn({ behavior });
+      if (!res.ok) {
+        setCloseBehaviorError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setCloseBehaviorError(null);
+      void refreshCloseBehavior();
+    } catch (e) {
+      setCloseBehaviorError(`设置关闭行为异常：${String(e)}`);
+    }
+  };
+
+  const resetCloseToTrayHint = async () => {
+    const api = getXinliuCloseBehaviorApi();
+    const fn = api?.resetCloseToTrayHint;
+    if (typeof fn !== 'function') {
+      setCloseBehaviorError('关闭行为 API 不可用（preload 未注入）');
+      return;
+    }
+    try {
+      const res = await fn();
+      if (!res.ok) {
+        setCloseBehaviorError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setCloseBehaviorError(null);
+      void refreshCloseBehavior();
+    } catch (e) {
+      setCloseBehaviorError(`重置提示异常：${String(e)}`);
+    }
   };
 
   const chooseAndMigrateStorageRoot = async () => {
@@ -1056,7 +1233,10 @@ function MainWindowApp() {
       if (res.value.kind === 'migrated') {
         setStorageRootLastMigration(res.value);
         setStorageRootRestartRequired(true);
-        setStorageRootStatus({ storageRootAbsPath: res.value.newStorageRootAbsPath, isDefault: false });
+        setStorageRootStatus({
+          storageRootAbsPath: res.value.newStorageRootAbsPath,
+          isDefault: false,
+        });
       }
     } catch (e) {
       setStorageRootError(`更改目录异常：${String(e)}`);
@@ -1151,11 +1331,7 @@ function MainWindowApp() {
           </div>
         </aside>
 
-        <section
-          className="pane paneMiddle"
-          data-testid="triptych-middle"
-          aria-label="中栏"
-        >
+        <section className="pane paneMiddle" data-testid="triptych-middle" aria-label="中栏">
           <div className="paneHeader">
             <div className="paneTitle">{routeMeta.label}</div>
             <div className="paneSub">{routeMeta.hint}</div>
@@ -1169,6 +1345,9 @@ function MainWindowApp() {
               storageRootStatus={storageRootStatus}
               storageRootError={storageRootError}
               storageRootApiAvailable={Boolean(getXinliuStorageRootApi())}
+              closeBehaviorStatus={closeBehaviorStatus}
+              closeBehaviorError={closeBehaviorError}
+              closeBehaviorApiAvailable={Boolean(getXinliuCloseBehaviorApi())}
               diagnosticsStatus={diagnosticsStatus}
               diagnosticsError={diagnosticsError}
               diagnosticsApiAvailable={Boolean(getXinliuDiagnosticsApi())}
@@ -1180,6 +1359,8 @@ function MainWindowApp() {
               onResetAll={() => void resetAll()}
               onChooseAndMigrateStorageRoot={() => void chooseAndMigrateStorageRoot()}
               onRestartNow={() => void restartNow()}
+              onSetCloseBehavior={(behavior) => void setCloseBehavior(behavior)}
+              onResetCloseToTrayHint={() => void resetCloseToTrayHint()}
             />
           ) : (
             <DefaultRoutePlaceholder

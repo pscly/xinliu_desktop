@@ -2,11 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  createCloseToTrayController,
-  installTrayManager,
-  runCleanupHooks,
-} from './trayManager';
+import { createCloseToTrayController, installTrayManager, runCleanupHooks } from './trayManager';
 
 import type { TrayLike, TrayMenuTemplateItem } from './trayManager';
 
@@ -51,6 +47,44 @@ describe('src/main/tray/trayManager', () => {
     expect(event2.preventDefault).toHaveBeenCalledOnce();
     expect(win2.hide).toHaveBeenCalledOnce();
     expect(hint).toHaveBeenCalledOnce();
+  });
+
+  it('窗口 close 事件：closeBehavior=quit 时不 hide 且触发 onCloseToQuit', () => {
+    const controller = createCloseToTrayController();
+    controller.setCloseBehavior('quit');
+
+    const event = { preventDefault: vi.fn() };
+    const win = { hide: vi.fn() };
+    const onCloseToQuit = vi.fn();
+
+    controller.handleWindowClose(event, win, { onCloseToQuit });
+
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(win.hide).not.toHaveBeenCalled();
+    expect(onCloseToQuit).toHaveBeenCalledOnce();
+    expect(controller.isExitRequested()).toBe(true);
+  });
+
+  it('resetCloseToTrayHint：重置后提示可再次触发', () => {
+    const controller = createCloseToTrayController();
+
+    const hint = vi.fn();
+
+    const event1 = { preventDefault: vi.fn() };
+    const win1 = { hide: vi.fn() };
+    controller.handleWindowClose(event1, win1, { onFirstCloseToTrayHint: hint });
+
+    const event2 = { preventDefault: vi.fn() };
+    const win2 = { hide: vi.fn() };
+    controller.handleWindowClose(event2, win2, { onFirstCloseToTrayHint: hint });
+
+    controller.resetCloseToTrayHint();
+
+    const event3 = { preventDefault: vi.fn() };
+    const win3 = { hide: vi.fn() };
+    controller.handleWindowClose(event3, win3, { onFirstCloseToTrayHint: hint });
+
+    expect(hint).toHaveBeenCalledTimes(2);
   });
 
   it('托盘 Exit：触发后必须执行所有 cleanup hooks', async () => {

@@ -1,0 +1,43 @@
+Task 54 - 路径权限门（open/save 对话框授权 + renderer 禁止任意绝对路径 IO）
+
+IPC 通道（白名单，静态可枚举）
+- src/shared/ipc.ts
+  - xinliu:fileAccess:showOpenDialog
+  - xinliu:fileAccess:showSaveDialog
+  - xinliu:fileAccess:readTextFile
+  - xinliu:fileAccess:writeTextFile
+
+拒绝策略（关键入口与裁决点）
+- main handler：src/main/ipc.ts
+  - showOpenDialog/showSaveDialog：
+    - 仅 main 调用 deps.fileAccess.showOpenDialog/showSaveDialog（系统对话框）。
+    - cancelled -> { kind: 'cancelled' }
+    - granted -> deps.pathGate.createGrant('read'|'write', fileAbsPath) 创建一次性 grantId，并返回 { kind:'granted', grantId, filePath, fileName }
+  - readTextFile/writeTextFile：
+    - renderer payload 必须带 grantId + filePath (+ content)。
+    - main 侧用 deps.pathGate.consumeGrant({ grantId, kind, fileAbsPath: filePath }) 验证；失败一律返回 PERMISSION_DENIED（中文 message，不泄漏系统细节）。
+    - 校验通过后才调用 deps.fileAccess.readTextFile/writeTextFile。
+
+一次性授权（one-shot）纯逻辑模块
+- src/main/pathGate/pathGate.ts
+  - createGrant: 创建 grant（带过期时间）
+  - consumeGrant: 校验 kind + 路径匹配后消费并立即失效（不可复用）
+
+强制测试覆盖点（未授权绝对路径必须拒绝）
+- src/main/ipc.test.ts
+  - 用例：IPC 权限门：未授权的绝对路径写入必须拒绝
+  - 调用：handler(IPC_CHANNELS.fileAccess.writeTextFile)
+  - 入参：{ grantId: 'bad', filePath: '/etc/passwd', content: 'x' }
+  - 断言：ok:false 且 error.code === 'PERMISSION_DENIED'
+
+额外单测（路径门基础语义）
+- src/main/pathGate/pathGate.test.ts
+  - 拒绝 /etc/passwd
+  - 拒绝 C:\\Windows\\System32\\drivers\\etc\\hosts
+  - one-shot：消费成功后再次消费 -> NOT_FOUND
+  - 过期 -> EXPIRED
+
+验证命令（Node 20）
+- source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm run typecheck  -> PASS
+- source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test          -> PASS (112 tests)
+- source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm run build      -> PASS

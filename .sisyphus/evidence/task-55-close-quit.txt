@@ -1,0 +1,17 @@
+Task 55 证据：用户切换为 close->quit（真正退出）
+
+场景说明：
+- 用户在设置中选择“真正退出”后，窗口 close 事件不再 hide；会触发 onCloseToQuit（对应主进程 app.quit 语义）。
+
+对应单测名称：
+- 窗口 close 事件：closeBehavior=quit 时不 hide 且触发 onCloseToQuit
+
+验证命令：
+- source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- src/main/tray/trayManager.test.ts
+
+命令输出片段：
+Now using node v20.20.0 (npm v10.8.2)
+> vitest run src/main/tray/trayManager.test.ts
+✓ src/main/tray/trayManager.test.ts (5 tests)
+Test Files  1 passed (1)
+Tests       5 passed (5)
