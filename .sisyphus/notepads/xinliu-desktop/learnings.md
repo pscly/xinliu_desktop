@@ -194,4 +194,35 @@
   - FTS 路径：往 memos 连续插入 25+ 条含关键词的数据，断言第一页 20 条 + hasMore=true，再断言第二页与第一页不重叠；再断言 snippet 含 `<mark>`（证明走了 FTS snippet）。
   - 降级路径：只 apply 到 v6（不建 FTS 表），或者 drop FTS 表，然后断言 mode='fallback' 且 ftsAvailable=false。
 
+- [2026-02-26] 回退 `src/renderer/App.tsx`：撤销未完成的大改动，避免引用 `../shared/ipc` 中不存在的类型与 `window.xinliu` 未注入字段，优先恢复到当前代码库已支持的 UI 壳/路由占位版本（验证：`source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm run typecheck`）。
+
+## [2026-02-26] - IPC Notes 通道（main 注册 + 白名单测试同步）
+
+- 新增 `IPC_CHANNELS.notes.*` 后，main 侧必须在 `registerIpcHandlers()` 显式逐条 `ipcMain.handle(...)` 注册；同时要同步更新 `src/main/ipc.test.ts` 的 expected 列表，否则白名单等值断言会失败。
+- notes deps 建议保持可选（`deps.notes?`），避免迫使改动其它 call site；当 `deps.notes` 缺失时，handler 应返回稳定的 `INTERNAL_ERROR` 与可解释 message（例如 `Notes 未实现`），而不是静默 no-op。
+- payload 校验要在 main 侧完成：例如 listItems 的 `scope` 强约束 + `page/pageSize` 整数与上限（<=200），以及 id payload 的 `provider` 值域（`memos/flow_notes`）与 `id` 非空。
+
+## [2026-02-27] - Task 54 路径权限门（对话框授权 + one-shot grant）落地模式
+
+- IPC 合同分两段：
+  - `showOpenDialog/showSaveDialog` 只负责让 main 调系统对话框并返回一次性 `grantId`（renderer 不拿“永久写入权限”）。
+  - `readTextFile/writeTextFile` 必须携带 `grantId + filePath`，main 侧以 `consumeGrant` 再次校验“本次授权结果”，失败统一 `PERMISSION_DENIED`。
+- 纯逻辑授权模块建议独立成 main-side 可测单元：`src/main/pathGate/pathGate.ts`，对 posix/win32 绝对路径都能做“等价比对 + one-shot 消费 + ttl 过期”。
+- 白名单测试要同步：新增 `IPC_CHANNELS.fileAccess.*` 后，`src/main/ipc.test.ts` 的 expected 列表必须追加 `...Object.values(IPC_CHANNELS.fileAccess)`，否则会在“静态可枚举”断言处失败。
+
+## [2026-02-27] - Task 55 关闭行为设置
+
+- 持久化 key：
+  - `desktop.close_behavior`（value_json 推荐 `{ "behavior": "hide"|"quit" }`，读取需容错）
+  - `desktop.close_to_tray_hint_shown`（value_json 推荐 `{ "shown": boolean }`）
+- main 接线要点：
+  - 主窗 `win.on('close')` 必须传 `onCloseToQuit`（对齐 `app.quit()` 语义），并在 `onFirstCloseToTrayHint` 内 best-effort 写入 `desktop.close_to_tray_hint_shown=true`；写入失败要吞掉并 `console.warn(String(error))`（避免 throw 影响关闭流程）。
+  - 初始化时在 `ensureMainWindow()` 之前从 SQLite 读取 status 并调用 controller：`setCloseBehavior(...)` + `setCloseToTrayHintShown(...)`，保证默认行为仍是 close->hide。
+- settings UI 稳定选择器（renderer）：
+  - `settings-close-behavior`
+  - `close-behavior-hide`
+  - `close-behavior-quit`
+  - `close-to-tray-hint-reset`
+- IPC 白名单测试要同步：新增 closeBehavior 通道后，`src/main/ipc.test.ts` 的 expected 列表必须追加 `...Object.values(IPC_CHANNELS.closeBehavior)`，否则会在“静态可枚举”断言处失败。
+
 - [2026-02-27] 计划状态同步：仅将 `.sisyphus/plans/xinliu-desktop.md` 的 Task 54 checkbox 从 `[ ]` 改为 `[x]`（不改 Task 55），用于 boulder/ground-truth 追踪；证据文件 `.sisyphus/evidence/task-54-path-gate.txt` 已存在且不重写；验证命令 `source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build` 已跑通。
