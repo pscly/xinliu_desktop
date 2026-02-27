@@ -1,0 +1,4 @@
+73:      - name: 生成 SHA-256 校验文件（release/*.sha256）
+94:            $hash = Get-FileHash -Algorithm SHA256 -Path $installer.FullName
+95:            $shaPath = Join-Path $releaseDir ($installer.Name + '.sha256')
+113:            release/*.sha256
