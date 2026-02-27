@@ -440,7 +440,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-52-multipart.txt
   ```
 
-- [ ] 53. “不得自动迁移回写”护栏（FlowNotes 降级写入后，Memos 恢复也不自动补写）
+- [x] 53. “不得自动迁移回写”护栏（FlowNotes 降级写入后，Memos 恢复也不自动补写）
 
   **What to do**:
   - 在 Notes Router + Memos Sync 中实现硬护栏：
