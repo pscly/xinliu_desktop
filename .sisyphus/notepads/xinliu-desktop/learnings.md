@@ -289,3 +289,10 @@
 - Vitest + RTL 对 debounce 场景优先使用真实计时器 + `waitFor({ timeout: ... })`，避免 `vi.useFakeTimers()` 泄漏到后续用例导致整文件异步测试批量超时。
 - Notes 状态文案要严格区分“本地保存状态”与“远端同步状态”：本地 autosave 成功后仅可显示“本地已保存（待同步/同步中/同步失败）”，不能直接宣称“已同步”。
 - Playwright Electron 在 Linux 无图形环境会报 `Missing X server or $DISPLAY`；需要 `xvfb-run -a` 包裹才能稳定产出截图证据。
+
+## [2026-02-28] - Task 39 Notes 冲突副本策略（Memos 409）
+
+- 触发点：直连 Memos 的 `UpdateMemo` 返回 HTTP 409 时，优先从 `HttpError.errorResponse.details.server_snapshot` 读取服务端版本；若快照缺少 `content/visibility`，再补一次 `GetMemo(memoName)` 拉取服务端正文用于回滚。
+- 持久化：在 `memos` 表新增 `conflict_of_local_uuid`（指向原记录 local_uuid）与 `conflict_request_id`（用于诊断/追溯）；冲突副本本身落在 `memos` 表（`sync_status='LOCAL_ONLY'`，保留本地正文）。
+- 回滚语义：原记录以服务端正文/可见性覆盖并标记 `sync_status='SYNCED'`；原记录下的本地附件行会移动到冲突副本名下，避免回滚后“正文与附件错配”。
+- 可检索性：`global_search_fts` 对 `memos` 有 trigger（insert/update/delete），因此冲突副本与回滚后的原记录都会被 `queryGlobalSearch()` 索引并可检索。
