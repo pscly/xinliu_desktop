@@ -16,6 +16,7 @@ import {
 } from './memosSyncJob';
 import { applyMigrations } from '../db/migrations';
 import { openSqliteDatabase } from '../db/sqlite';
+import { queryGlobalSearch } from '../search/globalSearch';
 
 function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'xinliu-memos-sync-job-'));
@@ -126,6 +127,8 @@ function readMemo(
   visibility: string;
   sync_status: string;
   last_error: string | null;
+  conflict_of_local_uuid: string | null;
+  conflict_request_id: string | null;
   updated_at_ms: number;
 } {
   const row = db
@@ -139,6 +142,8 @@ function readMemo(
           visibility,
           sync_status,
           last_error,
+          conflict_of_local_uuid,
+          conflict_request_id,
           updated_at_ms
         FROM memos
         WHERE local_uuid = ?
@@ -153,11 +158,26 @@ function readMemo(
         visibility: string;
         sync_status: string;
         last_error: string | null;
+        conflict_of_local_uuid: string | null;
+        conflict_request_id: string | null;
         updated_at_ms: number;
       }
     | undefined;
   if (!row) throw new Error('memo 不存在');
   return row;
+}
+
+function listAttachmentMemoLocalUuids(db: Database.Database): string[] {
+  const rows = db
+    .prepare(
+      `
+        SELECT memo_local_uuid
+        FROM memo_attachments
+        ORDER BY id ASC
+      `
+    )
+    .all() as Array<{ memo_local_uuid: string }>;
+  return rows.map((r) => r.memo_local_uuid);
 }
 
 describe('src/main/memos/memosSyncJob', () => {
@@ -525,6 +545,133 @@ describe('src/main/memos/memosSyncJob', () => {
       const row = readMemo(db, 'memo_local_3');
       expect(row.content).toBe('server');
       expect(row.visibility).toBe('PUBLIC');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('409 conflict：生成冲突副本并回滚原记录（两份可检索/读取）', async () => {
+    const dir = makeTempDir();
+    const dbFileAbsPath = path.join(dir, 'xinliu.sqlite3');
+    const { db } = openSqliteDatabase({ dbFileAbsPath });
+
+    try {
+      applyMigrations(db);
+      const nowMs = 1700000000000;
+
+      insertMemo(db, {
+        localUuid: 'memo_conflict_1',
+        serverMemoId: '123',
+        serverMemoName: 'memos/123',
+        content: '本地正文 alpha',
+        visibility: 'PRIVATE',
+        syncStatus: MEMOS_SYNC_STATUS.dirty,
+        createdAtMs: nowMs,
+        updatedAtMs: nowMs,
+      });
+      insertAttachment(db, {
+        id: 'att_1',
+        memoLocalUuid: 'memo_conflict_1',
+        localRelpath: 'attachments/a.bin',
+        createdAtMs: nowMs + 1,
+        updatedAtMs: nowMs + 1,
+      });
+      insertAttachment(db, {
+        id: 'att_2',
+        memoLocalUuid: 'memo_conflict_1',
+        localRelpath: 'attachments/b.bin',
+        createdAtMs: nowMs + 2,
+        updatedAtMs: nowMs + 2,
+      });
+
+      const updateMemo = vi.fn(async () => ({
+        ok: false,
+        error: {
+          code: 'HTTP_ERROR',
+          status: 409,
+          message: 'conflict',
+          requestId: 'cli-req',
+          responseRequestIdHeader: 'srv-req',
+          errorResponse: {
+            error: 'conflict',
+            message: 'conflict',
+            request_id: 'err-req',
+            details: {
+              server_snapshot: {
+                name: 'memos/123',
+                content: '服务端正文 beta',
+                visibility: 'PUBLIC',
+              },
+            },
+          },
+          retryAfterSeconds: null,
+        },
+      }));
+
+      const memosClient = {
+        createMemo: vi.fn(async () => {
+          throw new Error('unexpected');
+        }),
+        updateMemo,
+        getMemo: vi.fn(async () => {
+          throw new Error('unexpected');
+        }),
+        setMemoAttachments: vi.fn(async () => {
+          throw new Error('unexpected');
+        }),
+        createAttachment: vi.fn(async () => {
+          throw new Error('unexpected');
+        }),
+        listMemos: vi.fn(),
+        deleteMemo: vi.fn(),
+        getAttachment: vi.fn(),
+        updateAttachment: vi.fn(),
+        deleteAttachment: vi.fn(),
+        listMemoAttachments: vi.fn(),
+      } as unknown as MemosClient;
+
+      const out = await runMemosSyncOneMemoJob({
+        db,
+        memosClient,
+        storageRootAbsPath: dir,
+        memoLocalUuid: 'memo_conflict_1',
+        nowMs: () => nowMs + 10,
+      });
+
+      expect(out.kind).toBe('conflict');
+      if (out.kind !== 'conflict') {
+        throw new Error('unexpected');
+      }
+
+      const original = readMemo(db, 'memo_conflict_1');
+      expect(original.sync_status).toBe(MEMOS_SYNC_STATUS.synced);
+      expect(original.content).toBe('服务端正文 beta');
+      expect(original.visibility).toBe('PUBLIC');
+      expect(original.last_error).toBeNull();
+
+      const copy = readMemo(db, out.conflictLocalUuid);
+      expect(copy.sync_status).toBe(MEMOS_SYNC_STATUS.localOnly);
+      expect(copy.content).toBe('本地正文 alpha');
+      expect(copy.visibility).toBe('PRIVATE');
+      expect(copy.conflict_of_local_uuid).toBe('memo_conflict_1');
+      expect(copy.conflict_request_id).toBe('srv-req');
+
+      expect(listAttachmentMemoLocalUuids(db)).toEqual([
+        out.conflictLocalUuid,
+        out.conflictLocalUuid,
+      ]);
+
+      const localSearch = queryGlobalSearch(db, { query: 'alpha', page: 0, pageSize: 50 });
+      expect(
+        localSearch.items.some((i) => i.kind === 'memo' && i.id === out.conflictLocalUuid)
+      ).toBe(true);
+
+      const serverSearch = queryGlobalSearch(db, { query: 'beta', page: 0, pageSize: 50 });
+      expect(serverSearch.items.some((i) => i.kind === 'memo' && i.id === 'memo_conflict_1')).toBe(
+        true
+      );
+
+      expect(updateMemo).toHaveBeenCalledTimes(1);
     } finally {
       db.close();
     }

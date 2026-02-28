@@ -6,6 +6,8 @@ import type Database from 'better-sqlite3';
 import type { HttpResult } from '../net/httpClient';
 import type { Attachment, Memo, MemosClient } from './memosClient';
 
+import { createConflictCopyAndRollbackOriginalMemo } from '../notes/memoConflictCopy';
+
 import { fromRelpath } from '../storageLayout';
 import { withImmediateTransaction } from '../sync/outbox';
 
@@ -337,8 +339,108 @@ export interface RunMemosSyncOneMemoJobOptions {
 
 export type RunMemosSyncOneMemoJobOutcome =
   | { kind: 'synced'; localUuid: string; serverMemoName: string | null }
+  | {
+      kind: 'conflict';
+      localUuid: string;
+      conflictLocalUuid: string;
+      serverMemoName: string | null;
+      requestId: string | null;
+    }
   | { kind: 'skipped'; reason: 'not_found' | 'already_synced' | 'local_only' }
   | { kind: 'failed'; localUuid: string; message: string };
+
+function pickHttpRequestId(res: HttpResult<unknown>): string | null {
+  if (res.ok) return null;
+  const hdr = res.error.responseRequestIdHeader;
+  if (typeof hdr === 'string' && hdr.trim().length > 0) return hdr.trim();
+  const embedded = res.error.errorResponse?.request_id;
+  if (typeof embedded === 'string' && embedded.trim().length > 0) return embedded.trim();
+  const req = res.error.requestId;
+  return typeof req === 'string' && req.trim().length > 0 ? req.trim() : null;
+}
+
+function readServerSnapshotFromDetails(details: unknown): {
+  name: string | null;
+  content: string | null;
+  visibility: string | null;
+} | null {
+  if (!details || typeof details !== 'object') return null;
+  const obj = details as Record<string, unknown>;
+  const snap = obj.server_snapshot;
+  if (!snap || typeof snap !== 'object') return null;
+  const s = snap as Record<string, unknown>;
+  const name = typeof s.name === 'string' && s.name.trim().length > 0 ? s.name : null;
+  const content = typeof s.content === 'string' ? s.content : null;
+  const visibility = typeof s.visibility === 'string' ? s.visibility : null;
+  return { name, content, visibility };
+}
+
+async function handleUpdateConflict409(args: {
+  db: Database.Database;
+  memosClient: MemosClient;
+  localUuid: string;
+  local: LocalMemoRow;
+  memoName: string;
+  updateRes: HttpResult<Memo>;
+  nowMs: number;
+}): Promise<{
+  kind: 'conflict';
+  localUuid: string;
+  conflictLocalUuid: string;
+  serverMemoName: string | null;
+  requestId: string | null;
+} | null> {
+  if (args.updateRes.ok) return null;
+  if (args.updateRes.error.status !== 409) return null;
+
+  const requestId = pickHttpRequestId(args.updateRes);
+  const fromDetails = readServerSnapshotFromDetails(args.updateRes.error.errorResponse?.details);
+
+  let serverName: string | null = fromDetails?.name ?? null;
+  let serverContent: string | null = fromDetails?.content ?? null;
+  let serverVisibility: string | null = fromDetails?.visibility ?? null;
+
+  if (serverContent === null || serverVisibility === null) {
+    const getRes = await args.memosClient.getMemo(args.memoName);
+    if (getRes.ok) {
+      serverName =
+        typeof getRes.value.name === 'string' && getRes.value.name.trim().length > 0
+          ? getRes.value.name
+          : serverName;
+      serverContent =
+        typeof getRes.value.content === 'string' ? getRes.value.content : serverContent;
+      serverVisibility =
+        typeof getRes.value.visibility === 'string' ? getRes.value.visibility : serverVisibility;
+    }
+  }
+
+  if (serverContent === null || serverVisibility === null) {
+    return null;
+  }
+
+  const serverMemoName = serverName;
+  const serverMemoId = serverMemoName ? parseMemoIdFromName(serverMemoName) : null;
+
+  const { conflictLocalUuid } = createConflictCopyAndRollbackOriginalMemo(args.db, {
+    originalLocalUuid: args.localUuid,
+    originalContent: args.local.content,
+    originalVisibility: args.local.visibility,
+    serverMemoName,
+    serverMemoId,
+    serverContent,
+    serverVisibility,
+    requestId,
+    nowMs: () => args.nowMs,
+  });
+
+  return {
+    kind: 'conflict',
+    localUuid: args.localUuid,
+    conflictLocalUuid,
+    serverMemoName,
+    requestId,
+  };
+}
 
 async function defaultLoadAttachmentContentBase64(args: { absPath: string }): Promise<string> {
   const buf = fs.readFileSync(args.absPath);
@@ -456,7 +558,20 @@ export async function runMemosSyncOneMemoJob(
         memo: payload,
         updateMask: ['content', 'visibility'],
       });
+
       if (!res.ok) {
+        const conflict = await handleUpdateConflict409({
+          db: options.db,
+          memosClient: options.memosClient,
+          localUuid,
+          local,
+          memoName,
+          updateRes: res,
+          nowMs,
+        });
+        if (conflict) {
+          return conflict;
+        }
         throw new Error(`UpdateMemo 失败：${describeHttpResultError(res)}`);
       }
       serverMemo = res.value;
