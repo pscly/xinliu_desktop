@@ -2028,11 +2028,33 @@ function MainWindowApp() {
               onDeferInstall={() => void deferInstall()}
             />
           ) : (
-            <DefaultRoutePlaceholder
-              routeMeta={routeMeta}
-              middleItems={demoMiddleItems}
-              onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
-            />
+            <>
+              <DefaultRoutePlaceholder
+                routeMeta={routeMeta}
+                middleItems={demoMiddleItems}
+                onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
+              />
+
+              {route === 'conflicts' ? (
+                <div className="callout" style={{ marginTop: 12 }}>
+                  <div className="fine">
+                    对比入口（占位）：后续由冲突中心展示本地副本与服务端版本的差异。
+                  </div>
+                  <div className="btnRow" style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btnSmall"
+                      data-testid="conflict-compare"
+                      onClick={() => {
+                        console.warn('[conflicts] 对比入口占位，Task 41 将落地完整冲突中心');
+                      }}
+                    >
+                      打开对比
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </>
           )}
         </section>
 
