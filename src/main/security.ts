@@ -1,22 +1,17 @@
-import type {
-  BrowserWindowConstructorOptions,
-  WebContents,
-  WebPreferences,
-} from 'electron';
+import type { BrowserWindowConstructorOptions, WebContents, WebPreferences } from 'electron';
 
 const MUST_WEB_PREFERENCES: Pick<
   WebPreferences,
-  'contextIsolation' | 'nodeIntegration' | 'webSecurity' | 'allowRunningInsecureContent'
+  'contextIsolation' | 'nodeIntegration' | 'webSecurity' | 'allowRunningInsecureContent' | 'sandbox'
 > = {
   contextIsolation: true,
   nodeIntegration: false,
   webSecurity: true,
   allowRunningInsecureContent: false,
+  sandbox: false,
 };
 
-export function buildSecureWebPreferences(
-  extra: Partial<WebPreferences> = {}
-): WebPreferences {
+export function buildSecureWebPreferences(extra: Partial<WebPreferences> = {}): WebPreferences {
   return {
     ...extra,
     ...MUST_WEB_PREFERENCES,
@@ -43,10 +38,7 @@ export interface NavigationGuardsDependencies {
   };
 }
 
-export type NavigationGuardsWebContents = Pick<
-  WebContents,
-  'on' | 'setWindowOpenHandler'
->;
+export type NavigationGuardsWebContents = Pick<WebContents, 'on' | 'setWindowOpenHandler'>;
 
 function isAllowedNavigationUrl(url: string): boolean {
   try {

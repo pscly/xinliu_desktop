@@ -16,6 +16,7 @@ test('设置页：检查更新入口可触发且状态可解释', async () => {
       env[k] = v;
     }
   }
+  env.XINLIU_E2E = '1';
 
   const electronApp = await electron.launch({
     args: [electronMainJs],
