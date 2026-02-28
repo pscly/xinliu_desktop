@@ -37,6 +37,9 @@ export const IPC_CHANNELS = {
     popupFolder: `${IPC_NAMESPACE}:contextMenu:popupFolder`,
   },
   notes: {
+    createDraft: `${IPC_NAMESPACE}:notes:createDraft`,
+    upsertDraft: `${IPC_NAMESPACE}:notes:upsertDraft`,
+    getDraft: `${IPC_NAMESPACE}:notes:getDraft`,
     listItems: `${IPC_NAMESPACE}:notes:listItems`,
     delete: `${IPC_NAMESPACE}:notes:delete`,
     restore: `${IPC_NAMESPACE}:notes:restore`,
@@ -385,6 +388,35 @@ export interface NotesListItemsPayload {
 export interface NotesIdPayload {
   id: string;
   provider: NotesProvider;
+}
+
+export interface NotesCreateDraftPayload {
+  content: string;
+}
+
+export interface NotesCreateDraftResult {
+  localUuid: string;
+}
+
+export interface NotesUpsertDraftPayload {
+  localUuid: string;
+  content: string;
+}
+
+export interface NotesGetDraftPayload {
+  localUuid: string;
+}
+
+export interface NotesDraft {
+  localUuid: string;
+  content: string;
+  syncStatus: NotesSyncStatus;
+  updatedAtMs: number;
+  createdAtMs: number;
+}
+
+export interface NotesGetDraftResult {
+  draft: NotesDraft | null;
 }
 
 export interface NotesListItem {

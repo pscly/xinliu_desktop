@@ -21,12 +21,17 @@ import type {
   IpcErrorCode,
   IpcResult,
   IpcVoid,
+  NotesCreateDraftPayload,
+  NotesCreateDraftResult,
   NotesDeleteResult,
+  NotesGetDraftPayload,
+  NotesGetDraftResult,
   NotesHardDeleteResult,
   NotesIdPayload,
   NotesListItemsPayload,
   NotesListItemsResult,
   NotesRestoreResult,
+  NotesUpsertDraftPayload,
   QuickCaptureSubmitPayload,
   SearchQueryPayload,
   SearchQueryResult,
@@ -109,6 +114,11 @@ export interface RegisterIpcHandlersDeps {
     writeTextFile: (fileAbsPath: string, content: string) => Promise<void>;
   };
   notes?: {
+    createDraft: (
+      payload: NotesCreateDraftPayload
+    ) => NotesCreateDraftResult | Promise<NotesCreateDraftResult>;
+    upsertDraft: (payload: NotesUpsertDraftPayload) => void | Promise<void>;
+    getDraft: (payload: NotesGetDraftPayload) => NotesGetDraftResult | Promise<NotesGetDraftResult>;
     listItems: (
       payload: NotesListItemsPayload
     ) => NotesListItemsResult | Promise<NotesListItemsResult>;
@@ -505,6 +515,63 @@ function validateNotesIdPayload(payload: unknown): IpcResult<NotesIdPayload> {
   }
 
   return ok({ id: trimmed, provider });
+}
+
+function validateNotesCreateDraftPayload(payload: unknown): IpcResult<NotesCreateDraftPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const content = payload['content'];
+  if (typeof content !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (content.trim().length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ content });
+}
+
+function validateNotesUpsertDraftPayload(payload: unknown): IpcResult<NotesUpsertDraftPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const localUuid = payload['localUuid'];
+  const content = payload['content'];
+
+  if (typeof localUuid !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const localUuidTrimmed = localUuid.trim();
+  if (localUuidTrimmed.length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  if (typeof content !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (content.trim().length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  return ok({ localUuid: localUuidTrimmed, content });
+}
+
+function validateNotesGetDraftPayload(payload: unknown): IpcResult<NotesGetDraftPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const localUuid = payload['localUuid'];
+  if (typeof localUuid !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const localUuidTrimmed = localUuid.trim();
+  if (localUuidTrimmed.length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  return ok({ localUuid: localUuidTrimmed });
 }
 
 function createRateLimiter(options: { windowMs: number; max: number; now: () => number }) {
@@ -1000,6 +1067,55 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, deps: RegisterIpcHandl
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.notes.createDraft,
+    makeHandlerWithErrorMessage<NotesCreateDraftResult>({
+      channel: IPC_CHANNELS.notes.createDraft,
+      deps,
+      rateLimiter,
+      validate: validateNotesCreateDraftPayload,
+      run: async (validatedPayload) => {
+        if (!deps.notes) {
+          throw new Error('Notes 未实现');
+        }
+        return deps.notes.createDraft(validatedPayload as NotesCreateDraftPayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.notes.upsertDraft,
+    makeHandlerWithErrorMessage<IpcVoid>({
+      channel: IPC_CHANNELS.notes.upsertDraft,
+      deps,
+      rateLimiter,
+      validate: validateNotesUpsertDraftPayload,
+      run: async (validatedPayload) => {
+        if (!deps.notes) {
+          throw new Error('Notes 未实现');
+        }
+        await deps.notes.upsertDraft(validatedPayload as NotesUpsertDraftPayload);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.notes.getDraft,
+    makeHandlerWithErrorMessage<NotesGetDraftResult>({
+      channel: IPC_CHANNELS.notes.getDraft,
+      deps,
+      rateLimiter,
+      validate: validateNotesGetDraftPayload,
+      run: async (validatedPayload) => {
+        if (!deps.notes) {
+          throw new Error('Notes 未实现');
+        }
+        return deps.notes.getDraft(validatedPayload as NotesGetDraftPayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.notes.listItems,
     makeHandlerWithErrorMessage<NotesListItemsResult>({
       channel: IPC_CHANNELS.notes.listItems,
@@ -1312,4 +1428,7 @@ export const __test__ = {
   validateSearchQueryPayload,
   validateNotesListItemsPayload,
   validateNotesIdPayload,
+  validateNotesCreateDraftPayload,
+  validateNotesUpsertDraftPayload,
+  validateNotesGetDraftPayload,
 };

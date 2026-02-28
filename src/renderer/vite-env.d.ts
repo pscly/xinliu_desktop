@@ -14,12 +14,17 @@ import type {
   FileAccessWriteTextFilePayload,
   IpcResult,
   IpcVoid,
+  NotesCreateDraftPayload,
+  NotesCreateDraftResult,
   NotesDeleteResult,
+  NotesGetDraftPayload,
+  NotesGetDraftResult,
   NotesHardDeleteResult,
   NotesIdPayload,
   NotesListItemsPayload,
   NotesListItemsResult,
   NotesRestoreResult,
+  NotesUpsertDraftPayload,
   SearchQueryPayload,
   SearchQueryResult,
   SearchRebuildIndexResult,
@@ -72,6 +77,11 @@ declare global {
         getStatus: () => Promise<IpcResult<DiagnosticsStatus>>;
       };
       notes?: {
+        createDraft: (
+          payload: NotesCreateDraftPayload
+        ) => Promise<IpcResult<NotesCreateDraftResult>>;
+        upsertDraft: (payload: NotesUpsertDraftPayload) => Promise<IpcResult<IpcVoid>>;
+        getDraft: (payload: NotesGetDraftPayload) => Promise<IpcResult<NotesGetDraftResult>>;
         listItems: (payload: NotesListItemsPayload) => Promise<IpcResult<NotesListItemsResult>>;
         delete: (payload: NotesIdPayload) => Promise<IpcResult<NotesDeleteResult>>;
         restore: (payload: NotesIdPayload) => Promise<IpcResult<NotesRestoreResult>>;

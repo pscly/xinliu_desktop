@@ -18,12 +18,17 @@ import type {
   IpcErrorCode,
   IpcResult,
   IpcVoid,
+  NotesCreateDraftPayload,
+  NotesCreateDraftResult,
   NotesDeleteResult,
+  NotesGetDraftPayload,
+  NotesGetDraftResult,
   NotesHardDeleteResult,
   NotesIdPayload,
   NotesListItemsPayload,
   NotesListItemsResult,
   NotesRestoreResult,
+  NotesUpsertDraftPayload,
   QuickCaptureSubmitPayload,
   ShortcutId,
   SearchQueryPayload,
@@ -144,6 +149,18 @@ contextBridge.exposeInMainWorld('xinliu', {
     },
   },
   notes: {
+    createDraft: (payload: NotesCreateDraftPayload) =>
+      invokeIpc<NotesCreateDraftResult>(
+        IPC_CHANNELS.notes.createDraft,
+        payload satisfies NotesCreateDraftPayload
+      ),
+    upsertDraft: (payload: NotesUpsertDraftPayload) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.notes.upsertDraft, payload satisfies NotesUpsertDraftPayload),
+    getDraft: (payload: NotesGetDraftPayload) =>
+      invokeIpc<NotesGetDraftResult>(
+        IPC_CHANNELS.notes.getDraft,
+        payload satisfies NotesGetDraftPayload
+      ),
     listItems: (payload: NotesListItemsPayload) =>
       invokeIpc<NotesListItemsResult>(
         IPC_CHANNELS.notes.listItems,

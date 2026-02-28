@@ -1,4 +1,7 @@
 import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import {
   app,
@@ -44,6 +47,7 @@ import { queryGlobalSearch, rebuildGlobalSearchIndex } from './search/globalSear
 import { createPathGate } from './pathGate/pathGate';
 import { createUpdaterController } from './updater/updaterController';
 import { createElectronUpdaterAdapter } from './updater/electronUpdaterAdapter';
+import { createNotesDraftRepo } from './notes/notesDraftRepo';
 import {
   readCloseBehaviorStatus,
   writeCloseBehavior,
@@ -51,6 +55,38 @@ import {
 } from './userSettings/closeBehaviorSettings';
 
 const closeToTray = createCloseToTrayController();
+
+// E2E/CI 可复现的干净 userData：避免被本机历史 user_settings 影响。
+// - `XINLIU_USER_DATA_DIR`：显式指定 userData 目录（最高优先级）。
+// - `XINLIU_E2E=1`：自动选择一个全新的临时 userData 目录。
+// 说明：必须在 app.whenReady() 之前 setPath，才能影响后续 getPath('userData')。
+(() => {
+  const explicitDir = (process.env.XINLIU_USER_DATA_DIR ?? '').trim();
+  const e2eEnabled = (process.env.XINLIU_E2E ?? '').trim() === '1';
+  if (!e2eEnabled && explicitDir.length === 0) {
+    return;
+  }
+
+  const runIdRaw = (process.env.XINLIU_E2E_RUN_ID ?? crypto.randomUUID()).trim();
+  const runId = runIdRaw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+
+  const userDataDirAbsPath =
+    explicitDir.length > 0
+      ? explicitDir
+      : path.join(os.tmpdir(), `xinliu-e2e-user-data-${runId || 'run'}`);
+
+  try {
+    fsSync.mkdirSync(userDataDirAbsPath, { recursive: true });
+  } catch (error) {
+    console.warn('创建 E2E userData 目录失败', { error: String(error) });
+  }
+
+  try {
+    app.setPath('userData', userDataDirAbsPath);
+  } catch (error) {
+    console.warn('设置 E2E userData 目录失败', { error: String(error) });
+  }
+})();
 
 type WithMainDb = <T>(run: (db: Database.Database) => T) => T;
 
@@ -458,6 +494,45 @@ app.whenReady().then(async () => {
     },
     diagnostics: {
       getStatus: () => diagnostics.getStatus(),
+    },
+    notes: {
+      createDraft: ({ content }) =>
+        withMainDb((db) => {
+          return createNotesDraftRepo(db).createDraft(content);
+        }),
+      upsertDraft: ({ localUuid, content }) => {
+        withMainDb((db) => {
+          createNotesDraftRepo(db).upsertDraft(localUuid, content);
+        });
+      },
+      getDraft: ({ localUuid }) =>
+        withMainDb((db) => {
+          const draft = createNotesDraftRepo(db).getDraft(localUuid);
+          if (!draft) {
+            return { draft: null };
+          }
+          return {
+            draft: {
+              localUuid: draft.localUuid,
+              content: draft.content,
+              syncStatus: draft.syncStatus,
+              updatedAtMs: draft.updatedAtMs,
+              createdAtMs: draft.createdAtMs,
+            },
+          };
+        }),
+      listItems: () => {
+        throw new Error('Notes.listItems 未实现');
+      },
+      delete: () => {
+        throw new Error('Notes.delete 未实现');
+      },
+      restore: () => {
+        throw new Error('Notes.restore 未实现');
+      },
+      hardDelete: () => {
+        throw new Error('Notes.hardDelete 未实现');
+      },
     },
     pathGate,
     fileAccess: {
