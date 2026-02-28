@@ -9,7 +9,13 @@ import type { Attachment, Memo, MemosClient } from './memosClient';
 import { createConflictCopyAndRollbackOriginalMemo } from '../notes/memoConflictCopy';
 
 import { fromRelpath } from '../storageLayout';
-import { withImmediateTransaction } from '../sync/outbox';
+import {
+  FLOW_OP,
+  FLOW_RESOURCE,
+  bumpClientUpdatedAtMs,
+  enqueueFlowOutboxMutation,
+  withImmediateTransaction,
+} from '../sync/outbox';
 
 export const MEMOS_SYNC_STATUS = {
   localOnly: 'LOCAL_ONLY',
@@ -42,6 +48,16 @@ interface LocalMemoAttachmentRow {
   cache_key: string | null;
   created_at_ms: number;
   updated_at_ms: number;
+}
+
+interface LocalCollectionMemoRefRow {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  color: string | null;
+  sort_order: number;
+  ref_type: string;
+  client_updated_at_ms: number;
 }
 
 function safeNowMs(nowMs?: () => number): number {
@@ -194,6 +210,106 @@ function writeMemoServerIds(
   });
 }
 
+function backfillCollectionMemoRefsAfterMemoServerIdWritten(
+  db: Database.Database,
+  args: {
+    memoLocalUuid: string;
+    serverMemoName: string | null;
+    nowMs: number;
+  }
+): void {
+  const serverMemoName = typeof args.serverMemoName === 'string' ? args.serverMemoName.trim() : '';
+  if (serverMemoName.length === 0) {
+    return;
+  }
+
+  let targets: LocalCollectionMemoRefRow[] = [];
+  try {
+    targets = db
+      .prepare(
+        `
+          SELECT
+            id,
+            parent_id,
+            name,
+            color,
+            sort_order,
+            ref_type,
+            client_updated_at_ms
+          FROM collection_items
+          WHERE
+            item_type = 'note_ref'
+            AND ref_type = 'memos_memo'
+            AND ref_id = @memo_local_uuid
+        `
+      )
+      .all({ memo_local_uuid: args.memoLocalUuid }) as LocalCollectionMemoRefRow[];
+  } catch (error) {
+    console.warn('回填 collection_items 目标查询失败', String(error));
+    return;
+  }
+
+  if (targets.length === 0) {
+    return;
+  }
+
+  const nowIso = new Date(args.nowMs).toISOString();
+  for (const target of targets) {
+    try {
+      const nextClientUpdatedAtMs = bumpClientUpdatedAtMs({
+        lastMs: target.client_updated_at_ms,
+        nowMs: args.nowMs,
+      });
+
+      const updateResult = db
+        .prepare(
+          `
+            UPDATE collection_items
+            SET
+              ref_id = @ref_id,
+              client_updated_at_ms = @client_updated_at_ms,
+              updated_at = @updated_at
+            WHERE
+              id = @id
+              AND item_type = 'note_ref'
+              AND ref_type = 'memos_memo'
+              AND ref_id = @from_ref_id
+          `
+        )
+        .run({
+          id: target.id,
+          ref_id: serverMemoName,
+          client_updated_at_ms: nextClientUpdatedAtMs,
+          updated_at: nowIso,
+          from_ref_id: args.memoLocalUuid,
+        });
+
+      if (updateResult.changes === 0) {
+        continue;
+      }
+
+      enqueueFlowOutboxMutation(db, {
+        resource: FLOW_RESOURCE.collectionItem,
+        op: FLOW_OP.upsert,
+        entityId: target.id,
+        clientUpdatedAtMs: nextClientUpdatedAtMs,
+        data: {
+          item_type: 'note_ref',
+          parent_id: target.parent_id,
+          name: target.name,
+          color: target.color,
+          sort_order: target.sort_order,
+          ref_type: target.ref_type,
+          ref_id: serverMemoName,
+        },
+        nowMs: args.nowMs,
+      });
+    } catch (error) {
+      console.warn(`回填 collection_items 引用失败: item_id=${target.id}`, String(error));
+    }
+  }
+}
+
 function writeAttachmentServerName(
   db: Database.Database,
   args: { id: string; serverAttachmentName: string; nowMs: number }
@@ -243,6 +359,11 @@ export function mergePulledServerMemoIntoLocalMemo(args: MergePulledServerMemoIn
         serverMemoId: serverId,
         nowMs,
       });
+      backfillCollectionMemoRefsAfterMemoServerIdWritten(args.db, {
+        memoLocalUuid: localUuid,
+        serverMemoName: serverName,
+        nowMs,
+      });
       return;
     }
 
@@ -274,6 +395,12 @@ export function mergePulledServerMemoIntoLocalMemo(args: MergePulledServerMemoIn
         visibility: nextVisibility,
         updated_at_ms: nowMs,
       });
+
+    backfillCollectionMemoRefsAfterMemoServerIdWritten(args.db, {
+      memoLocalUuid: localUuid,
+      serverMemoName: serverName,
+      nowMs,
+    });
   });
 }
 
@@ -584,6 +711,11 @@ export async function runMemosSyncOneMemoJob(
         localUuid,
         serverMemoName,
         serverMemoId,
+        nowMs,
+      });
+      backfillCollectionMemoRefsAfterMemoServerIdWritten(options.db, {
+        memoLocalUuid: localUuid,
+        serverMemoName,
         nowMs,
       });
     });

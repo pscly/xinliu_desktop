@@ -1,0 +1,24 @@
+Task 40 - Backfill Worker（memo server 标识回填 Collections 引用并入 outbox）证据
+
+运行命令：
+
+```bash
+npm test
+```
+
+关键测试用例：
+
+- `createMemo 写回 server_memo_name 后回填 collection note_ref 并入 outbox`
+
+测试通过摘要（节选）：
+
+```text
+✓ src/main/memos/memosSyncJob.test.ts (8 tests)
+
+Test Files  40 passed (40)
+     Tests  132 passed (132)
+```
+
+关键说明：
+
+- 当前 schema 尚无 `ref_local_uuid` 字段，因此本次回填以 `collection_items.ref_type='memos_memo'` 且 `collection_items.ref_id == memo.local_uuid` 作为待回填匹配条件，再更新为 `server_memo_name` 并入 `outbox_mutations(resource='collection_item', op='upsert')`。

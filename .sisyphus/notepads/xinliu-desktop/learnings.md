@@ -296,3 +296,7 @@
 - 持久化：在 `memos` 表新增 `conflict_of_local_uuid`（指向原记录 local_uuid）与 `conflict_request_id`（用于诊断/追溯）；冲突副本本身落在 `memos` 表（`sync_status='LOCAL_ONLY'`，保留本地正文）。
 - 回滚语义：原记录以服务端正文/可见性覆盖并标记 `sync_status='SYNCED'`；原记录下的本地附件行会移动到冲突副本名下，避免回滚后“正文与附件错配”。
 - 可检索性：`global_search_fts` 对 `memos` 有 trigger（insert/update/delete），因此冲突副本与回滚后的原记录都会被 `queryGlobalSearch()` 索引并可检索。
+
+- [2026-02-28] Task 40 回填折中：由于当前 `collection_items` schema 没有 `ref_local_uuid`，只能临时用 `ref_id=local_uuid` 承载待回填关联；风险是 `ref_id` 语义复用会增加歧义，后续若引入双轨字段（local/server）需要补一次数据迁移把历史占位值清洗到专用字段。
+
+- [2026-02-28] 工作区隔离提交经验：先按“功能闭环 + 依赖顺序”做路径分组，再逐个 `git status --porcelain=v1` 校验 staged 集合，可显著降低混杂改动误提交风险；对于 `better-sqlite3` 的 Node ABI 变化，建议在切换 Node 主版本后立即执行 `npm rebuild better-sqlite3`，避免测试结果受原生模块不匹配干扰。

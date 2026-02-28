@@ -116,6 +116,93 @@ function insertAttachment(
   });
 }
 
+function insertCollectionNoteRef(
+  db: Database.Database,
+  args: {
+    id: string;
+    refType: 'memos_memo' | 'flow_note';
+    refId: string;
+    createdAtMs: number;
+    updatedAtMs: number;
+    clientUpdatedAtMs: number;
+    name?: string;
+  }
+): void {
+  db.prepare(
+    `
+      INSERT INTO collection_items(
+        id,
+        item_type,
+        parent_id,
+        name,
+        color,
+        ref_type,
+        ref_id,
+        sort_order,
+        client_updated_at_ms,
+        created_at,
+        updated_at,
+        deleted_at
+      ) VALUES(
+        @id,
+        'note_ref',
+        NULL,
+        @name,
+        NULL,
+        @ref_type,
+        @ref_id,
+        0,
+        @client_updated_at_ms,
+        @created_at,
+        @updated_at,
+        NULL
+      )
+    `
+  ).run({
+    id: args.id,
+    name: args.name ?? '',
+    ref_type: args.refType,
+    ref_id: args.refId,
+    client_updated_at_ms: args.clientUpdatedAtMs,
+    created_at: new Date(args.createdAtMs).toISOString(),
+    updated_at: new Date(args.updatedAtMs).toISOString(),
+  });
+}
+
+function readCollectionItemRef(
+  db: Database.Database,
+  id: string
+): { ref_id: string | null; client_updated_at_ms: number } {
+  const row = db
+    .prepare(
+      `
+        SELECT ref_id, client_updated_at_ms
+        FROM collection_items
+        WHERE id = ?
+      `
+    )
+    .get(id) as { ref_id: string | null; client_updated_at_ms: number } | undefined;
+  if (!row) {
+    throw new Error('collection item 不存在');
+  }
+  return row;
+}
+
+function listCollectionItemUpsertOutbox(
+  db: Database.Database
+): Array<{ entity_id: string; client_updated_at_ms: number; data_json: string }> {
+  return db
+    .prepare(
+      `
+        SELECT entity_id, client_updated_at_ms, data_json
+        FROM outbox_mutations
+        WHERE resource = 'collection_item' AND op = 'upsert'
+        ORDER BY created_at_ms ASC, id ASC
+      `
+    )
+    .all() as Array<{ entity_id: string; client_updated_at_ms: number; data_json: string }>;
+}
+
 function readMemo(
   db: Database.Database,
   localUuid: string
@@ -453,6 +540,96 @@ describe('src/main/memos/memosSyncJob', () => {
         'CreateAttachment:att_b',
         'SetMemoAttachments',
       ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('createMemo 写回 server_memo_name 后回填 collection note_ref 并入 outbox', async () => {
+    const dir = makeTempDir();
+    const dbFileAbsPath = path.join(dir, 'xinliu.sqlite3');
+    const { db } = openSqliteDatabase({ dbFileAbsPath });
+
+    try {
+      applyMigrations(db);
+      const nowMs = 1700000000000;
+
+      insertMemo(db, {
+        localUuid: 'memo_local_create',
+        serverMemoId: null,
+        serverMemoName: null,
+        content: 'memo-content',
+        visibility: 'PRIVATE',
+        syncStatus: MEMOS_SYNC_STATUS.dirty,
+        createdAtMs: nowMs,
+        updatedAtMs: nowMs,
+      });
+
+      insertCollectionNoteRef(db, {
+        id: 'col_note_ref_1',
+        refType: 'memos_memo',
+        refId: 'memo_local_create',
+        createdAtMs: nowMs,
+        updatedAtMs: nowMs,
+        clientUpdatedAtMs: nowMs,
+        name: 'memo ref',
+      });
+
+      const memosClient = {
+        createMemo: vi.fn(async () => ({
+          ok: true,
+          status: 200,
+          requestId: 'cli',
+          responseRequestIdHeader: 'srv',
+          value: { name: 'memos/999', content: 'memo-content', visibility: 'PRIVATE' },
+        })),
+        updateMemo: vi.fn(async () => {
+          throw new Error('unexpected');
+        }),
+        setMemoAttachments: vi.fn(async () => ({
+          ok: true,
+          status: 200,
+          requestId: 'cli',
+          responseRequestIdHeader: 'srv',
+          value: null,
+        })),
+        createAttachment: vi.fn(async () => {
+          throw new Error('unexpected');
+        }),
+        getMemo: vi.fn(),
+        listMemos: vi.fn(),
+        deleteMemo: vi.fn(),
+        getAttachment: vi.fn(),
+        updateAttachment: vi.fn(),
+        deleteAttachment: vi.fn(),
+        listMemoAttachments: vi.fn(),
+      } as unknown as MemosClient;
+
+      const out = await runMemosSyncOneMemoJob({
+        db,
+        memosClient,
+        storageRootAbsPath: dir,
+        memoLocalUuid: 'memo_local_create',
+        nowMs: () => nowMs,
+      });
+
+      expect(out.kind).toBe('synced');
+
+      const item = readCollectionItemRef(db, 'col_note_ref_1');
+      expect(item.ref_id).toBe('memos/999');
+      expect(item.client_updated_at_ms).toBe(nowMs + 1);
+
+      const outboxRows = listCollectionItemUpsertOutbox(db);
+      expect(outboxRows).toHaveLength(1);
+      expect(outboxRows[0]?.entity_id).toBe('col_note_ref_1');
+      expect(outboxRows[0]?.client_updated_at_ms).toBe(nowMs + 1);
+
+      const outboxData = JSON.parse(outboxRows[0]?.data_json ?? '{}') as {
+        ref_id?: string;
+        ref_type?: string;
+      };
+      expect(outboxData.ref_type).toBe('memos_memo');
+      expect(outboxData.ref_id).toBe('memos/999');
     } finally {
       db.close();
     }
