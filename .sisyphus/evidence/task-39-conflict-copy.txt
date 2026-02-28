@@ -1,0 +1,25 @@
+Task 39 - Notes 冲突副本策略（Memos 409）证据
+
+目标：当 UpdateMemo 遇到 409 conflict（并且存在 ErrorResponse.details.server_snapshot）时：
+1) 生成冲突副本保留本地正文（并包含 created_at_ms / request_id 等诊断字段）
+2) 原记录回滚为服务端版本（不丢本地文本）
+3) 两份都可被检索/读取（此处用 SQLite + queryGlobalSearch 断言）
+
+构造 409 场景：
+- 在 `src/main/memos/memosSyncJob.test.ts` 中 mock `memosClient.updateMemo()` 返回 `{ ok:false, error:{ status:409, errorResponse.details.server_snapshot: {...} } }`
+- 触发 `runMemosSyncOneMemoJob(...)` 走冲突分支，生成冲突副本并回滚原记录
+
+运行命令：
+
+```bash
+source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test
+```
+
+关键输出（节选）：
+
+```text
+✓ src/main/memos/memosSyncJob.test.ts (7 tests)
+
+Test Files  40 passed (40)
+     Tests  131 passed (131)
+```

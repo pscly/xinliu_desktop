@@ -1,0 +1,13 @@
+Task 39 - UI 最小对比入口契约
+
+验证命令：
+
+```bash
+rg -n "data-testid=\"conflict-compare\"" src/renderer -S
+```
+
+关键输出（节选）：
+
+```text
+src/renderer/App.tsx:2047:                      data-testid="conflict-compare"
+```
