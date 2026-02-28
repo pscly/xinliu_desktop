@@ -39,6 +39,9 @@ jobs:
       - name: 构建（build）
         run: npm run build
 
+      - name: E2E（Playwright + Electron）
+        run: npm run test:e2e
+
       - name: 上传证据与构建产物（artifacts）
         if: always()
         uses: actions/upload-artifact@v4
@@ -47,4 +50,6 @@ jobs:
           if-no-files-found: ignore
           path: |
             .sisyphus/evidence/
+            test-results/
+            playwright-report/
             dist/

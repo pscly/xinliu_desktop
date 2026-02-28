@@ -2,6 +2,11 @@ node_modules/
 dist/
 .DS_Store
 
+# Playwright 输出（不要入库）
+test-results/
+playwright-report/
+.tmp/
+
 # 本地环境文件（不要入库）
 .env
 .env.*
