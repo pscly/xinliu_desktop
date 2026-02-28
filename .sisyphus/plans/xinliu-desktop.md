@@ -1050,7 +1050,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-36-no-path.txt
   ```
 
-- [ ] 37. Notes Editor（右栏 Markdown 编辑 + autosave 本地落盘 + sync 状态展示）
+- [x] 37. Notes Editor（右栏 Markdown 编辑 + autosave 本地落盘 + sync 状态展示）
 
   **What to do**:
   - 右栏实现 Notes 编辑器：Markdown 正文编辑、保存策略（自动保存到 SQLite）、同步状态展示（本地已保存/同步中/失败）。
@@ -1352,7 +1352,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-32-sha.txt
   ```
 
-- [ ] 33. Windows runner E2E（Playwright + Electron：关键旅程回归）
+- [x] 33. Windows runner E2E（Playwright + Electron：关键旅程回归）
 
   **What to do**:
   - 搭建 Playwright 的 Electron E2E：在 Windows runner 启动 app，按 `data-testid` 驱动关键旅程。

@@ -1,0 +1,32 @@
+[Task 37 验证证据]
+时间: 2026-02-28
+
+1) 命令: source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test -- src/renderer/App.test.tsx
+结果: PASS
+关键输出:
+- Test Files  1 passed (1)
+- Tests  12 passed (12)
+- 包含新增用例:
+  - Notes 编辑器：可以新建草稿并进入可编辑状态
+  - Notes 编辑器：输入后会 debounce 调用 autosave（避免每次按键都 IPC）
+  - Notes 编辑器：sync 状态文案会按 getDraft 返回值更新
+
+2) 命令: source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run build
+结果: PASS
+关键输出:
+- Test Files  40 passed (40)
+- Tests  130 passed (130)
+- build:electron PASS
+- build:renderer PASS
+- vite built in 1.14s
+
+3) 命令: source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm run test:e2e
+结果: FAIL（环境限制）
+关键输出:
+- 3 failed
+- Missing X server or $DISPLAY
+
+4) 可选离线截图
+命令: xvfb-run -a node -e "...playwright electron screenshot..."
+结果: PASS
+产物: .sisyphus/evidence/task-37-offline.png

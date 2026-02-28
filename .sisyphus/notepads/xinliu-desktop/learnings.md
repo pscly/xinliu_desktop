@@ -257,6 +257,10 @@
 - SHA-256 推荐在 Windows runner 生成：PowerShell `Get-FileHash -Algorithm SHA256`，输出文件名用 `<installer>.sha256`，内容格式写成 `<hash>  <filename>`（双空格），便于用户/脚本校验。
 - 发布 Release：使用 `softprops/action-gh-release` 直接用 `GITHUB_TOKEN` 创建 stable release（`prerelease: false`），并上传 `release/*.exe`、`release/latest.yml`、`release/*.sha256`、必要的 `release/*.blockmap`。
 
+## [2026-02-27] - Notes 草稿 IPC（autosave 调用链）
+
+- notes 草稿 IPC 新增通道需要同步更新 `src/main/ipc.test.ts`（白名单）、`src/preload/index.ts`（window 暴露）、`src/renderer/vite-env.d.ts`（类型声明），否则要么测试失败、要么运行时/类型不同步。
+
 ## [2026-02-27] - Task 30 自动更新（GitHub Releases stable：检查/下载/延后安装/失败回退）
 
 - `electron-updater` 必须落到 `package-lock.json`：仅修改 import 不够，`npm run typecheck` 会报 `Cannot find module 'electron-updater'`；需要在 Node 20 环境执行一次 `npm install` 让 lock 与 node_modules 同步。
@@ -272,3 +276,16 @@
   - preload 未注入回退：`update-error` 含 `preload`
 - 断言实现建议用 `expect.poll()` 自己组合多个 locator 的 textContent/count，避免 `locator.textContent()` 在元素不存在时被动超时。
 - 截图证据要保证“失败也落盘”：把 `page.screenshot({ path })` 放到 `finally` 里 best-effort 执行，再关闭/kill Electron 进程。
+
+## [2026-02-27] - Task 33 E2E（Triptych/快捕/关闭到托盘）稳定性经验
+
+- E2E/CI 要“可复现的干净 userData”：main 进程在 `app.whenReady()` 之前支持 `XINLIU_E2E=1`/`XINLIU_USER_DATA_DIR`，用 `app.setPath('userData', <新目录>)` 强制每次启动都不受本机历史设置影响（尤其是 `desktop.close_behavior` 会让 close-to-tray 变成 quit）。
+- 多窗口等待不要依赖 `electronApp.waitForEvent('window')`：在 CI/低性能环境容易被时序卡住；更稳的是轮询 `electronApp.windows()`，按窗口 URL hash（例如 `#quick-capture`）或稳定 testid 来识别目标窗口。
+- close-to-tray 判定用 `BrowserWindow.isVisible()` 轮询最直观：点击 `data-testid="titlebar-close"` 后，轮询 `isVisible()` 从 true -> false，同时断言 `electronApp.process().exitCode===null`，避免误把“真的退出”当成隐藏。
+- teardown 固化：每个用例都用 `try/finally` 做 best-effort 截图；`electronApp.close()` 失败则 `electronApp.process().kill('SIGKILL')` 兜底，避免后台常驻/托盘常驻导致 CI 卡住。
+
+## [2026-02-28] - Task 37 Notes Editor（renderer autosave + 状态文案）
+
+- Vitest + RTL 对 debounce 场景优先使用真实计时器 + `waitFor({ timeout: ... })`，避免 `vi.useFakeTimers()` 泄漏到后续用例导致整文件异步测试批量超时。
+- Notes 状态文案要严格区分“本地保存状态”与“远端同步状态”：本地 autosave 成功后仅可显示“本地已保存（待同步/同步中/同步失败）”，不能直接宣称“已同步”。
+- Playwright Electron 在 Linux 无图形环境会报 `Missing X server or $DISPLAY`；需要 `xvfb-run -a` 包裹才能稳定产出截图证据。

@@ -4,6 +4,7 @@ import type {
   CloseBehaviorStatus,
   ContextMenuDidSelectPayload,
   DiagnosticsStatus,
+  NotesSyncStatus,
   SearchQueryResult,
   SearchResultItem,
   ShortcutId,
@@ -41,6 +42,7 @@ type XinliuContextMenuApi = NonNullable<Window['xinliu']>['contextMenu'];
 type XinliuSearchApi = NonNullable<Window['xinliu']>['search'];
 type XinliuFileAccessApi = NonNullable<Window['xinliu']>['fileAccess'];
 type XinliuUpdaterApi = NonNullable<Window['xinliu']>['updater'];
+type XinliuNotesApi = NonNullable<Window['xinliu']>['notes'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
   return window.xinliu?.window;
@@ -76,6 +78,32 @@ function getXinliuFileAccessApi(): XinliuFileAccessApi | undefined {
 
 function getXinliuUpdaterApi(): XinliuUpdaterApi | undefined {
   return window.xinliu?.updater;
+}
+
+function getXinliuNotesApi(): XinliuNotesApi | undefined {
+  return window.xinliu?.notes;
+}
+
+function formatNotesSyncStatus(status: NotesSyncStatus): string {
+  if (status === 'DIRTY') {
+    return '本地已保存（待同步）';
+  }
+  if (status === 'SYNCING') {
+    return '本地已保存（同步中）';
+  }
+  if (status === 'FAILED') {
+    return '本地已保存（同步失败）';
+  }
+  if (status === 'SYNCED') {
+    return '远端已同步（后台）';
+  }
+  if (status === 'LOCAL_ONLY') {
+    return '仅本地（不参与同步）';
+  }
+  if (status === 'UNKNOWN' || status === null) {
+    return '本地已保存（状态未知）';
+  }
+  return String(status);
 }
 
 async function safePopupMiddleItemMenu(itemId: string) {
@@ -1157,6 +1185,255 @@ function GlobalSearchBox() {
   );
 }
 
+function NotesEditorCard() {
+  const [localUuid, setLocalUuid] = useState<string | null>(null);
+  const [content, setContent] = useState('');
+  const [syncStatus, setSyncStatus] = useState<NotesSyncStatus>(null);
+  const [phase, setPhase] = useState<'idle' | 'dirty' | 'saving' | 'failed'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  const debounceMs = 800;
+  const timerRef = useRef<number | null>(null);
+  const contentRef = useRef<string>('');
+  const localUuidRef = useRef<string | null>(null);
+  const lastSavedContentRef = useRef<string>('');
+  const mountedRef = useRef(true);
+
+  const safeSetPhase = useCallback((next: 'idle' | 'dirty' | 'saving' | 'failed') => {
+    if (!mountedRef.current) {
+      return;
+    }
+    setPhase(next);
+  }, []);
+
+  const safeSetError = useCallback((next: string | null) => {
+    if (!mountedRef.current) {
+      return;
+    }
+    setError(next);
+  }, []);
+
+  const safeSetSyncStatus = useCallback((next: NotesSyncStatus) => {
+    if (!mountedRef.current) {
+      return;
+    }
+    setSyncStatus(next);
+  }, []);
+
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
+
+  useEffect(() => {
+    localUuidRef.current = localUuid;
+  }, [localUuid]);
+
+  const refreshDraftMeta = useCallback(
+    async (uuid: string) => {
+      const api = getXinliuNotesApi();
+      const fn = api?.getDraft;
+      if (typeof fn !== 'function') {
+        return;
+      }
+
+      try {
+        const res = await fn({ localUuid: uuid });
+        if (!res.ok) {
+          return;
+        }
+        const draft = res.value.draft;
+        if (!draft) {
+          return;
+        }
+        safeSetSyncStatus(draft.syncStatus);
+      } catch {}
+    },
+    [safeSetSyncStatus]
+  );
+
+  const saveNow = useCallback(
+    async (reason: 'debounce' | 'flush') => {
+      const api = getXinliuNotesApi();
+      const upsert = api?.upsertDraft;
+      const getDraft = api?.getDraft;
+
+      if (typeof upsert !== 'function' || typeof getDraft !== 'function') {
+        if (reason !== 'flush') {
+          safeSetPhase('failed');
+          safeSetError('Notes API 不可用（preload 未注入）');
+        }
+        return;
+      }
+
+      const uuid = localUuidRef.current;
+      if (!uuid) {
+        return;
+      }
+
+      const latest = contentRef.current;
+      if (latest === lastSavedContentRef.current) {
+        return;
+      }
+
+      safeSetPhase('saving');
+      safeSetError(null);
+
+      try {
+        const res = await upsert({ localUuid: uuid, content: latest });
+        if (!res.ok) {
+          safeSetPhase('failed');
+          safeSetError(`${res.error.message}（${res.error.code}）`);
+          return;
+        }
+
+        lastSavedContentRef.current = latest;
+
+        const meta = await getDraft({ localUuid: uuid });
+        if (meta.ok && meta.value.draft) {
+          safeSetSyncStatus(meta.value.draft.syncStatus);
+        } else {
+          safeSetSyncStatus('DIRTY');
+        }
+        safeSetPhase('idle');
+      } catch (e) {
+        safeSetPhase('failed');
+        safeSetError(`保存异常：${String(e)}`);
+      }
+    },
+    [safeSetError, safeSetPhase, safeSetSyncStatus]
+  );
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+
+      void saveNow('flush');
+    };
+  }, [saveNow]);
+
+  useEffect(() => {
+    if (!localUuid) {
+      return;
+    }
+
+    if (content === lastSavedContentRef.current) {
+      return;
+    }
+
+    safeSetPhase('dirty');
+    safeSetError(null);
+
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+    }
+
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      void saveNow('debounce');
+    }, debounceMs);
+
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [content, localUuid, saveNow, safeSetError, safeSetPhase]);
+
+  const onNewDraft = async () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    await saveNow('flush');
+
+    const api = getXinliuNotesApi();
+    const fn = api?.createDraft;
+    if (typeof fn !== 'function') {
+      safeSetPhase('failed');
+      safeSetError('Notes API 不可用（preload 未注入）');
+      return;
+    }
+
+    const initial = '# 新笔记\n';
+    safeSetPhase('saving');
+    safeSetError(null);
+    try {
+      const res = await fn({ content: initial });
+      if (!res.ok) {
+        safeSetPhase('failed');
+        safeSetError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setLocalUuid(res.value.localUuid);
+      setContent(initial);
+      lastSavedContentRef.current = initial;
+      safeSetPhase('idle');
+      void refreshDraftMeta(res.value.localUuid);
+    } catch (e) {
+      safeSetPhase('failed');
+      safeSetError(`新建草稿异常：${String(e)}`);
+    }
+  };
+
+  const apiAvailable = Boolean(getXinliuNotesApi());
+
+  const statusText = (() => {
+    if (!apiAvailable) {
+      return 'Notes API 不可用（preload 未注入）';
+    }
+    if (!localUuid) {
+      return '尚未创建草稿';
+    }
+    if (phase === 'saving') {
+      return '正在保存到本地…';
+    }
+    if (phase === 'dirty') {
+      return '本地修改待保存…';
+    }
+    if (phase === 'failed') {
+      return error ? `本地保存失败：${error}` : '本地保存失败';
+    }
+    return formatNotesSyncStatus(syncStatus);
+  })();
+
+  return (
+    <div className="rightCard" data-testid="notes-editor">
+      <div className="rightCardTitle">编辑器</div>
+      <div className="rightCardBody">
+        <div className="btnRow" style={{ marginBottom: 10 }}>
+          <button
+            type="button"
+            className="btnSmall"
+            data-testid="notes-new"
+            onClick={() => void onNewDraft()}
+            disabled={!apiAvailable || phase === 'saving'}
+          >
+            新建
+          </button>
+          <div className="fine" data-testid="notes-save-status" style={{ marginLeft: 'auto' }}>
+            {statusText}
+          </div>
+        </div>
+
+        <textarea
+          className="textInput"
+          data-testid="notes-editor-input"
+          value={content}
+          onChange={(e) => setContent(e.currentTarget.value)}
+          placeholder={localUuid ? '在此输入 Markdown…' : '点击「新建」创建草稿后开始编辑'}
+          disabled={!localUuid}
+          style={{ minHeight: 260, resize: 'vertical' }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function MainWindowApp() {
   const [route, setRoute] = useState<RouteKey>('notes');
   const routeMeta = useMemo(() => ROUTES.find((r) => r.key === route)!, [route]);
@@ -1767,6 +2044,8 @@ function MainWindowApp() {
 
           <div className="rightStack">
             <GlobalSearchBox />
+
+            {route === 'notes' ? <NotesEditorCard /> : null}
 
             <div className="rightCard" data-testid="share-export">
               <div className="rightCardTitle">分享 / 导出</div>

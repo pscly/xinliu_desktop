@@ -10,6 +10,7 @@ import type {
   FileAccessShowSaveDialogResult,
   IpcResult,
   IpcVoid,
+  NotesGetDraftResult,
   SearchQueryResult,
   SearchRebuildIndexResult,
   ShortcutsStatus,
@@ -23,9 +24,14 @@ afterEach(() => {
   cleanup();
 });
 
+type XinliuNotesApi = NonNullable<NonNullable<Window['xinliu']>['notes']>;
+
 function buildXinliuStub(overrides: {
   showSaveDialog?: NonNullable<NonNullable<Window['xinliu']>['fileAccess']>['showSaveDialog'];
   writeTextFile?: NonNullable<NonNullable<Window['xinliu']>['fileAccess']>['writeTextFile'];
+  createDraft?: XinliuNotesApi['createDraft'];
+  upsertDraft?: XinliuNotesApi['upsertDraft'];
+  getDraft?: XinliuNotesApi['getDraft'];
 }): NonNullable<Window['xinliu']> {
   return {
     versions: { electron: '0', chrome: '0', node: '0' },
@@ -135,6 +141,40 @@ function buildXinliuStub(overrides: {
           } satisfies SearchRebuildIndexResult,
         }) satisfies IpcResult<SearchRebuildIndexResult>,
     },
+    notes: {
+      createDraft:
+        overrides.createDraft ??
+        (async () =>
+          ({ ok: true, value: { localUuid: 'draft_1' } }) satisfies IpcResult<{
+            localUuid: string;
+          }>),
+      upsertDraft:
+        overrides.upsertDraft ??
+        (async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>),
+      getDraft:
+        overrides.getDraft ??
+        (async ({ localUuid }) =>
+          ({
+            ok: true,
+            value: {
+              draft: {
+                localUuid,
+                content: '# 新笔记\n',
+                syncStatus: 'DIRTY',
+                updatedAtMs: 2,
+                createdAtMs: 1,
+              },
+            },
+          }) satisfies IpcResult<NotesGetDraftResult>),
+      listItems: async () =>
+        ({ ok: true, value: { items: [], hasMore: false } }) satisfies IpcResult<{
+          items: [];
+          hasMore: boolean;
+        }>,
+      delete: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      restore: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      hardDelete: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+    },
     updater: {
       getStatus: async () =>
         ({
@@ -196,6 +236,187 @@ describe('<App />', () => {
     expect(screen.getByTestId('diagnostics-copy-memos-request-id')).toBeTruthy();
     fireEvent.click(screen.getByTestId('nav-conflicts'));
     expect(screen.getAllByText('冲突').length).toBeGreaterThan(0);
+  });
+
+  it('Notes 编辑器：可以新建草稿并进入可编辑状态', async () => {
+    const createDraft = vi.fn(
+      async () =>
+        ({ ok: true, value: { localUuid: 'draft_local_1' } }) satisfies IpcResult<{
+          localUuid: string;
+        }>
+    );
+    const getDraft = vi.fn(
+      async ({ localUuid }: { localUuid: string }) =>
+        ({
+          ok: true,
+          value: {
+            draft: {
+              localUuid,
+              content: '# 新笔记\n',
+              syncStatus: 'DIRTY',
+              updatedAtMs: 2,
+              createdAtMs: 1,
+            },
+          },
+        }) satisfies IpcResult<NotesGetDraftResult>
+    );
+
+    window.xinliu = buildXinliuStub({
+      createDraft: createDraft as XinliuNotesApi['createDraft'],
+      getDraft: getDraft as XinliuNotesApi['getDraft'],
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('notes-new'));
+
+    await waitFor(() => {
+      expect(createDraft).toHaveBeenCalledTimes(1);
+    });
+    expect(createDraft).toHaveBeenCalledWith({ content: '# 新笔记\n' });
+
+    const input = screen.getByTestId('notes-editor-input') as HTMLTextAreaElement;
+    expect(input.disabled).toBe(false);
+    expect(input.value).toBe('# 新笔记\n');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-save-status').textContent ?? '').toContain('本地已保存');
+    });
+
+    delete window.xinliu;
+  });
+
+  it('Notes 编辑器：输入后会 debounce 调用 autosave（避免每次按键都 IPC）', async () => {
+    const createDraft = vi.fn(
+      async () =>
+        ({ ok: true, value: { localUuid: 'draft_local_1' } }) satisfies IpcResult<{
+          localUuid: string;
+        }>
+    );
+    const upsertDraft = vi.fn(async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>);
+    const getDraft = vi.fn(
+      async ({ localUuid }: { localUuid: string }) =>
+        ({
+          ok: true,
+          value: {
+            draft: {
+              localUuid,
+              content: '# 新笔记\n',
+              syncStatus: 'DIRTY',
+              updatedAtMs: 2,
+              createdAtMs: 1,
+            },
+          },
+        }) satisfies IpcResult<NotesGetDraftResult>
+    );
+
+    window.xinliu = buildXinliuStub({
+      createDraft: createDraft as XinliuNotesApi['createDraft'],
+      upsertDraft: upsertDraft as XinliuNotesApi['upsertDraft'],
+      getDraft: getDraft as XinliuNotesApi['getDraft'],
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('notes-new'));
+
+    await waitFor(() => {
+      expect(createDraft).toHaveBeenCalledTimes(1);
+    });
+
+    const input = screen.getByTestId('notes-editor-input');
+
+    fireEvent.change(input, { target: { value: '# 新笔记\n第一行' } });
+    expect(screen.getByTestId('notes-save-status').textContent ?? '').toContain('本地修改待保存');
+
+    await waitFor(
+      () => {
+        expect(upsertDraft).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 2500 }
+    );
+    expect(upsertDraft).toHaveBeenLastCalledWith({
+      localUuid: 'draft_local_1',
+      content: '# 新笔记\n第一行',
+    });
+
+    fireEvent.change(input, { target: { value: '# 新笔记\n第二行' } });
+    fireEvent.change(input, { target: { value: '# 新笔记\n第三行' } });
+
+    await waitFor(
+      () => {
+        expect(upsertDraft).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 2500 }
+    );
+    expect(upsertDraft).toHaveBeenLastCalledWith({
+      localUuid: 'draft_local_1',
+      content: '# 新笔记\n第三行',
+    });
+
+    delete window.xinliu;
+  });
+
+  it('Notes 编辑器：sync 状态文案会按 getDraft 返回值更新', async () => {
+    const createDraft = vi.fn(
+      async () =>
+        ({ ok: true, value: { localUuid: 'draft_local_1' } }) satisfies IpcResult<{
+          localUuid: string;
+        }>
+    );
+    const upsertDraft = vi.fn(async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>);
+    const getDraft = vi
+      .fn<XinliuNotesApi['getDraft']>()
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          draft: {
+            localUuid: 'draft_local_1',
+            content: '# 新笔记\n',
+            syncStatus: 'SYNCING',
+            updatedAtMs: 2,
+            createdAtMs: 1,
+          },
+        },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          draft: {
+            localUuid: 'draft_local_1',
+            content: '# 新笔记\n更新后',
+            syncStatus: 'FAILED',
+            updatedAtMs: 3,
+            createdAtMs: 1,
+          },
+        },
+      });
+
+    window.xinliu = buildXinliuStub({
+      createDraft: createDraft as XinliuNotesApi['createDraft'],
+      upsertDraft: upsertDraft as XinliuNotesApi['upsertDraft'],
+      getDraft,
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('notes-new'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-save-status').textContent ?? '').toContain('同步中');
+    });
+
+    fireEvent.change(screen.getByTestId('notes-editor-input'), {
+      target: { value: '# 新笔记\n更新后' },
+    });
+
+    await waitFor(
+      () => {
+        expect(upsertDraft).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('notes-save-status').textContent ?? '').toContain('同步失败');
+      },
+      { timeout: 3000 }
+    );
+
+    delete window.xinliu;
   });
 
   it('设置页：更新区块必须包含关键 data-testid（disabled 提示也要可定位）', async () => {
