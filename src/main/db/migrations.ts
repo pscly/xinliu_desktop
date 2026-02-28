@@ -608,6 +608,21 @@ export const MIGRATIONS: readonly SqliteMigration[] = [
       `);
     },
   },
+  {
+    version: 8,
+    name: 'memos_conflict_copy_meta',
+    up: (db) => {
+      db.exec(`
+        -- 冲突副本元数据：用于保留本地正文并提供可诊断字段。
+        ALTER TABLE memos ADD COLUMN conflict_of_local_uuid TEXT NULL;
+        ALTER TABLE memos ADD COLUMN conflict_request_id TEXT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_memos_conflict_of_local_uuid
+          ON memos(conflict_of_local_uuid)
+          WHERE conflict_of_local_uuid IS NOT NULL;
+      `);
+    },
+  },
 ];
 
 export function applyMigrations(
@@ -624,9 +639,7 @@ export function applyMigrations(
   }
 
   if (fromVersion > latest) {
-    throw new Error(
-      `数据库版本(${fromVersion})高于当前可识别版本(${latest})，可能需要升级客户端`
-    );
+    throw new Error(`数据库版本(${fromVersion})高于当前可识别版本(${latest})，可能需要升级客户端`);
   }
 
   const appliedVersions: number[] = [];
