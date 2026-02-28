@@ -12,3 +12,8 @@
   - CreateMemo 的 409（若出现）
   - “rejected conflict/并发检测”之类的非 409 形态（需要协议证据后再实现，避免虚构行为）
   - 冲突中心/对比 UI（Task 41 承接；本任务仅提供 `data-testid="conflict-compare"` 入口契约）
+
+- [2026-02-28] Task 40 前置审计：当前 git 工作区非干净状态，存在会干扰 Backfill Worker 开发与验收的改动混杂。
+  - 未暂存改动覆盖 CI/E2E（`.github/workflows/ci.yml`、`playwright.config.ts`、`e2e/updater.spec.ts`）、IPC 合同（`src/shared/ipc.ts`、`src/preload/index.ts`、`src/renderer/vite-env.d.ts`、`src/main/ipc.ts`）与 main 启动接线（`src/main/main.ts`）。
+  - 另有未跟踪实现与测试（`src/main/notes/notesDraftRepo.ts`、`src/main/notes/notesDraftRepo.test.ts`、`e2e/task-33-*.spec.ts`）及临时目录 `.tmp/`，若直接继续 Task 40，测试失败归因与回归范围会被放大。
+  - 建议先做隔离：将当前改动整理到独立分支或临时提交；Task 40 在干净分支上实施，避免 `src/main/main.ts` 与 `src/main/ipc.ts` 的并行改动产生冲突。
