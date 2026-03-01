@@ -790,7 +790,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-43-settings-ui.txt
   ```
 
-- [ ] 44. Notes 列表页（时间线/收件箱/回收站）+ 虚拟列表 + provider 标注
+- [x] 44. Notes 列表页（时间线/收件箱/回收站）+ 虚拟列表 + provider 标注
 
   **What to do**:
   - 实现 Notes 的三类列表：时间线、收件箱、回收站（删除/恢复/彻底删除需二次确认）。
