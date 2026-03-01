@@ -991,6 +991,31 @@ export function createTodoRepo(db: Database.Database, deps: TodoRepoDeps = {}) {
     });
   }
 
+  function getTodoItem(id: string): TodoItemRow | null {
+    if (!id || id.trim().length === 0) {
+      throw new Error('id 不能为空');
+    }
+    return readTodoItem(id);
+  }
+
+  function hardDeleteTodoItem(id: string): void {
+    if (!id || id.trim().length === 0) {
+      throw new Error('id 不能为空');
+    }
+    const existing = readTodoItem(id);
+    if (!existing) {
+      throw new Error('todo item 不存在');
+    }
+    if (existing.deletedAt === null) {
+      throw new Error('只能彻底删除回收站中的 todo item');
+    }
+
+    withImmediateTransaction(db, () => {
+      db.prepare('DELETE FROM todo_occurrences WHERE item_id = ?').run(id);
+      db.prepare('DELETE FROM todo_items WHERE id = ?').run(id);
+    });
+  }
+
   return {
     listTodoLists,
     listTodoItems,
@@ -1002,5 +1027,7 @@ export function createTodoRepo(db: Database.Database, deps: TodoRepoDeps = {}) {
     patchTodoItem,
     deleteTodoItem,
     restoreTodoItem,
+    getTodoItem,
+    hardDeleteTodoItem,
   };
 }

@@ -43,6 +43,15 @@ export const IPC_CHANNELS = {
     listChildren: `${IPC_NAMESPACE}:collections:listChildren`,
     move: `${IPC_NAMESPACE}:collections:move`,
   },
+  todo: {
+    listItems: `${IPC_NAMESPACE}:todo:listItems`,
+    toggleComplete: `${IPC_NAMESPACE}:todo:toggleComplete`,
+    softDelete: `${IPC_NAMESPACE}:todo:softDelete`,
+    restore: `${IPC_NAMESPACE}:todo:restore`,
+    hardDelete: `${IPC_NAMESPACE}:todo:hardDelete`,
+    bulkComplete: `${IPC_NAMESPACE}:todo:bulkComplete`,
+    bulkDelete: `${IPC_NAMESPACE}:todo:bulkDelete`,
+  },
   notes: {
     createDraft: `${IPC_NAMESPACE}:notes:createDraft`,
     upsertDraft: `${IPC_NAMESPACE}:notes:upsertDraft`,
@@ -112,6 +121,8 @@ export type IpcChannelContextMenu =
 export type IpcChannelCollections =
   (typeof IPC_CHANNELS.collections)[keyof typeof IPC_CHANNELS.collections];
 
+export type IpcChannelTodo = (typeof IPC_CHANNELS.todo)[keyof typeof IPC_CHANNELS.todo];
+
 export type IpcChannelNotes = (typeof IPC_CHANNELS.notes)[keyof typeof IPC_CHANNELS.notes];
 
 export type IpcChannelConflicts =
@@ -133,6 +144,7 @@ export type IpcChannel =
   | IpcChannelDiagnostics
   | IpcChannelContextMenu
   | IpcChannelCollections
+  | IpcChannelTodo
   | IpcChannelNotes
   | IpcChannelConflicts
   | IpcChannelSearch
@@ -277,6 +289,44 @@ export interface CollectionsMovePayload {
 export interface CollectionsMoveResult {
   itemId: string;
   parentId: string | null;
+}
+
+export type TodoScope = 'active' | 'completed' | 'trash';
+
+export interface TodoListItemsPayload {
+  scope: TodoScope;
+  limit: number;
+  offset: number;
+}
+
+export interface TodoListItem {
+  id: string;
+  listId: string;
+  title: string;
+  note: string;
+  completed: boolean;
+  status: string;
+  completedAtLocal: string | null;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface TodoListItemsResult {
+  items: TodoListItem[];
+  hasMore: boolean;
+}
+
+export interface TodoIdPayload {
+  id: string;
+}
+
+export interface TodoToggleCompleteResult {
+  id: string;
+  completed: boolean;
+}
+
+export interface TodoBulkIdsPayload {
+  ids: string[];
 }
 
 export type ShortcutId = 'openQuickCapture' | 'openMainAndFocusSearch';

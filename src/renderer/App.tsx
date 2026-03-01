@@ -41,6 +41,8 @@ import type {
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
+  TodoListItem,
+  TodoScope,
   UpdaterStatus,
 } from '../shared/ipc';
 
@@ -74,6 +76,7 @@ type XinliuFileAccessApi = NonNullable<Window['xinliu']>['fileAccess'];
 type XinliuUpdaterApi = NonNullable<Window['xinliu']>['updater'];
 type XinliuNotesApi = NonNullable<Window['xinliu']>['notes'];
 type XinliuConflictsApi = NonNullable<Window['xinliu']>['conflicts'];
+type XinliuTodoApi = NonNullable<Window['xinliu']>['todo'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
   return window.xinliu?.window;
@@ -121,6 +124,10 @@ function getXinliuNotesApi(): XinliuNotesApi | undefined {
 
 function getXinliuConflictsApi(): XinliuConflictsApi | undefined {
   return window.xinliu?.conflicts;
+}
+
+function getXinliuTodoApi(): XinliuTodoApi | undefined {
+  return window.xinliu?.todo;
 }
 
 function formatNotesSyncStatus(status: NotesSyncStatus): string {
@@ -2093,6 +2100,447 @@ function NotesListCenter(props: {
   );
 }
 
+const TODO_LIST_PAGE_SIZE = 200;
+
+function TodoCenter() {
+  const api = getXinliuTodoApi();
+  const apiAvailable = Boolean(api);
+
+  const [scope, setScope] = useState<TodoScope>('active');
+  const [items, setItems] = useState<TodoListItem[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusyKey, setActionBusyKey] = useState<string | null>(null);
+  const [pendingHardDeleteId, setPendingHardDeleteId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+
+  const selectedIds = useMemo(() => Array.from(selected.values()), [selected]);
+  const bulkVisible = selectedIds.length > 0 && scope !== 'trash';
+
+  const refresh = useCallback(async () => {
+    if (!api || typeof api.listItems !== 'function') {
+      setError('Todo API 不可用（preload 未注入）');
+      setItems([]);
+      setHasMore(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.listItems({ scope, limit: TODO_LIST_PAGE_SIZE, offset: 0 });
+      if (!res.ok) {
+        setError(`${res.error.message}（${res.error.code}）`);
+        setItems([]);
+        setHasMore(false);
+        return;
+      }
+      setItems(res.value.items);
+      setHasMore(res.value.hasMore);
+    } catch (e) {
+      setError(`Todo 加载异常：${String(e)}`);
+      setItems([]);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, scope]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const runAction = useCallback(
+    async (key: string, run: () => Promise<{ ok: true } | { ok: false; message: string }>) => {
+      setActionBusyKey(key);
+      setActionError(null);
+      try {
+        const result = await run();
+        if (!result.ok) {
+          setActionError(result.message);
+          return;
+        }
+        setActionError(null);
+        await refresh();
+      } finally {
+        setActionBusyKey(null);
+      }
+    },
+    [refresh]
+  );
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div className="contentPlaceholder" data-testid="todo-center">
+      <div className="contentHero">
+        <div className="contentHeroTitle">Todo</div>
+        <div className="contentHeroSub">
+          任务列表 / 已完成 / 回收站；所有读写仅通过 Todo IPC（renderer 不直连 DB）
+        </div>
+      </div>
+
+      <div className="notesScopeRow" style={{ marginTop: 12 }}>
+        <button
+          type="button"
+          className={`scopeBtn ${scope === 'active' ? 'scopeBtnActive' : ''}`}
+          data-testid="todo-scope-active"
+          onClick={() => {
+            setScope('active');
+            setPendingHardDeleteId(null);
+            setActionError(null);
+            setSelected(new Set());
+          }}
+          disabled={loading}
+        >
+          未完成
+        </button>
+        <button
+          type="button"
+          className={`scopeBtn ${scope === 'completed' ? 'scopeBtnActive' : ''}`}
+          data-testid="todo-scope-completed"
+          onClick={() => {
+            setScope('completed');
+            setPendingHardDeleteId(null);
+            setActionError(null);
+            setSelected(new Set());
+          }}
+          disabled={loading}
+        >
+          已完成
+        </button>
+        <button
+          type="button"
+          className={`scopeBtn ${scope === 'trash' ? 'scopeBtnActive' : ''}`}
+          data-testid="todo-scope-trash"
+          onClick={() => {
+            setScope('trash');
+            setPendingHardDeleteId(null);
+            setActionError(null);
+            setSelected(new Set());
+          }}
+          disabled={loading}
+        >
+          回收站
+        </button>
+
+        <button
+          type="button"
+          className="btnSmall"
+          onClick={() => void refresh()}
+          disabled={loading || !apiAvailable}
+          style={{ marginLeft: 'auto' }}
+        >
+          {loading ? '刷新中…' : '刷新'}
+        </button>
+      </div>
+
+      <div className="fine" style={{ marginTop: 8 }}>
+        当前范围：{scope} · 条目：{items.length}
+        {hasMore ? ' · 仅显示当前分页' : ''}
+      </div>
+
+      {!apiAvailable ? (
+        <div className="callout calloutWarn" style={{ marginTop: 10 }}>
+          Todo API 不可用（preload 未注入）
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="callout calloutWarn" style={{ marginTop: 10 }}>
+          {error}
+        </div>
+      ) : null}
+
+      {actionError ? (
+        <div className="callout calloutWarn" style={{ marginTop: 10 }}>
+          {actionError}
+        </div>
+      ) : null}
+
+      {bulkVisible ? (
+        <div className="callout" data-testid="todo-bulk-bar" style={{ marginTop: 10 }}>
+          已选择 {selectedIds.length} 项。
+          <div className="calloutActions">
+            <button
+              type="button"
+              className="btnSmall"
+              data-testid="todo-bulk-complete"
+              disabled={!apiAvailable || loading || actionBusyKey !== null}
+              onClick={() => {
+                const fn = api?.bulkComplete;
+                if (typeof fn !== 'function') {
+                  setActionError('Todo API 不可用（preload 未注入）');
+                  return;
+                }
+                void runAction('bulkComplete', async () => {
+                  try {
+                    const res = await fn({ ids: selectedIds });
+                    if (!res.ok) {
+                      return {
+                        ok: false as const,
+                        message: `${res.error.message}（${res.error.code}）`,
+                      };
+                    }
+                    setSelected(new Set());
+                    return { ok: true as const };
+                  } catch (e) {
+                    return { ok: false as const, message: `批量完成异常：${String(e)}` };
+                  }
+                });
+              }}
+            >
+              批量完成
+            </button>
+            <button
+              type="button"
+              className="btnSmall"
+              data-testid="todo-bulk-delete"
+              disabled={!apiAvailable || loading || actionBusyKey !== null}
+              onClick={() => {
+                const fn = api?.bulkDelete;
+                if (typeof fn !== 'function') {
+                  setActionError('Todo API 不可用（preload 未注入）');
+                  return;
+                }
+                void runAction('bulkDelete', async () => {
+                  try {
+                    const res = await fn({ ids: selectedIds });
+                    if (!res.ok) {
+                      return {
+                        ok: false as const,
+                        message: `${res.error.message}（${res.error.code}）`,
+                      };
+                    }
+                    setSelected(new Set());
+                    return { ok: true as const };
+                  } catch (e) {
+                    return { ok: false as const, message: `批量删除异常：${String(e)}` };
+                  }
+                });
+              }}
+            >
+              批量删除
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="contentList" style={{ marginTop: 12 }}>
+        <div className="contentListTitle">任务列表</div>
+        <div className="contentListBody">
+          {items.map((item) => {
+            const toggling = actionBusyKey === `toggle:${item.id}`;
+            const deleting = actionBusyKey === `delete:${item.id}`;
+            const restoring = actionBusyKey === `restore:${item.id}`;
+            const hardDeleting = actionBusyKey === `hardDelete:${item.id}`;
+            const confirmVisible = pendingHardDeleteId === item.id;
+
+            return (
+              <div key={item.id} className="listRow" data-testid={`todo-item-${item.id}`}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    data-testid={`todo-select-${item.id}`}
+                    checked={selected.has(item.id)}
+                    disabled={
+                      !apiAvailable || scope === 'trash' || loading || actionBusyKey !== null
+                    }
+                    onChange={(e) => toggleSelected(item.id, e.currentTarget.checked)}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div className="listRowTitle">{item.title || '（未命名）'}</div>
+                    <div className="listRowSub">
+                      {item.note?.trim().length ? item.note : '（无备注）'}
+                    </div>
+                    <div className="fine" style={{ marginTop: 6 }}>
+                      {item.completed ? '已完成' : '未完成'} · updatedAt: {item.updatedAt}
+                      {item.deletedAt ? ` · deletedAt: ${item.deletedAt}` : ''}
+                    </div>
+                  </div>
+                </div>
+
+                {scope !== 'trash' ? (
+                  <div className="btnRow" style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btnSmall"
+                      data-testid={`todo-item-toggle-${item.id}`}
+                      disabled={!apiAvailable || loading || toggling || deleting}
+                      onClick={() => {
+                        const fn = api?.toggleComplete;
+                        if (typeof fn !== 'function') {
+                          setActionError('Todo API 不可用（preload 未注入）');
+                          return;
+                        }
+                        void runAction(`toggle:${item.id}`, async () => {
+                          try {
+                            const res = await fn({ id: item.id });
+                            if (!res.ok) {
+                              return {
+                                ok: false as const,
+                                message: `${res.error.message}（${res.error.code}）`,
+                              };
+                            }
+                            return { ok: true as const };
+                          } catch (e) {
+                            return { ok: false as const, message: `切换完成异常：${String(e)}` };
+                          }
+                        });
+                      }}
+                    >
+                      {item.completed ? '取消完成' : '完成'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btnSmall"
+                      data-testid={`todo-item-delete-${item.id}`}
+                      disabled={!apiAvailable || loading || deleting || toggling}
+                      onClick={() => {
+                        const fn = api?.softDelete;
+                        if (typeof fn !== 'function') {
+                          setActionError('Todo API 不可用（preload 未注入）');
+                          return;
+                        }
+                        void runAction(`delete:${item.id}`, async () => {
+                          try {
+                            const res = await fn({ id: item.id });
+                            if (!res.ok) {
+                              return {
+                                ok: false as const,
+                                message: `${res.error.message}（${res.error.code}）`,
+                              };
+                            }
+                            setSelected((prev) => {
+                              const next = new Set(prev);
+                              next.delete(item.id);
+                              return next;
+                            });
+                            return { ok: true as const };
+                          } catch (e) {
+                            return { ok: false as const, message: `删除异常：${String(e)}` };
+                          }
+                        });
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                ) : (
+                  <div className="btnRow" style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btnSmall"
+                      data-testid={`todo-item-restore-${item.id}`}
+                      disabled={!apiAvailable || loading || restoring || hardDeleting}
+                      onClick={() => {
+                        const fn = api?.restore;
+                        if (typeof fn !== 'function') {
+                          setActionError('Todo API 不可用（preload 未注入）');
+                          return;
+                        }
+                        void runAction(`restore:${item.id}`, async () => {
+                          try {
+                            const res = await fn({ id: item.id });
+                            if (!res.ok) {
+                              return {
+                                ok: false as const,
+                                message: `${res.error.message}（${res.error.code}）`,
+                              };
+                            }
+                            return { ok: true as const };
+                          } catch (e) {
+                            return { ok: false as const, message: `恢复异常：${String(e)}` };
+                          }
+                        });
+                      }}
+                    >
+                      恢复
+                    </button>
+                    <button
+                      type="button"
+                      className="btnSmall"
+                      data-testid={`todo-item-hard-delete-${item.id}`}
+                      disabled={!apiAvailable || loading || restoring || hardDeleting}
+                      onClick={() => setPendingHardDeleteId(item.id)}
+                    >
+                      彻底删除
+                    </button>
+                  </div>
+                )}
+
+                {scope === 'trash' && confirmVisible ? (
+                  <div
+                    className="callout calloutWarn"
+                    data-testid={`todo-item-hard-delete-panel-${item.id}`}
+                    style={{ marginTop: 10 }}
+                  >
+                    <div>确认彻底删除？该操作不可恢复。</div>
+                    <div className="btnRow" style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`todo-item-hard-delete-confirm-${item.id}`}
+                        disabled={!apiAvailable || loading || hardDeleting}
+                        onClick={() => {
+                          const fn = api?.hardDelete;
+                          if (typeof fn !== 'function') {
+                            setActionError('Todo API 不可用（preload 未注入）');
+                            return;
+                          }
+                          void runAction(`hardDelete:${item.id}`, async () => {
+                            try {
+                              const res = await fn({ id: item.id });
+                              if (!res.ok) {
+                                return {
+                                  ok: false as const,
+                                  message: `${res.error.message}（${res.error.code}）`,
+                                };
+                              }
+                              setPendingHardDeleteId(null);
+                              return { ok: true as const };
+                            } catch (e) {
+                              return { ok: false as const, message: `彻底删除异常：${String(e)}` };
+                            }
+                          });
+                        }}
+                      >
+                        确认删除
+                      </button>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`todo-item-hard-delete-cancel-${item.id}`}
+                        disabled={hardDeleting}
+                        onClick={() => setPendingHardDeleteId(null)}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+
+          {!loading && items.length === 0 ? <div className="fine">当前范围暂无条目。</div> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ConflictsCenter(props: {
   apiAvailable: boolean;
   loading: boolean;
@@ -3841,6 +4289,8 @@ function MainWindowApp() {
                 onCancelHardDelete={() => setNotesPendingHardDeleteKey(null)}
                 onConfirmHardDelete={(item) => void runNotesAction(item, 'hardDelete')}
               />
+            ) : route === 'todo' ? (
+              <TodoCenter />
             ) : route === 'conflicts' ? (
               <ConflictsCenter
                 apiAvailable={Boolean(getXinliuConflictsApi())}

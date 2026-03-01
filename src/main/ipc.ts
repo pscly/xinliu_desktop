@@ -53,6 +53,11 @@ import type {
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
+  TodoBulkIdsPayload,
+  TodoIdPayload,
+  TodoListItemsPayload,
+  TodoListItemsResult,
+  TodoToggleCompleteResult,
   UpdaterStatus,
 } from '../shared/ipc';
 
@@ -120,6 +125,19 @@ export interface RegisterIpcHandlersDeps {
     move: (
       payload: CollectionsMovePayload
     ) => CollectionsMoveResult | Promise<CollectionsMoveResult>;
+  };
+  todo?: {
+    listItems: (
+      payload: TodoListItemsPayload
+    ) => TodoListItemsResult | Promise<TodoListItemsResult>;
+    toggleComplete: (
+      payload: TodoIdPayload
+    ) => TodoToggleCompleteResult | Promise<TodoToggleCompleteResult>;
+    softDelete: (payload: TodoIdPayload) => IpcVoid | Promise<IpcVoid>;
+    restore: (payload: TodoIdPayload) => IpcVoid | Promise<IpcVoid>;
+    hardDelete: (payload: TodoIdPayload) => IpcVoid | Promise<IpcVoid>;
+    bulkComplete: (payload: TodoBulkIdsPayload) => IpcVoid | Promise<IpcVoid>;
+    bulkDelete: (payload: TodoBulkIdsPayload) => IpcVoid | Promise<IpcVoid>;
   };
   pathGate: PathGate;
   fileAccess: {
@@ -696,6 +714,68 @@ function validateNotesGetDraftPayload(payload: unknown): IpcResult<NotesGetDraft
   }
 
   return ok({ localUuid: localUuidTrimmed });
+}
+
+function validateTodoListItemsPayload(payload: unknown): IpcResult<TodoListItemsPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const scope = payload['scope'];
+  const limit = payload['limit'];
+  const offset = payload['offset'];
+
+  if (scope !== 'active' && scope !== 'completed' && scope !== 'trash') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit <= 0 || limit > 500) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  return ok({ scope, limit, offset });
+}
+
+function validateTodoIdPayload(payload: unknown): IpcResult<TodoIdPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const id = payload['id'];
+  if (typeof id !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const trimmed = id.trim();
+  if (trimmed.length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ id: trimmed });
+}
+
+function validateTodoBulkIdsPayload(payload: unknown): IpcResult<TodoBulkIdsPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const ids = payload['ids'];
+  if (!Array.isArray(ids)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const normalized: string[] = [];
+  for (const id of ids) {
+    if (typeof id !== 'string') {
+      return err('VALIDATION_ERROR', '参数不合法');
+    }
+    const trimmed = id.trim();
+    if (trimmed.length === 0) {
+      return err('VALIDATION_ERROR', '参数不合法');
+    }
+    normalized.push(trimmed);
+  }
+  if (normalized.length === 0 || normalized.length > 200) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ ids: normalized });
 }
 
 function validateFlowConflictResolvePayload(
@@ -1277,6 +1357,123 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, deps: RegisterIpcHandl
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.todo.listItems,
+    makeHandlerWithErrorMessage<TodoListItemsResult>({
+      channel: IPC_CHANNELS.todo.listItems,
+      deps,
+      rateLimiter,
+      validate: validateTodoListItemsPayload,
+      run: async (validatedPayload) => {
+        if (!deps.todo) {
+          throw new Error('Todo 未实现');
+        }
+        return deps.todo.listItems(validatedPayload as TodoListItemsPayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.todo.toggleComplete,
+    makeHandlerWithErrorMessage<TodoToggleCompleteResult>({
+      channel: IPC_CHANNELS.todo.toggleComplete,
+      deps,
+      rateLimiter,
+      validate: validateTodoIdPayload,
+      run: async (validatedPayload) => {
+        if (!deps.todo) {
+          throw new Error('Todo 未实现');
+        }
+        return deps.todo.toggleComplete(validatedPayload as TodoIdPayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.todo.softDelete,
+    makeHandlerWithErrorMessage<IpcVoid>({
+      channel: IPC_CHANNELS.todo.softDelete,
+      deps,
+      rateLimiter,
+      validate: validateTodoIdPayload,
+      run: async (validatedPayload) => {
+        if (!deps.todo) {
+          throw new Error('Todo 未实现');
+        }
+        await deps.todo.softDelete(validatedPayload as TodoIdPayload);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.todo.restore,
+    makeHandlerWithErrorMessage<IpcVoid>({
+      channel: IPC_CHANNELS.todo.restore,
+      deps,
+      rateLimiter,
+      validate: validateTodoIdPayload,
+      run: async (validatedPayload) => {
+        if (!deps.todo) {
+          throw new Error('Todo 未实现');
+        }
+        await deps.todo.restore(validatedPayload as TodoIdPayload);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.todo.hardDelete,
+    makeHandlerWithErrorMessage<IpcVoid>({
+      channel: IPC_CHANNELS.todo.hardDelete,
+      deps,
+      rateLimiter,
+      validate: validateTodoIdPayload,
+      run: async (validatedPayload) => {
+        if (!deps.todo) {
+          throw new Error('Todo 未实现');
+        }
+        await deps.todo.hardDelete(validatedPayload as TodoIdPayload);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.todo.bulkComplete,
+    makeHandlerWithErrorMessage<IpcVoid>({
+      channel: IPC_CHANNELS.todo.bulkComplete,
+      deps,
+      rateLimiter,
+      validate: validateTodoBulkIdsPayload,
+      run: async (validatedPayload) => {
+        if (!deps.todo) {
+          throw new Error('Todo 未实现');
+        }
+        await deps.todo.bulkComplete(validatedPayload as TodoBulkIdsPayload);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.todo.bulkDelete,
+    makeHandlerWithErrorMessage<IpcVoid>({
+      channel: IPC_CHANNELS.todo.bulkDelete,
+      deps,
+      rateLimiter,
+      validate: validateTodoBulkIdsPayload,
+      run: async (validatedPayload) => {
+        if (!deps.todo) {
+          throw new Error('Todo 未实现');
+        }
+        await deps.todo.bulkDelete(validatedPayload as TodoBulkIdsPayload);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.notes.createDraft,
     makeHandlerWithErrorMessage<NotesCreateDraftResult>({
       channel: IPC_CHANNELS.notes.createDraft,
@@ -1702,5 +1899,8 @@ export const __test__ = {
   validateNotesCreateDraftPayload,
   validateNotesUpsertDraftPayload,
   validateNotesGetDraftPayload,
+  validateTodoListItemsPayload,
+  validateTodoIdPayload,
+  validateTodoBulkIdsPayload,
   validateFlowConflictResolvePayload,
 };

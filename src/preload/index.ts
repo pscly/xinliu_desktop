@@ -50,6 +50,11 @@ import type {
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
+  TodoBulkIdsPayload,
+  TodoIdPayload,
+  TodoListItemsPayload,
+  TodoListItemsResult,
+  TodoToggleCompleteResult,
   UpdaterStatus,
   UpdaterStatusChangedPayload,
 } from '../shared/ipc';
@@ -185,6 +190,28 @@ contextBridge.exposeInMainWorld('xinliu', {
         IPC_CHANNELS.collections.move,
         payload satisfies CollectionsMovePayload
       ),
+  },
+  todo: {
+    listItems: (payload: TodoListItemsPayload) =>
+      invokeIpc<TodoListItemsResult>(
+        IPC_CHANNELS.todo.listItems,
+        payload satisfies TodoListItemsPayload
+      ),
+    toggleComplete: (payload: TodoIdPayload) =>
+      invokeIpc<TodoToggleCompleteResult>(
+        IPC_CHANNELS.todo.toggleComplete,
+        payload satisfies TodoIdPayload
+      ),
+    softDelete: (payload: TodoIdPayload) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.todo.softDelete, payload satisfies TodoIdPayload),
+    restore: (payload: TodoIdPayload) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.todo.restore, payload satisfies TodoIdPayload),
+    hardDelete: (payload: TodoIdPayload) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.todo.hardDelete, payload satisfies TodoIdPayload),
+    bulkComplete: (payload: TodoBulkIdsPayload) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.todo.bulkComplete, payload satisfies TodoBulkIdsPayload),
+    bulkDelete: (payload: TodoBulkIdsPayload) =>
+      invokeIpc<IpcVoid>(IPC_CHANNELS.todo.bulkDelete, payload satisfies TodoBulkIdsPayload),
   },
   notes: {
     createDraft: (payload: NotesCreateDraftPayload) =>

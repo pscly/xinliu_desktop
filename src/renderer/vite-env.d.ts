@@ -44,6 +44,11 @@ import type {
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
+  TodoBulkIdsPayload,
+  TodoIdPayload,
+  TodoListItemsPayload,
+  TodoListItemsResult,
+  TodoToggleCompleteResult,
   UpdaterStatus,
 } from '../shared/ipc';
 
@@ -144,6 +149,15 @@ declare global {
           payload: CollectionsListChildrenPayload
         ) => Promise<IpcResult<CollectionsListResult>>;
         move: (payload: CollectionsMovePayload) => Promise<IpcResult<CollectionsMoveResult>>;
+      };
+      todo?: {
+        listItems: (payload: TodoListItemsPayload) => Promise<IpcResult<TodoListItemsResult>>;
+        toggleComplete: (payload: TodoIdPayload) => Promise<IpcResult<TodoToggleCompleteResult>>;
+        softDelete: (payload: TodoIdPayload) => Promise<IpcResult<IpcVoid>>;
+        restore: (payload: TodoIdPayload) => Promise<IpcResult<IpcVoid>>;
+        hardDelete: (payload: TodoIdPayload) => Promise<IpcResult<IpcVoid>>;
+        bulkComplete: (payload: TodoBulkIdsPayload) => Promise<IpcResult<IpcVoid>>;
+        bulkDelete: (payload: TodoBulkIdsPayload) => Promise<IpcResult<IpcVoid>>;
       };
       updater: {
         getStatus: () => Promise<IpcResult<UpdaterStatus>>;

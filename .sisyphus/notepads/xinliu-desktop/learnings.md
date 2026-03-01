@@ -359,3 +359,21 @@
 
 - [2026-03-01] Task 46（Playwright Electron E2E）跑用例前先执行一次 `npm run build`，否则可能复用旧 `dist/`，导致用例行为与截图证据不稳定（看起来像“偶发/玄学”）。
 - [2026-03-01] Task 46 证据截图 `.sisyphus/evidence/task-46-dnd.png` 必须能看到撤销入口（`collections-undo-*`），避免截图落在“撤销完成后”导致无法证明撤销功能确实存在。
+
+## [2026-03-02] - Task 47 Todo UI（列表/完成/回收站/批量操作）
+
+- Todo 页面稳定 testid 约定（E2E 依赖）：
+  - 容器：`todo-center`
+  - 范围切换：`todo-scope-active` / `todo-scope-completed` / `todo-scope-trash`
+  - 条目容器：`todo-item-<id>`
+  - 完成切换：`todo-item-toggle-<id>`
+  - 软删：`todo-item-delete-<id>`
+  - 回收站恢复：`todo-item-restore-<id>`
+  - 打开硬删确认：`todo-item-hard-delete-<id>`
+  - 硬删确认面板：`todo-item-hard-delete-panel-<id>`
+  - 硬删确认/取消：`todo-item-hard-delete-confirm-<id>` / `todo-item-hard-delete-cancel-<id>`
+  - 多选 checkbox：`todo-select-<id>`
+  - 批量操作条：`todo-bulk-bar` / `todo-bulk-complete` / `todo-bulk-delete`
+- E2E seed（XINLIU_E2E=1）：
+  - todo_list：`e2e_todo_list_inbox`
+  - todo_item：`e2e_todo_item_1`、`e2e_todo_item_2`

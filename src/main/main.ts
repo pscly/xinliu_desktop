@@ -49,6 +49,7 @@ import { createPathGate } from './pathGate/pathGate';
 import { createUpdaterController } from './updater/updaterController';
 import { createElectronUpdaterAdapter } from './updater/electronUpdaterAdapter';
 import { createCollectionsRepo } from './collections/collectionsRepo';
+import { createTodoRepo } from './todo/todoRepo';
 import { createNotesDraftRepo } from './notes/notesDraftRepo';
 import { createNotesListRepo } from './notes/notesListRepo';
 import { createNotesConflictsService } from './notes/notesConflicts';
@@ -108,6 +109,8 @@ type WithMainDb = <T>(run: (db: Database.Database) => T) => T;
 let withMainDbRef: WithMainDb | null = null;
 let e2eCollectionsSeeded = false;
 let e2eCollectionsFallbackWarned = false;
+let e2eTodoSeeded = false;
+let e2eTodoFallbackWarned = false;
 
 type E2eCollectionItem = {
   id: string;
@@ -129,6 +132,10 @@ let e2eCollectionsFallbackItemsById: Record<string, E2eCollectionItem> | null = 
 const E2E_COLLECTION_ROOT_ID = 'e2e_folder_root';
 const E2E_COLLECTION_CHILD_ID = 'e2e_folder_child';
 const E2E_COLLECTION_TARGET_ID = 'e2e_folder_target';
+
+const E2E_TODO_LIST_ID = 'e2e_todo_list_inbox';
+const E2E_TODO_ITEM_1_ID = 'e2e_todo_item_1';
+const E2E_TODO_ITEM_2_ID = 'e2e_todo_item_2';
 
 function seedE2eCollectionsTreeIfNeeded(db: Database.Database): void {
   if ((process.env.XINLIU_E2E ?? '').trim() !== '1') {
@@ -267,6 +274,114 @@ function seedE2eCollectionsTreeIfNeeded(db: Database.Database): void {
   e2eCollectionsSeeded = true;
 }
 
+function seedE2eTodoIfNeeded(db: Database.Database): void {
+  if ((process.env.XINLIU_E2E ?? '').trim() !== '1') {
+    return;
+  }
+  if (e2eTodoSeeded) {
+    return;
+  }
+
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+
+  db.prepare(
+    `
+      INSERT OR IGNORE INTO todo_lists (
+        id,
+        name,
+        color,
+        sort_order,
+        archived,
+        client_updated_at_ms,
+        updated_at,
+        deleted_at
+      ) VALUES (
+        @id,
+        @name,
+        NULL,
+        @sort_order,
+        0,
+        @client_updated_at_ms,
+        @updated_at,
+        NULL
+      )
+    `
+  ).run({
+    id: E2E_TODO_LIST_ID,
+    name: 'E2E Inbox',
+    sort_order: 0,
+    client_updated_at_ms: nowMs,
+    updated_at: nowIso,
+  });
+
+  const insertItem = db.prepare(
+    `
+      INSERT OR IGNORE INTO todo_items (
+        id,
+        list_id,
+        parent_id,
+        title,
+        note,
+        status,
+        priority,
+        due_at_local,
+        completed_at_local,
+        sort_order,
+        tags_json,
+        is_recurring,
+        rrule,
+        dtstart_local,
+        tzid,
+        reminders_json,
+        client_updated_at_ms,
+        updated_at,
+        deleted_at
+      ) VALUES (
+        @id,
+        @list_id,
+        NULL,
+        @title,
+        '',
+        'todo',
+        0,
+        NULL,
+        NULL,
+        @sort_order,
+        '[]',
+        0,
+        NULL,
+        NULL,
+        'Asia/Shanghai',
+        '[]',
+        @client_updated_at_ms,
+        @updated_at,
+        NULL
+      )
+    `
+  );
+
+  insertItem.run({
+    id: E2E_TODO_ITEM_1_ID,
+    list_id: E2E_TODO_LIST_ID,
+    title: 'E2E Todo #1',
+    sort_order: 0,
+    client_updated_at_ms: nowMs + 1,
+    updated_at: nowIso,
+  });
+
+  insertItem.run({
+    id: E2E_TODO_ITEM_2_ID,
+    list_id: E2E_TODO_LIST_ID,
+    title: 'E2E Todo #2（用于删除/恢复/硬删）',
+    sort_order: 1,
+    client_updated_at_ms: nowMs + 2,
+    updated_at: nowIso,
+  });
+
+  e2eTodoSeeded = true;
+}
+
 function isE2eCollectionsFallbackError(error: unknown): boolean {
   if ((process.env.XINLIU_E2E ?? '').trim() !== '1') {
     return false;
@@ -275,6 +390,193 @@ function isE2eCollectionsFallbackError(error: unknown): boolean {
   return (
     message.includes('Module did not self-register') && message.includes('better_sqlite3.node')
   );
+}
+
+function isE2eTodoFallbackError(error: unknown): boolean {
+  if ((process.env.XINLIU_E2E ?? '').trim() !== '1') {
+    return false;
+  }
+  const message = String(error);
+  return (
+    message.includes('Module did not self-register') && message.includes('better_sqlite3.node')
+  );
+}
+
+type E2eTodoItem = {
+  id: string;
+  listId: string;
+  title: string;
+  note: string;
+  status: string;
+  completedAtLocal: string | null;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+
+let e2eTodoFallbackItemsById: Record<string, E2eTodoItem> | null = null;
+
+function getE2eTodoFallbackItemsById(): Record<string, E2eTodoItem> {
+  if (e2eTodoFallbackItemsById) {
+    return e2eTodoFallbackItemsById;
+  }
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  e2eTodoFallbackItemsById = {
+    [E2E_TODO_ITEM_1_ID]: {
+      id: E2E_TODO_ITEM_1_ID,
+      listId: E2E_TODO_LIST_ID,
+      title: 'E2E Todo #1',
+      note: '',
+      status: 'todo',
+      completedAtLocal: null,
+      updatedAt: nowIso,
+      deletedAt: null,
+    },
+    [E2E_TODO_ITEM_2_ID]: {
+      id: E2E_TODO_ITEM_2_ID,
+      listId: E2E_TODO_LIST_ID,
+      title: 'E2E Todo #2（用于删除/恢复/硬删）',
+      note: '',
+      status: 'todo',
+      completedAtLocal: null,
+      updatedAt: nowIso,
+      deletedAt: null,
+    },
+  };
+  return e2eTodoFallbackItemsById;
+}
+
+function isTodoCompleted(item: { status: string; completedAtLocal: string | null }): boolean {
+  if (item.completedAtLocal) {
+    return true;
+  }
+  const s = item.status.trim().toLowerCase();
+  return s === 'done' || s === 'completed';
+}
+
+function listTodoItemsFromE2eFallback(args: {
+  scope: 'active' | 'completed' | 'trash';
+  limit: number;
+  offset: number;
+}) {
+  const byId = getE2eTodoFallbackItemsById();
+  const rows = Object.values(byId)
+    .filter((item) => {
+      const deleted = item.deletedAt !== null;
+      const completed = isTodoCompleted(item);
+      if (args.scope === 'trash') return deleted;
+      if (deleted) return false;
+      return args.scope === 'completed' ? completed : !completed;
+    })
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const paged = rows.slice(args.offset, args.offset + args.limit + 1);
+  return {
+    items: paged.slice(0, args.limit).map((item) => ({
+      id: item.id,
+      listId: item.listId,
+      title: item.title,
+      note: item.note,
+      completed: isTodoCompleted(item),
+      status: item.status,
+      completedAtLocal: item.completedAtLocal,
+      updatedAt: item.updatedAt,
+      deletedAt: item.deletedAt,
+    })),
+    hasMore: paged.length > args.limit,
+  };
+}
+
+function toggleTodoCompleteInE2eFallback(id: string): { id: string; completed: boolean } {
+  const byId = getE2eTodoFallbackItemsById();
+  const item = byId[id];
+  if (!item || item.deletedAt !== null) {
+    throw new Error('todo item 不存在');
+  }
+
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  const completed = !isTodoCompleted(item);
+  byId[id] = {
+    ...item,
+    status: completed ? 'done' : 'todo',
+    completedAtLocal: completed ? nowIso : null,
+    updatedAt: nowIso,
+  };
+
+  return { id, completed };
+}
+
+function softDeleteTodoInE2eFallback(id: string): void {
+  const byId = getE2eTodoFallbackItemsById();
+  const item = byId[id];
+  if (!item || item.deletedAt !== null) {
+    throw new Error('todo item 不存在');
+  }
+  const nowIso = new Date(Date.now()).toISOString();
+  byId[id] = { ...item, deletedAt: nowIso, updatedAt: nowIso };
+}
+
+function restoreTodoInE2eFallback(id: string): void {
+  const byId = getE2eTodoFallbackItemsById();
+  const item = byId[id];
+  if (!item || item.deletedAt === null) {
+    throw new Error('todo item 不存在');
+  }
+  const nowIso = new Date(Date.now()).toISOString();
+  byId[id] = { ...item, deletedAt: null, updatedAt: nowIso };
+}
+
+function hardDeleteTodoInE2eFallback(id: string): void {
+  const byId = getE2eTodoFallbackItemsById();
+  const item = byId[id];
+  if (!item) {
+    throw new Error('todo item 不存在');
+  }
+  if (item.deletedAt === null) {
+    throw new Error('只能彻底删除回收站中的 todo item');
+  }
+  delete byId[id];
+}
+
+function bulkCompleteTodoInE2eFallback(ids: string[]): void {
+  for (const id of ids) {
+    const byId = getE2eTodoFallbackItemsById();
+    const item = byId[id];
+    if (!item || item.deletedAt !== null) {
+      continue;
+    }
+    if (isTodoCompleted(item)) {
+      continue;
+    }
+    toggleTodoCompleteInE2eFallback(id);
+  }
+}
+
+function bulkDeleteTodoInE2eFallback(ids: string[]): void {
+  for (const id of ids) {
+    const byId = getE2eTodoFallbackItemsById();
+    const item = byId[id];
+    if (!item || item.deletedAt !== null) {
+      continue;
+    }
+    softDeleteTodoInE2eFallback(id);
+  }
+}
+
+function withTodoDbOrE2eFallback<T>(runDb: () => T, runFallback: () => T): T {
+  try {
+    return runDb();
+  } catch (error) {
+    if (!isE2eTodoFallbackError(error)) {
+      throw error;
+    }
+    if (!e2eTodoFallbackWarned) {
+      console.warn('Todo E2E 回退到内存数据（better-sqlite3 在 Playwright/Electron 环境加载失败）');
+      e2eTodoFallbackWarned = true;
+    }
+    return runFallback();
+  }
 }
 
 function getE2eCollectionsFallbackItemsById(): Record<string, E2eCollectionItem> {
@@ -694,6 +996,7 @@ app.whenReady().then(async () => {
     try {
       applyMigrations(db);
       seedE2eCollectionsTreeIfNeeded(db);
+      seedE2eTodoIfNeeded(db);
       return run(db);
     } finally {
       closeSqliteDatabase(db);
@@ -910,6 +1213,155 @@ app.whenReady().then(async () => {
               };
             }),
           () => moveCollectionInE2eFallback(itemId, newParentId)
+        ),
+    },
+    todo: {
+      listItems: ({ scope, limit, offset }) =>
+        withTodoDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              const repo = createTodoRepo(db);
+              const raw = repo.listTodoItems({ includeArchivedLists: false, includeDeleted: true });
+
+              const filtered = raw.filter((item) => {
+                const deleted = item.deletedAt !== null;
+                const completed = isTodoCompleted({
+                  status: item.status,
+                  completedAtLocal: item.completedAtLocal,
+                });
+                if (scope === 'trash') {
+                  return deleted;
+                }
+                if (deleted) {
+                  return false;
+                }
+                return scope === 'completed' ? completed : !completed;
+              });
+
+              const paged = filtered.slice(offset, offset + limit + 1);
+              return {
+                items: paged.slice(0, limit).map((item) => ({
+                  id: item.id,
+                  listId: item.listId,
+                  title: item.title,
+                  note: item.note,
+                  completed: isTodoCompleted({
+                    status: item.status,
+                    completedAtLocal: item.completedAtLocal,
+                  }),
+                  status: item.status,
+                  completedAtLocal: item.completedAtLocal,
+                  updatedAt: item.updatedAt,
+                  deletedAt: item.deletedAt,
+                })),
+                hasMore: paged.length > limit,
+              };
+            }),
+          () => listTodoItemsFromE2eFallback({ scope, limit, offset })
+        ),
+      toggleComplete: ({ id }) =>
+        withTodoDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              const repo = createTodoRepo(db);
+              const existing = repo.getTodoItem(id);
+              if (!existing || existing.deletedAt !== null) {
+                throw new Error('todo item 不存在');
+              }
+              const nowIso = new Date(Date.now()).toISOString();
+              const completed = isTodoCompleted({
+                status: existing.status,
+                completedAtLocal: existing.completedAtLocal,
+              });
+
+              const nextCompleted = !completed;
+              repo.patchTodoItem({
+                id,
+                status: nextCompleted ? 'done' : 'todo',
+                completedAtLocal: nextCompleted ? nowIso : null,
+              });
+              return { id, completed: nextCompleted };
+            }),
+          () => toggleTodoCompleteInE2eFallback(id)
+        ),
+      softDelete: ({ id }) =>
+        withTodoDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              createTodoRepo(db).deleteTodoItem(id);
+              return null;
+            }),
+          () => {
+            softDeleteTodoInE2eFallback(id);
+            return null;
+          }
+        ),
+      restore: ({ id }) =>
+        withTodoDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              createTodoRepo(db).restoreTodoItem(id);
+              return null;
+            }),
+          () => {
+            restoreTodoInE2eFallback(id);
+            return null;
+          }
+        ),
+      hardDelete: ({ id }) =>
+        withTodoDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              createTodoRepo(db).hardDeleteTodoItem(id);
+              return null;
+            }),
+          () => {
+            hardDeleteTodoInE2eFallback(id);
+            return null;
+          }
+        ),
+      bulkComplete: ({ ids }) =>
+        withTodoDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              const repo = createTodoRepo(db);
+              for (const id of ids) {
+                const item = repo.getTodoItem(id);
+                if (!item || item.deletedAt !== null) {
+                  continue;
+                }
+                if (
+                  isTodoCompleted({ status: item.status, completedAtLocal: item.completedAtLocal })
+                ) {
+                  continue;
+                }
+                repo.patchTodoItem({
+                  id,
+                  status: 'done',
+                  completedAtLocal: new Date(Date.now()).toISOString(),
+                });
+              }
+              return null;
+            }),
+          () => {
+            bulkCompleteTodoInE2eFallback(ids);
+            return null;
+          }
+        ),
+      bulkDelete: ({ ids }) =>
+        withTodoDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              const repo = createTodoRepo(db);
+              for (const id of ids) {
+                repo.deleteTodoItem(id);
+              }
+              return null;
+            }),
+          () => {
+            bulkDeleteTodoInE2eFallback(ids);
+            return null;
+          }
         ),
     },
     notes: {
