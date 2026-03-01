@@ -69,21 +69,6 @@ import {
   writeMemosBaseUrlRaw,
 } from './userSettings/backendSettings';
 
-interface E2eCollectionsItem {
-  id: string;
-  itemType: 'folder' | 'note_ref';
-  parentId: string | null;
-  name: string;
-  color: string | null;
-  refType: 'flow_note' | 'memos_memo' | null;
-  refId: string | null;
-  sortOrder: number;
-  clientUpdatedAtMs: number;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-}
-
 const closeToTray = createCloseToTrayController();
 
 // E2E/CI 可复现的干净 userData：避免被本机历史 user_settings 影响。
@@ -125,52 +110,6 @@ let e2eCollectionsSeeded = false;
 
 const E2E_COLLECTION_ROOT_ID = 'e2e_folder_root';
 const E2E_COLLECTION_CHILD_ID = 'e2e_folder_child';
-
-const E2E_COLLECTIONS_CREATED_AT = '2026-03-01T00:00:00.000Z';
-
-const E2E_COLLECTIONS_ITEMS: ReadonlyArray<E2eCollectionsItem> = [
-  {
-    id: E2E_COLLECTION_ROOT_ID,
-    itemType: 'folder',
-    parentId: null,
-    name: 'E2E Root Folder',
-    color: null,
-    refType: null,
-    refId: null,
-    sortOrder: 0,
-    clientUpdatedAtMs: 1_762_000_000_000,
-    createdAt: E2E_COLLECTIONS_CREATED_AT,
-    updatedAt: E2E_COLLECTIONS_CREATED_AT,
-    deletedAt: null,
-  },
-  {
-    id: E2E_COLLECTION_CHILD_ID,
-    itemType: 'folder',
-    parentId: E2E_COLLECTION_ROOT_ID,
-    name: 'E2E Child Folder',
-    color: null,
-    refType: null,
-    refId: null,
-    sortOrder: 0,
-    clientUpdatedAtMs: 1_762_000_000_001,
-    createdAt: E2E_COLLECTIONS_CREATED_AT,
-    updatedAt: E2E_COLLECTIONS_CREATED_AT,
-    deletedAt: null,
-  },
-] as const;
-
-function listE2eCollectionsByParent(args: {
-  parentId: string | null;
-  limit: number;
-  offset: number;
-}): { items: E2eCollectionsItem[]; hasMore: boolean } {
-  const all = E2E_COLLECTIONS_ITEMS.filter((item) => item.parentId === args.parentId);
-  const page = all.slice(args.offset, args.offset + args.limit);
-  return {
-    items: page,
-    hasMore: args.offset + args.limit < all.length,
-  };
-}
 
 function seedE2eCollectionsTreeIfNeeded(db: Database.Database): void {
   if ((process.env.XINLIU_E2E ?? '').trim() !== '1') {
@@ -705,35 +644,31 @@ app.whenReady().then(async () => {
     },
     collections: {
       listRoots: ({ limit, offset }) =>
-        (process.env.XINLIU_E2E ?? '').trim() === '1'
-          ? listE2eCollectionsByParent({ parentId: null, limit, offset })
-          : withMainDb((db) => {
-              const items = createCollectionsRepo(db).listCollectionItems({
-                parentId: null,
-                includeDeleted: false,
-                limit: limit + 1,
-                offset,
-              });
-              return {
-                items: items.slice(0, limit),
-                hasMore: items.length > limit,
-              };
-            }),
+        withMainDb((db) => {
+          const items = createCollectionsRepo(db).listCollectionItems({
+            parentId: null,
+            includeDeleted: false,
+            limit: limit + 1,
+            offset,
+          });
+          return {
+            items: items.slice(0, limit),
+            hasMore: items.length > limit,
+          };
+        }),
       listChildren: ({ parentId, limit, offset }) =>
-        (process.env.XINLIU_E2E ?? '').trim() === '1'
-          ? listE2eCollectionsByParent({ parentId, limit, offset })
-          : withMainDb((db) => {
-              const items = createCollectionsRepo(db).listCollectionItems({
-                parentId,
-                includeDeleted: false,
-                limit: limit + 1,
-                offset,
-              });
-              return {
-                items: items.slice(0, limit),
-                hasMore: items.length > limit,
-              };
-            }),
+        withMainDb((db) => {
+          const items = createCollectionsRepo(db).listCollectionItems({
+            parentId,
+            includeDeleted: false,
+            limit: limit + 1,
+            offset,
+          });
+          return {
+            items: items.slice(0, limit),
+            hasMore: items.length > limit,
+          };
+        }),
     },
     notes: {
       createDraft: ({ content }) =>

@@ -32,3 +32,8 @@
 - 本次真实失败原因：直接跑 `npm run test:e2e -- e2e/task-45-hover.spec.ts` 时，`dist/*` 可能不是最新构建，导致 UI 未出现 `e2e_folder_root` 节点；先 `npm run build` 再跑 E2E 即通过。
 - `XINLIU_E2E=1` 的作用：main 在 SQLite seed 两层 folder（`e2e_folder_root/e2e_folder_child`），Collections UI 仍通过 IPC `collections.listRoots/listChildren` 从 SQLite 读取；不涉及“collections IPC 固定数据兜底”结论。
 - 关于 `better-sqlite3 Module did not self-register`：本次复核未复现，且无可重复证据支撑；相关结论标注为未证实并撤回。
+
+[2026-03-01 22:08] 二次勘误 / 与实现对齐
+
+- 本次已实改 `src/main/main.ts`：移除 `XINLIU_E2E=1` 下 Collections 的静态常量列表分支（`E2E_COLLECTIONS_ITEMS` 与 `listE2eCollectionsByParent`）。
+- 当前实现为：`XINLIU_E2E=1` 仅用于 `seedE2eCollectionsTreeIfNeeded(db)` 写入两层 folder（`e2e_folder_root`、`e2e_folder_child`）；`collections.listRoots/listChildren` 与非 E2E 完全一致，统一通过 `withMainDb(createCollectionsRepo(db).listCollectionItems(...))` 从 SQLite 读取。
