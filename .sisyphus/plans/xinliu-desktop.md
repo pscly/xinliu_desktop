@@ -829,7 +829,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-44-virtual.txt
   ```
 
-- [ ] 40. Backfill Worker（memo 获得 server 标识后回填 Collections 引用并入 outbox）
+- [x] 40. Backfill Worker（memo 获得 server 标识后回填 Collections 引用并入 outbox）
 
   **What to do**:
   - 当 memo 写回 `server_memo_id` 或 `server_memo_name`（如 `memos/123`）后：
@@ -866,7 +866,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-40-backfill.txt
   ```
 
-- [ ] 41. 冲突中心（聚合入口：Flow rejected/server_snapshot + Notes 冲突副本）
+- [x] 41. 冲突中心（聚合入口：Flow rejected/server_snapshot + Notes 冲突副本）
 
   **What to do**:
   - 实现“冲突中心”入口（不要求全屏页，但必须可达）：
@@ -959,7 +959,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-38-no-overwrite.txt
   ```
 
-- [ ] 39. Notes 冲突副本策略（保留本地文本 + 原记录回滚为服务端 + 可对比可复制）
+- [x] 39. Notes 冲突副本策略（保留本地文本 + 原记录回滚为服务端 + 可对比可复制）
 
   **What to do**:
   - 在以下情形触发冲突：在线 409、同步 rejected conflict、并发写入检测。

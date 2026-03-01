@@ -310,3 +310,9 @@
   - 总体与容器：`conflicts-center`、`conflicts-refresh`、`conflicts-error`、`conflicts-action-error`、`conflicts-flow-list`、`conflicts-notes-list`
   - Flow 列表与动作：`conflicts-flow-item-<outboxId>`、`conflicts-flow-apply-server-<outboxId>`、`conflicts-flow-keep-local-<outboxId>`、`conflicts-flow-force-overwrite-<outboxId>`、`conflicts-flow-force-confirm-panel-<outboxId>`、`conflicts-flow-force-confirm-<outboxId>`、`conflicts-flow-force-cancel-<outboxId>`
   - Notes 列表与入口：`conflicts-notes-item-<localUuid>`、`conflicts-notes-compare-<localUuid>`、`conflicts-notes-copy-<localUuid>`、`conflicts-notes-compare-panel-<localUuid>`
+
+## [2026-03-01 18:31] - Task 39 UI 验收补齐（恢复 `conflict-compare` 稳定入口）
+
+- 当计划或 E2E 需要“全局可检索”的冲突页入口时，建议在 `route='conflicts'` 的真实 UI 区域保留一个唯一 `data-testid="conflict-compare"`，并与按条目 testid（如 `conflicts-notes-compare-<id>`）并存：前者用于快速定位，后者用于精确交互。
+- 为避免选择器歧义，`conflict-compare` 不应在 map 列表中重复出现；放在 Notes 冲突卡片 header 最稳妥。
+- 入口按钮应具备“存在即合理”行为：有数据时执行最小可解释动作（展开首条 Notes 对比），无数据时 `disabled`，这样既满足验收检索，也不会引入无意义点击分支。
