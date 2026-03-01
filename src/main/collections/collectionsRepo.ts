@@ -15,16 +15,14 @@ export const COLLECTION_ITEM_TYPE = {
   noteRef: 'note_ref',
 } as const;
 
-export type CollectionItemType =
-  (typeof COLLECTION_ITEM_TYPE)[keyof typeof COLLECTION_ITEM_TYPE];
+export type CollectionItemType = (typeof COLLECTION_ITEM_TYPE)[keyof typeof COLLECTION_ITEM_TYPE];
 
 export const COLLECTION_REF_TYPE = {
   flowNote: 'flow_note',
   memosMemo: 'memos_memo',
 } as const;
 
-export type CollectionRefType =
-  (typeof COLLECTION_REF_TYPE)[keyof typeof COLLECTION_REF_TYPE];
+export type CollectionRefType = (typeof COLLECTION_REF_TYPE)[keyof typeof COLLECTION_REF_TYPE];
 
 export interface CollectionItemRow {
   id: string;
@@ -291,14 +289,18 @@ export function createCollectionsRepo(db: Database.Database, deps: CollectionsRe
             deleted_at
           FROM collection_items
           WHERE
-            (@parent_id_filter = 0 OR parent_id = @parent_id)
+            (
+              @parent_filter_mode = 0
+              OR (@parent_filter_mode = 1 AND parent_id IS NULL)
+              OR (@parent_filter_mode = 2 AND parent_id = @parent_id)
+            )
             AND (@include_deleted = 1 OR deleted_at IS NULL)
           ORDER BY sort_order ASC, created_at ASC
           LIMIT @limit OFFSET @offset
         `
       )
       .all({
-        parent_id_filter: args.parentId === undefined ? 0 : 1,
+        parent_filter_mode: args.parentId === undefined ? 0 : args.parentId === null ? 1 : 2,
         parent_id: args.parentId ?? null,
         include_deleted: includeDeleted ? 1 : 0,
         limit,

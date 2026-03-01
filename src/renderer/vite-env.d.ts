@@ -3,6 +3,9 @@
 import type {
   CloseBehaviorSetPayload,
   CloseBehaviorStatus,
+  CollectionsListChildrenPayload,
+  CollectionsListResult,
+  CollectionsListRootsPayload,
   ContextMenuDidSelectPayload,
   DiagnosticsSetFlowBaseUrlPayload,
   DiagnosticsSetMemosBaseUrlPayload,
@@ -130,6 +133,14 @@ declare global {
         popupMiddleItem: (itemId: string) => Promise<IpcResult<IpcVoid>>;
         popupFolder: (folderId: string) => Promise<IpcResult<IpcVoid>>;
         onCommand: (listener: (payload: ContextMenuDidSelectPayload) => void) => () => void;
+      };
+      collections?: {
+        listRoots: (
+          payload: CollectionsListRootsPayload
+        ) => Promise<IpcResult<CollectionsListResult>>;
+        listChildren: (
+          payload: CollectionsListChildrenPayload
+        ) => Promise<IpcResult<CollectionsListResult>>;
       };
       updater: {
         getStatus: () => Promise<IpcResult<UpdaterStatus>>;

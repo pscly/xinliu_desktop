@@ -38,6 +38,10 @@ export const IPC_CHANNELS = {
     popupMiddleItem: `${IPC_NAMESPACE}:contextMenu:popupMiddleItem`,
     popupFolder: `${IPC_NAMESPACE}:contextMenu:popupFolder`,
   },
+  collections: {
+    listRoots: `${IPC_NAMESPACE}:collections:listRoots`,
+    listChildren: `${IPC_NAMESPACE}:collections:listChildren`,
+  },
   notes: {
     createDraft: `${IPC_NAMESPACE}:notes:createDraft`,
     upsertDraft: `${IPC_NAMESPACE}:notes:upsertDraft`,
@@ -104,6 +108,9 @@ export type IpcChannelDiagnostics =
 export type IpcChannelContextMenu =
   (typeof IPC_CHANNELS.contextMenu)[keyof typeof IPC_CHANNELS.contextMenu];
 
+export type IpcChannelCollections =
+  (typeof IPC_CHANNELS.collections)[keyof typeof IPC_CHANNELS.collections];
+
 export type IpcChannelNotes = (typeof IPC_CHANNELS.notes)[keyof typeof IPC_CHANNELS.notes];
 
 export type IpcChannelConflicts =
@@ -124,6 +131,7 @@ export type IpcChannel =
   | IpcChannelCloseBehavior
   | IpcChannelDiagnostics
   | IpcChannelContextMenu
+  | IpcChannelCollections
   | IpcChannelNotes
   | IpcChannelConflicts
   | IpcChannelSearch
@@ -223,6 +231,41 @@ export type ContextMenuTarget =
 export interface ContextMenuDidSelectPayload {
   target: ContextMenuTarget;
   command: ContextMenuCommand;
+}
+
+export type CollectionsItemType = 'folder' | 'note_ref';
+
+export type CollectionsRefType = 'flow_note' | 'memos_memo' | null;
+
+export interface CollectionsTreeItem {
+  id: string;
+  itemType: CollectionsItemType;
+  parentId: string | null;
+  name: string;
+  color: string | null;
+  refType: CollectionsRefType;
+  refId: string | null;
+  sortOrder: number;
+  clientUpdatedAtMs: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface CollectionsListRootsPayload {
+  limit: number;
+  offset: number;
+}
+
+export interface CollectionsListChildrenPayload {
+  parentId: string;
+  limit: number;
+  offset: number;
+}
+
+export interface CollectionsListResult {
+  items: CollectionsTreeItem[];
+  hasMore: boolean;
 }
 
 export type ShortcutId = 'openQuickCapture' | 'openMainAndFocusSearch';

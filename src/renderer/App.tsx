@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 
 import type {
   CloseBehaviorStatus,
+  CollectionsTreeItem,
   ContextMenuDidSelectPayload,
   DiagnosticsStatus,
   FlowConflictItem,
@@ -43,6 +44,7 @@ type XinliuStorageRootApi = NonNullable<Window['xinliu']>['storageRoot'];
 type XinliuCloseBehaviorApi = NonNullable<Window['xinliu']>['closeBehavior'];
 type XinliuDiagnosticsApi = NonNullable<Window['xinliu']>['diagnostics'];
 type XinliuContextMenuApi = NonNullable<Window['xinliu']>['contextMenu'];
+type XinliuCollectionsApi = NonNullable<Window['xinliu']>['collections'];
 type XinliuSearchApi = NonNullable<Window['xinliu']>['search'];
 type XinliuFileAccessApi = NonNullable<Window['xinliu']>['fileAccess'];
 type XinliuUpdaterApi = NonNullable<Window['xinliu']>['updater'];
@@ -71,6 +73,10 @@ function getXinliuDiagnosticsApi(): XinliuDiagnosticsApi | undefined {
 
 function getXinliuContextMenuApi(): XinliuContextMenuApi | undefined {
   return window.xinliu?.contextMenu;
+}
+
+function getXinliuCollectionsApi(): XinliuCollectionsApi | undefined {
+  return window.xinliu?.collections;
 }
 
 function getXinliuSearchApi(): XinliuSearchApi | undefined {
@@ -1078,6 +1084,89 @@ function DefaultRoutePlaceholder(props: {
   );
 }
 
+function CollectionsMiddle(props: {
+  selectedParentId: string | null;
+  selectedParentName: string | null;
+  items: CollectionsTreeItem[];
+  hasMore: boolean;
+  loading: boolean;
+  error: string | null;
+  apiAvailable: boolean;
+  onRefresh: () => void;
+  onOpenFolder: (item: CollectionsTreeItem) => void;
+  onPopupMiddleItemMenu: (itemId: string) => void;
+}) {
+  return (
+    <div className="contentPlaceholder" data-testid="collections-center">
+      <div className="contentHero">
+        <div className="contentHeroTitle">Collections</div>
+        <div className="contentHeroSub">
+          中栏展示当前 parentId 的直接子项（folder 与 note_ref 混排）。
+        </div>
+      </div>
+
+      <div className="notesScopeRow" style={{ marginTop: 12 }}>
+        <div className="fine" data-testid="collections-parent-meta">
+          当前 parentId：{props.selectedParentId ?? 'ROOT'}
+          {props.selectedParentName ? `（${props.selectedParentName}）` : ''}
+        </div>
+        <button
+          type="button"
+          className="btnSmall"
+          onClick={() => props.onRefresh()}
+          disabled={!props.apiAvailable || props.loading}
+          style={{ marginLeft: 'auto' }}
+        >
+          {props.loading ? '刷新中…' : '刷新'}
+        </button>
+      </div>
+
+      {props.error ? (
+        <div className="callout calloutWarn" style={{ marginTop: 10 }}>
+          {props.error}
+        </div>
+      ) : null}
+
+      <div className="contentList" data-testid="middle-list">
+        <div className="contentListTitle">子项列表</div>
+        <div className="contentListBody">
+          {props.items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="listRow"
+              data-testid={`middle-list-item-${item.id}`}
+              draggable
+              onClick={() => {
+                if (item.itemType === 'folder') {
+                  props.onOpenFolder(item);
+                }
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                props.onPopupMiddleItemMenu(item.id);
+              }}
+            >
+              <div className="listRowTitle">
+                [{item.itemType}] {item.name || '（未命名）'}
+              </div>
+              <div className="listRowSub">id: {item.id}</div>
+            </button>
+          ))}
+
+          {!props.loading && props.items.length === 0 ? (
+            <div className="fine">当前 parentId 暂无子项。</div>
+          ) : null}
+        </div>
+
+        {props.hasMore ? (
+          <div className="fine">当前只展示第一页，请扩展分页参数查看后续。</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function GlobalSearchBox() {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -1529,6 +1618,12 @@ const NOTES_VIRTUAL_ROW_HEIGHT = 132;
 const NOTES_VIRTUAL_VIEWPORT_HEIGHT = 560;
 const NOTES_VIRTUAL_OVERSCAN = 4;
 const NOTES_LIST_PAGE_SIZE = 200;
+
+const COLLECTIONS_PAGE_SIZE = 200;
+const COLLECTIONS_ROOT_KEY = '__root__';
+const HOVER_EXPAND_DELAY_MS = 800;
+const TREE_EDGE_SCROLL_THRESHOLD_PX = 56;
+const TREE_EDGE_SCROLL_STEP_PX = 24;
 
 function NotesListCenter(props: {
   apiAvailable: boolean;
@@ -2092,6 +2187,32 @@ function MainWindowApp() {
   );
   const [notesCompareLocalUuid, setNotesCompareLocalUuid] = useState<string | null>(null);
 
+  const [collectionsItemsById, setCollectionsItemsById] = useState<
+    Record<string, CollectionsTreeItem>
+  >({});
+  const [collectionsChildIdsByParent, setCollectionsChildIdsByParent] = useState<
+    Record<string, string[]>
+  >({ [COLLECTIONS_ROOT_KEY]: [] });
+  const [collectionsLoadedParent, setCollectionsLoadedParent] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [collectionsLoadingParent, setCollectionsLoadingParent] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [collectionsTreeError, setCollectionsTreeError] = useState<string | null>(null);
+  const [collectionsExpanded, setCollectionsExpanded] = useState<Record<string, boolean>>({});
+  const [collectionsSelectedNodeId, setCollectionsSelectedNodeId] = useState<string | null>(null);
+
+  const [collectionsMiddleParentId, setCollectionsMiddleParentId] = useState<string | null>(null);
+  const [collectionsMiddleItems, setCollectionsMiddleItems] = useState<CollectionsTreeItem[]>([]);
+  const [collectionsMiddleHasMore, setCollectionsMiddleHasMore] = useState(false);
+  const [collectionsMiddleLoading, setCollectionsMiddleLoading] = useState(false);
+  const [collectionsMiddleError, setCollectionsMiddleError] = useState<string | null>(null);
+
+  const folderTreeViewportRef = useRef<HTMLDivElement | null>(null);
+  const hoverExpandTimerRef = useRef<number | null>(null);
+  const collectionsRootInitRef = useRef(false);
+
   useEffect(() => {
     const api = getXinliuContextMenuApi();
     const off = api?.onCommand?.((payload) => {
@@ -2113,24 +2234,279 @@ function MainWindowApp() {
     };
   }, []);
 
-  const demoFolders = useMemo(
-    () => [
-      { id: 'folder_inbox', title: '收件箱' },
-      { id: 'folder_projects', title: '项目' },
-      { id: 'folder_archive', title: '归档' },
-    ],
-    []
+  const queryCollectionsPage = useCallback(async (parentId: string | null) => {
+    const api = getXinliuCollectionsApi();
+    if (!api) {
+      return {
+        ok: false as const,
+        error: 'Collections API 不可用（preload 未注入）',
+      };
+    }
+
+    const pagePayload = { limit: COLLECTIONS_PAGE_SIZE, offset: 0 };
+    try {
+      const res =
+        parentId === null
+          ? await api.listRoots(pagePayload)
+          : await api.listChildren({ parentId, ...pagePayload });
+      if (!res.ok) {
+        return {
+          ok: false as const,
+          error: `${res.error.message}（${res.error.code}）`,
+        };
+      }
+      return { ok: true as const, value: res.value };
+    } catch (error) {
+      return {
+        ok: false as const,
+        error: `Collections 加载异常：${String(error)}`,
+      };
+    }
+  }, []);
+
+  const mergeCollectionsItems = useCallback((items: CollectionsTreeItem[]) => {
+    setCollectionsItemsById((prev) => {
+      const next = { ...prev };
+      for (const item of items) {
+        next[item.id] = item;
+      }
+      return next;
+    });
+  }, []);
+
+  const loadCollectionsTreeBranch = useCallback(
+    async (parentId: string | null, options?: { force?: boolean }) => {
+      const parentKey = parentId ?? COLLECTIONS_ROOT_KEY;
+      if (!options?.force && collectionsLoadedParent[parentKey]) {
+        return;
+      }
+
+      setCollectionsLoadingParent((prev) => ({ ...prev, [parentKey]: true }));
+      const result = await queryCollectionsPage(parentId);
+      setCollectionsLoadingParent((prev) => ({ ...prev, [parentKey]: false }));
+
+      if (!result.ok) {
+        setCollectionsTreeError(result.error);
+        return;
+      }
+
+      setCollectionsTreeError(null);
+      mergeCollectionsItems(result.value.items);
+      setCollectionsChildIdsByParent((prev) => ({
+        ...prev,
+        [parentKey]: result.value.items.map((item) => item.id),
+      }));
+      setCollectionsLoadedParent((prev) => ({ ...prev, [parentKey]: true }));
+    },
+    [collectionsLoadedParent, mergeCollectionsItems, queryCollectionsPage]
   );
 
-  const demoMiddleItems = useMemo(() => {
+  const loadCollectionsMiddle = useCallback(
+    async (parentId: string | null) => {
+      setCollectionsMiddleLoading(true);
+      const result = await queryCollectionsPage(parentId);
+      setCollectionsMiddleLoading(false);
+
+      if (!result.ok) {
+        setCollectionsMiddleItems([]);
+        setCollectionsMiddleHasMore(false);
+        setCollectionsMiddleError(result.error);
+        return;
+      }
+
+      const parentKey = parentId ?? COLLECTIONS_ROOT_KEY;
+      setCollectionsMiddleError(null);
+      setCollectionsMiddleItems(result.value.items);
+      setCollectionsMiddleHasMore(result.value.hasMore);
+
+      mergeCollectionsItems(result.value.items);
+      setCollectionsChildIdsByParent((prev) => ({
+        ...prev,
+        [parentKey]: result.value.items.map((item) => item.id),
+      }));
+      setCollectionsLoadedParent((prev) => ({ ...prev, [parentKey]: true }));
+    },
+    [mergeCollectionsItems, queryCollectionsPage]
+  );
+
+  const clearHoverExpandTimer = useCallback(() => {
+    if (hoverExpandTimerRef.current !== null) {
+      window.clearTimeout(hoverExpandTimerRef.current);
+      hoverExpandTimerRef.current = null;
+    }
+  }, []);
+
+  const expandFolderNode = useCallback(
+    async (folderId: string) => {
+      const node = collectionsItemsById[folderId];
+      if (!node || node.itemType !== 'folder') {
+        return;
+      }
+      await loadCollectionsTreeBranch(folderId);
+      setCollectionsExpanded((prev) => ({ ...prev, [folderId]: true }));
+    },
+    [collectionsItemsById, loadCollectionsTreeBranch]
+  );
+
+  const toggleFolderNode = useCallback(
+    async (folderId: string) => {
+      const expanded = Boolean(collectionsExpanded[folderId]);
+      if (expanded) {
+        setCollectionsExpanded((prev) => ({ ...prev, [folderId]: false }));
+        return;
+      }
+      await expandFolderNode(folderId);
+    },
+    [collectionsExpanded, expandFolderNode]
+  );
+
+  const scheduleHoverExpand = useCallback(
+    (item: CollectionsTreeItem) => {
+      if (item.itemType !== 'folder') {
+        return;
+      }
+      if (collectionsExpanded[item.id]) {
+        return;
+      }
+      clearHoverExpandTimer();
+      hoverExpandTimerRef.current = window.setTimeout(() => {
+        hoverExpandTimerRef.current = null;
+        void expandFolderNode(item.id);
+      }, HOVER_EXPAND_DELAY_MS);
+    },
+    [clearHoverExpandTimer, collectionsExpanded, expandFolderNode]
+  );
+
+  const selectCollectionsRoot = useCallback(() => {
+    setCollectionsSelectedNodeId(null);
+    setCollectionsMiddleParentId(null);
+    setRoute('collections');
+  }, []);
+
+  const onCollectionNodeClick = useCallback(
+    (item: CollectionsTreeItem) => {
+      setCollectionsSelectedNodeId(item.id);
+      setCollectionsMiddleParentId(item.id);
+      setRoute('collections');
+      if (item.itemType === 'folder') {
+        void expandFolderNode(item.id);
+      }
+    },
+    [expandFolderNode]
+  );
+
+  const handleFolderTreeEdgeScroll = useCallback((event: DragEvent<HTMLDivElement>) => {
+    const container = folderTreeViewportRef.current;
+    if (!container) {
+      return;
+    }
+    const rect = container.getBoundingClientRect();
+    const y = event.clientY - rect.top;
+    if (y < TREE_EDGE_SCROLL_THRESHOLD_PX) {
+      container.scrollTop -= TREE_EDGE_SCROLL_STEP_PX;
+      event.preventDefault();
+      return;
+    }
+    if (y > rect.height - TREE_EDGE_SCROLL_THRESHOLD_PX) {
+      container.scrollTop += TREE_EDGE_SCROLL_STEP_PX;
+      event.preventDefault();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (collectionsRootInitRef.current) {
+      return;
+    }
+    collectionsRootInitRef.current = true;
+    void loadCollectionsTreeBranch(null);
+  }, [loadCollectionsTreeBranch]);
+
+  useEffect(() => {
+    if (route !== 'collections') {
+      return;
+    }
+    void loadCollectionsMiddle(collectionsMiddleParentId);
+  }, [collectionsMiddleParentId, loadCollectionsMiddle, route]);
+
+  useEffect(() => {
+    return () => {
+      clearHoverExpandTimer();
+    };
+  }, [clearHoverExpandTimer]);
+
+  const renderCollectionTreeNodes = (parentId: string | null, depth: number): JSX.Element[] => {
+    const parentKey = parentId ?? COLLECTIONS_ROOT_KEY;
+    const childIds = collectionsChildIdsByParent[parentKey] ?? [];
+    const nodes: JSX.Element[] = [];
+
+    for (const childId of childIds) {
+      const item = collectionsItemsById[childId];
+      if (!item) {
+        continue;
+      }
+
+      const isFolder = item.itemType === 'folder';
+      const expanded = Boolean(collectionsExpanded[item.id]);
+      const childLoading = Boolean(collectionsLoadingParent[item.id]);
+      const selected = collectionsSelectedNodeId === item.id;
+
+      nodes.push(
+        <div key={item.id} className="treeNodeWrap" style={{ marginLeft: depth * 14 }}>
+          <button
+            type="button"
+            className={`treeRow ${selected ? 'treeRowSelected' : ''}`}
+            data-testid={`folder-tree-node-${item.id}`}
+            draggable
+            onClick={() => onCollectionNodeClick(item)}
+            onMouseEnter={() => scheduleHoverExpand(item)}
+            onMouseLeave={() => clearHoverExpandTimer()}
+            onContextMenu={(e) => {
+              if (!isFolder) {
+                return;
+              }
+              e.preventDefault();
+              void safePopupFolderMenu(item.id);
+            }}
+          >
+            <div className="treeRowLine">
+              {isFolder ? (
+                <button
+                  type="button"
+                  className="treeToggle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void toggleFolderNode(item.id);
+                  }}
+                  aria-label={expanded ? '收起' : '展开'}
+                >
+                  {expanded ? '▾' : '▸'}
+                </button>
+              ) : (
+                <span className="treeToggle treeTogglePlaceholder">•</span>
+              )}
+
+              <div className="treeRowTitle">
+                [{item.itemType}] {item.name || '（未命名）'}
+              </div>
+            </div>
+            <div className="treeRowSub">id: {item.id}</div>
+            {childLoading ? <div className="treeRowSub">加载子项中…</div> : null}
+          </button>
+
+          {isFolder && expanded ? renderCollectionTreeNodes(item.id, depth + 1) : null}
+        </div>
+      );
+    }
+
+    return nodes;
+  };
+
+  const placeholderMiddleItems = useMemo(() => {
     if (route === 'notes') {
       return [
         { id: 'note_1', title: '示例笔记：今日复盘', sub: '右键：打开 / 移动到 / 删除 / 导出' },
         { id: 'note_2', title: '示例笔记：灵感碎片', sub: '（占位数据，后续接入本地库）' },
       ];
-    }
-    if (route === 'collections') {
-      return [{ id: 'col_1', title: '示例条目：收藏夹', sub: '右键：打开 / 移动到 / 删除 / 导出' }];
     }
     if (route === 'todo') {
       return [
@@ -2140,17 +2516,27 @@ function MainWindowApp() {
     return [];
   }, [route]);
 
+  const exportItems = useMemo(() => {
+    if (route === 'collections') {
+      return collectionsMiddleItems.map((item) => ({
+        id: item.id,
+        title: `[${item.itemType}] ${item.name || '（未命名）'}`,
+      }));
+    }
+    return placeholderMiddleItems.map((item) => ({ id: item.id, title: item.title }));
+  }, [collectionsMiddleItems, placeholderMiddleItems, route]);
+
   const exportPlainText = useMemo(() => {
     const lines: string[] = [];
     lines.push('心流 · 导出（纯文本，占位）');
     lines.push(`路由：${routeMeta.label}（${routeMeta.key}）`);
     lines.push('');
     lines.push('条目（占位）：');
-    for (const item of demoMiddleItems) {
+    for (const item of exportItems) {
       lines.push(`- ${item.title}`);
     }
     return `${lines.join('\n')}\n`;
-  }, [demoMiddleItems, routeMeta.key, routeMeta.label]);
+  }, [exportItems, routeMeta.key, routeMeta.label]);
 
   const exportMarkdown = useMemo(() => {
     const lines: string[] = [];
@@ -2159,11 +2545,11 @@ function MainWindowApp() {
     lines.push(`- 路由：${routeMeta.label}（${routeMeta.key}）`);
     lines.push('');
     lines.push('## 条目（占位）');
-    for (const item of demoMiddleItems) {
+    for (const item of exportItems) {
       lines.push(`- ${item.title}`);
     }
     return `${lines.join('\n')}\n`;
-  }, [demoMiddleItems, routeMeta.key, routeMeta.label]);
+  }, [exportItems, routeMeta.key, routeMeta.label]);
 
   const exportContentForCopy = exportLastFormat === 'markdown' ? exportMarkdown : exportPlainText;
 
@@ -2789,22 +3175,37 @@ function MainWindowApp() {
 
             <div className="navDivider" />
             <div className="tree" data-testid="folder-tree">
-              <div className="treeTitle">Folders（占位，可右键）</div>
-              <div className="treeBody">
-                {demoFolders.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    className="treeRow"
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      void safePopupFolderMenu(f.id);
-                    }}
-                  >
-                    <div className="treeRowTitle">{f.title}</div>
-                    <div className="treeRowSub">右键：新建子项 / 重命名 / 移动 / 删除</div>
-                  </button>
-                ))}
+              <div className="treeTitle">Collections / Folder 树</div>
+              <div className="treeBody folderTreeBody">
+                <button
+                  type="button"
+                  className={`treeRow ${collectionsSelectedNodeId === null ? 'treeRowSelected' : ''}`}
+                  data-testid="folder-tree-root"
+                  onClick={() => selectCollectionsRoot()}
+                >
+                  <div className="treeRowTitle">[root] 根节点</div>
+                  <div className="treeRowSub">单击查看 root 的直接子项</div>
+                </button>
+
+                <div
+                  ref={folderTreeViewportRef}
+                  className="folderTreeViewport"
+                  role="tree"
+                  aria-label="Collections Tree"
+                  tabIndex={0}
+                  onKeyDown={() => {}}
+                  onDragOver={(e) => handleFolderTreeEdgeScroll(e)}
+                  onDrag={(e) => handleFolderTreeEdgeScroll(e)}
+                >
+                  {collectionsLoadingParent[COLLECTIONS_ROOT_KEY] ? (
+                    <div className="fine">加载根节点中…</div>
+                  ) : null}
+                  {renderCollectionTreeNodes(null, 0)}
+                </div>
+
+                {collectionsTreeError ? (
+                  <div className="callout calloutWarn">{collectionsTreeError}</div>
+                ) : null}
               </div>
             </div>
           </nav>
@@ -2904,11 +3305,28 @@ function MainWindowApp() {
               }
               onCopyNotes={(content) => void safeCopyTextToClipboard(content)}
             />
+          ) : route === 'collections' ? (
+            <CollectionsMiddle
+              selectedParentId={collectionsMiddleParentId}
+              selectedParentName={
+                collectionsMiddleParentId
+                  ? (collectionsItemsById[collectionsMiddleParentId]?.name ?? null)
+                  : null
+              }
+              items={collectionsMiddleItems}
+              hasMore={collectionsMiddleHasMore}
+              loading={collectionsMiddleLoading}
+              error={collectionsMiddleError}
+              apiAvailable={Boolean(getXinliuCollectionsApi())}
+              onRefresh={() => void loadCollectionsMiddle(collectionsMiddleParentId)}
+              onOpenFolder={(item) => onCollectionNodeClick(item)}
+              onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
+            />
           ) : (
             <>
               <DefaultRoutePlaceholder
                 routeMeta={routeMeta}
-                middleItems={demoMiddleItems}
+                middleItems={placeholderMiddleItems}
                 onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
               />
             </>

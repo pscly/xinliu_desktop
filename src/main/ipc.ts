@@ -5,6 +5,9 @@ import type {
   CloseBehavior,
   CloseBehaviorSetPayload,
   CloseBehaviorStatus,
+  CollectionsListChildrenPayload,
+  CollectionsListResult,
+  CollectionsListRootsPayload,
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
   DiagnosticsSetFlowBaseUrlPayload,
@@ -104,6 +107,14 @@ export interface RegisterIpcHandlersDeps {
     getStatus: () => DiagnosticsStatus | Promise<DiagnosticsStatus>;
     setFlowBaseUrl: (payload: DiagnosticsSetFlowBaseUrlPayload) => void | Promise<void>;
     setMemosBaseUrl: (payload: DiagnosticsSetMemosBaseUrlPayload) => void | Promise<void>;
+  };
+  collections: {
+    listRoots: (
+      payload: CollectionsListRootsPayload
+    ) => CollectionsListResult | Promise<CollectionsListResult>;
+    listChildren: (
+      payload: CollectionsListChildrenPayload
+    ) => CollectionsListResult | Promise<CollectionsListResult>;
   };
   pathGate: PathGate;
   fileAccess: {
@@ -476,6 +487,53 @@ function validateContextMenuPopupFolderPayload(
     return err('VALIDATION_ERROR', '参数不合法');
   }
   return ok({ folderId: trimmed });
+}
+
+function validateCollectionsPagination(
+  payload: Record<string, unknown>
+): IpcResult<{ limit: number; offset: number }> {
+  const limit = payload['limit'];
+  const offset = payload['offset'];
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit <= 0 || limit > 500) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ limit, offset });
+}
+
+function validateCollectionsListRootsPayload(
+  payload: unknown
+): IpcResult<CollectionsListRootsPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const page = validateCollectionsPagination(payload);
+  if (!page.ok) {
+    return page;
+  }
+  return ok(page.value);
+}
+
+function validateCollectionsListChildrenPayload(
+  payload: unknown
+): IpcResult<CollectionsListChildrenPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const parentId = payload['parentId'];
+  if (typeof parentId !== 'string' || parentId.trim().length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const page = validateCollectionsPagination(payload);
+  if (!page.ok) {
+    return page;
+  }
+
+  return ok({ parentId: parentId.trim(), limit: page.value.limit, offset: page.value.offset });
 }
 
 function validateSearchQueryPayload(payload: unknown): IpcResult<SearchQueryPayload> {
@@ -1150,6 +1208,32 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, deps: RegisterIpcHandl
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.collections.listRoots,
+    makeHandlerWithErrorMessage<CollectionsListResult>({
+      channel: IPC_CHANNELS.collections.listRoots,
+      deps,
+      rateLimiter,
+      validate: validateCollectionsListRootsPayload,
+      run: async (validatedPayload) => {
+        return deps.collections.listRoots(validatedPayload as CollectionsListRootsPayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.collections.listChildren,
+    makeHandlerWithErrorMessage<CollectionsListResult>({
+      channel: IPC_CHANNELS.collections.listChildren,
+      deps,
+      rateLimiter,
+      validate: validateCollectionsListChildrenPayload,
+      run: async (validatedPayload) => {
+        return deps.collections.listChildren(validatedPayload as CollectionsListChildrenPayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.notes.createDraft,
     makeHandlerWithErrorMessage<NotesCreateDraftResult>({
       channel: IPC_CHANNELS.notes.createDraft,
@@ -1566,6 +1650,8 @@ export const __test__ = {
   validateShortcutsResetOnePayload,
   validateContextMenuPopupMiddleItemPayload,
   validateContextMenuPopupFolderPayload,
+  validateCollectionsListRootsPayload,
+  validateCollectionsListChildrenPayload,
   validateSearchQueryPayload,
   validateNotesListItemsPayload,
   validateNotesIdPayload,

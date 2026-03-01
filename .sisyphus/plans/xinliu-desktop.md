@@ -593,7 +593,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-50-releasing.txt
   ```
 
-- [ ] 45. Folder/Collections 树 UI（无限层级、hover 800ms 展开、edge scrolling）
+- [x] 45. Folder/Collections 树 UI（无限层级、hover 800ms 展开、edge scrolling）
 
   **What to do**:
   - Triptych 左栏实现 Folder/Collections 树：无限层级、folder 与 note_ref 混排。

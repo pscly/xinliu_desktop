@@ -62,6 +62,10 @@ describe('src/main/ipc', () => {
         setFlowBaseUrl: () => {},
         setMemosBaseUrl: () => {},
       },
+      collections: {
+        listRoots: () => ({ items: [], hasMore: false }),
+        listChildren: () => ({ items: [], hasMore: false }),
+      },
       conflicts: {
         listFlow: () => ({ items: [] }),
         listNotes: () => ({ items: [] }),
@@ -137,6 +141,7 @@ describe('src/main/ipc', () => {
       ...Object.values(IPC_CHANNELS.closeBehavior),
       ...Object.values(IPC_CHANNELS.diagnostics),
       ...Object.values(IPC_CHANNELS.contextMenu),
+      ...Object.values(IPC_CHANNELS.collections),
       ...Object.values(IPC_CHANNELS.notes),
       ...Object.values(IPC_CHANNELS.conflicts),
       ...Object.values(IPC_CHANNELS.search),
@@ -192,6 +197,10 @@ describe('src/main/ipc', () => {
         }),
         setFlowBaseUrl: () => {},
         setMemosBaseUrl: () => {},
+      },
+      collections: {
+        listRoots: () => ({ items: [], hasMore: false }),
+        listChildren: () => ({ items: [], hasMore: false }),
       },
       conflicts: {
         listFlow: () => ({ items: [] }),
@@ -313,6 +322,10 @@ describe('src/main/ipc', () => {
         setFlowBaseUrl: () => {},
         setMemosBaseUrl: () => {},
       },
+      collections: {
+        listRoots: () => ({ items: [], hasMore: false }),
+        listChildren: () => ({ items: [], hasMore: false }),
+      },
       conflicts: {
         listFlow: () => ({ items: [] }),
         listNotes: () => ({ items: [] }),
@@ -432,6 +445,10 @@ describe('src/main/ipc', () => {
         }),
         setFlowBaseUrl: () => {},
         setMemosBaseUrl: () => {},
+      },
+      collections: {
+        listRoots: () => ({ items: [], hasMore: false }),
+        listChildren: () => ({ items: [], hasMore: false }),
       },
       conflicts: {
         listFlow: () => ({ items: [] }),

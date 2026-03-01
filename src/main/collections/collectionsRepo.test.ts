@@ -9,10 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import { applyMigrations } from '../db/migrations';
 import { openSqliteDatabase } from '../db/sqlite';
-import {
-  COLLECTION_REF_TYPE,
-  createCollectionsRepo,
-} from './collectionsRepo';
+import { COLLECTION_REF_TYPE, createCollectionsRepo } from './collectionsRepo';
 
 function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'xinliu-collections-repo-'));
@@ -98,9 +95,49 @@ describe('src/main/collections/collectionsRepo', () => {
         refId: 'note_1',
       });
 
-      expect(() =>
-        repo.patchCollectionItem({ id: rootId, parentId: childId })
-      ).toThrow();
+      expect(() => repo.patchCollectionItem({ id: rootId, parentId: childId })).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('listCollectionItems: parentId=null 应返回 root 项；undefined 表示不过滤 parent', () => {
+    const dir = makeTempDir();
+    const dbFileAbsPath = path.join(dir, 'xinliu.sqlite3');
+    const { db } = openSqliteDatabase({ dbFileAbsPath });
+    try {
+      applyMigrations(db);
+      const repo = createCollectionsRepo(db, {
+        nowMs: () => 1700000000100,
+        randomUUID: cryptoSeq(),
+      });
+
+      const { id: rootA } = repo.createFolder({ name: 'Root A', parentId: null, sortOrder: 1 });
+      const { id: rootB } = repo.createFolder({ name: 'Root B', parentId: null, sortOrder: 2 });
+      const { id: childA } = repo.createFolder({ name: 'Child A', parentId: rootA, sortOrder: 1 });
+
+      const roots = repo.listCollectionItems({
+        parentId: null,
+        includeDeleted: false,
+        limit: 20,
+        offset: 0,
+      });
+      expect(roots.map((item) => item.id)).toEqual([rootA, rootB]);
+
+      const children = repo.listCollectionItems({
+        parentId: rootA,
+        includeDeleted: false,
+        limit: 20,
+        offset: 0,
+      });
+      expect(children.map((item) => item.id)).toEqual([childA]);
+
+      const allWithoutParentFilter = repo.listCollectionItems({
+        includeDeleted: false,
+        limit: 20,
+        offset: 0,
+      });
+      expect(allWithoutParentFilter.map((item) => item.id)).toEqual([rootA, childA, rootB]);
     } finally {
       db.close();
     }

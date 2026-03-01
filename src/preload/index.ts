@@ -4,6 +4,9 @@ import { EMPTY_PAYLOAD, IPC_CHANNELS, IPC_EVENTS } from '../shared/ipc';
 import type {
   CloseBehaviorSetPayload,
   CloseBehaviorStatus,
+  CollectionsListChildrenPayload,
+  CollectionsListResult,
+  CollectionsListRootsPayload,
   ContextMenuDidSelectPayload,
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
@@ -163,6 +166,18 @@ contextBridge.exposeInMainWorld('xinliu', {
         ipcRenderer.removeListener(IPC_EVENTS.contextMenu.didSelect, wrapped);
       };
     },
+  },
+  collections: {
+    listRoots: (payload: CollectionsListRootsPayload) =>
+      invokeIpc<CollectionsListResult>(
+        IPC_CHANNELS.collections.listRoots,
+        payload satisfies CollectionsListRootsPayload
+      ),
+    listChildren: (payload: CollectionsListChildrenPayload) =>
+      invokeIpc<CollectionsListResult>(
+        IPC_CHANNELS.collections.listChildren,
+        payload satisfies CollectionsListChildrenPayload
+      ),
   },
   notes: {
     createDraft: (payload: NotesCreateDraftPayload) =>
