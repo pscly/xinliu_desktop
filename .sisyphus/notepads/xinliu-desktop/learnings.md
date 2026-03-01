@@ -395,3 +395,18 @@
 - sync 控制器单测适合注入简化 scheduler（内联 fake），只断言 lane 调用边界与引擎调用次数，不绑定真实定时器；这样可以稳定覆盖“互不串扰”与“缺配置可解释失败”这两类关键约束。
 
 - [2026-03-02] Task 48 commit: d9525908540b199a0af8ad7ef2f3574a083a078e feat(sync): 解耦 Flow/Memos 调度并打通手动同步入口
+
+## [2026-03-02] - Task 49 同步状态摘要 UI（左栏/设置页）落地经验
+
+- 若要保持 Flow/Memos 真正独立，最佳做法是在共享类型层直接分 lane 定义 `summary`（`SyncFlowSummary` / `SyncMemosSummary`），避免 renderer 用“可选字段大杂烩”导致语义串线。
+- 同步摘要统计应放在 main 进程 `getStatus` 内一次返回：renderer 只负责展示，不触库、不二次拼装；这样能减少状态漂移，也能让 IPC 契约更稳定。
+- Memos 统计必须始终显式带 `deleted_at_ms IS NULL`，否则回收站数据会污染 DIRTY/FAILED 数；这类约束最好写进 SQL 本身而不是交给前端过滤。
+- 错误面板建议按 lane 单独维护展开状态（`expanded.flow` / `expanded.memos`），并在 UI 上与 lane 卡片绑定，避免“一处展开影响全局”的交互混乱。
+- request_id 展示应默认“尽力而为 + 不可用时禁用复制按钮”，这能在无冲突场景保持界面简洁，同时在排障时给出可复制的定位信息。
+
+## [2026-03-02] - Task 50 发布约定（版本号/tag/Release Notes/产物与 SHA-256）
+
+- 当前阶段版本号只允许 `0.y.z`，tag 固定为 `v0.y.z`，发布工作流只对 `v0.*` tag 生效。
+- stable only，不做 prerelease，避免 electron-updater 更新通道与用户预期混乱。
+- Windows(NSIS) 发布产物最小集合应包含：安装包 `.exe`、`latest.yml`、对应的 `*.blockmap`，以及 `*.sha256` 校验文件。
+- SHA-256 推荐在 Windows runner 用 PowerShell `Get-FileHash -Algorithm SHA256` 生成，内容格式建议写成 `<hash>  <filename>`（双空格），便于脚本与人工核对。
