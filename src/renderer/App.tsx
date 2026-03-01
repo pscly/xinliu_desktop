@@ -1,4 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
+
+import {
+  DndContext,
+  MouseSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragCancelEvent,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+  type UniqueIdentifier,
+} from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 
 import type {
   CloseBehaviorStatus,
@@ -1084,6 +1108,182 @@ function DefaultRoutePlaceholder(props: {
   );
 }
 
+const MIDDLE_LIST_ITEM_TEST_ID_PREFIX = 'middle-list-item-';
+const FOLDER_TREE_NODE_TEST_ID_PREFIX = 'folder-tree-node-';
+const DRAG_UNDO_DURATION_MS = 6000;
+const MOUSE_DRAG_MIN_DISTANCE_PX = 8;
+
+interface CollectionsMoveUndoNotice {
+  itemId: string;
+  itemName: string;
+  fromParentId: string | null;
+  toParentId: string | null;
+}
+
+interface CollectionsMouseDragCandidate {
+  itemId: string;
+  startX: number;
+  startY: number;
+}
+
+function parseMiddleListItemIdFromDnd(id: UniqueIdentifier | null | undefined): string | null {
+  if (id === null || id === undefined) {
+    return null;
+  }
+  const raw = String(id);
+  if (!raw.startsWith(MIDDLE_LIST_ITEM_TEST_ID_PREFIX)) {
+    return null;
+  }
+  const itemId = raw.slice(MIDDLE_LIST_ITEM_TEST_ID_PREFIX.length).trim();
+  return itemId.length > 0 ? itemId : null;
+}
+
+function parseFolderNodeIdFromDnd(id: UniqueIdentifier | null | undefined): string | null {
+  if (id === null || id === undefined) {
+    return null;
+  }
+  const raw = String(id);
+  if (!raw.startsWith(FOLDER_TREE_NODE_TEST_ID_PREFIX)) {
+    return null;
+  }
+  const folderId = raw.slice(FOLDER_TREE_NODE_TEST_ID_PREFIX.length).trim();
+  return folderId.length > 0 ? folderId : null;
+}
+
+function readPointerClientY(
+  event: Event,
+  fallbackRect: { top: number; bottom: number } | null
+): number | null {
+  if (event instanceof MouseEvent) {
+    return event.clientY;
+  }
+  if ('touches' in event) {
+    const touches = (event as TouchEvent).touches;
+    if (touches.length > 0) {
+      return touches[0]?.clientY ?? null;
+    }
+  }
+  if (fallbackRect) {
+    return (fallbackRect.top + fallbackRect.bottom) / 2;
+  }
+  return null;
+}
+
+function CollectionsMiddleDraggableItem(props: {
+  item: CollectionsTreeItem;
+  onOpenFolder: (item: CollectionsTreeItem) => void;
+  onPopupMiddleItemMenu: (itemId: string) => void;
+  onMouseDragStart: (args: { itemId: string; clientX: number; clientY: number }) => void;
+}) {
+  const dragId = `${MIDDLE_LIST_ITEM_TEST_ID_PREFIX}${props.item.id}`;
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: dragId,
+  });
+
+  const style: CSSProperties = {
+    transform: transform ? CSS.Translate.toString(transform) : undefined,
+    zIndex: isDragging ? 2 : undefined,
+  };
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      className={`listRow ${isDragging ? 'listRowDragging' : ''}`}
+      data-testid={dragId}
+      style={style}
+      onClick={() => {
+        if (props.item.itemType === 'folder') {
+          props.onOpenFolder(props.item);
+        }
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        props.onPopupMiddleItemMenu(props.item.id);
+      }}
+      onMouseDown={(e) => {
+        if (e.button !== 0) {
+          return;
+        }
+        props.onMouseDragStart({
+          itemId: props.item.id,
+          clientX: e.clientX,
+          clientY: e.clientY,
+        });
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <div className="listRowTitle">
+        [{props.item.itemType}] {props.item.name || '（未命名）'}
+      </div>
+      <div className="listRowSub">id: {props.item.id}</div>
+    </button>
+  );
+}
+
+function CollectionsTreeNodeButton(props: {
+  item: CollectionsTreeItem;
+  selected: boolean;
+  expanded: boolean;
+  childLoading: boolean;
+  dropState: 'idle' | 'valid' | 'invalid';
+  dropHint: string | null;
+  onClick: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  onToggleFolder: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+}) {
+  const isFolder = props.item.itemType === 'folder';
+  const { setNodeRef } = useDroppable({
+    id: `${FOLDER_TREE_NODE_TEST_ID_PREFIX}${props.item.id}`,
+    disabled: !isFolder,
+  });
+
+  const dropClass =
+    props.dropState === 'valid'
+      ? 'treeRowDropValid'
+      : props.dropState === 'invalid'
+        ? 'treeRowDropInvalid'
+        : '';
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      className={`treeRow ${props.selected ? 'treeRowSelected' : ''} ${dropClass}`.trim()}
+      data-testid={`${FOLDER_TREE_NODE_TEST_ID_PREFIX}${props.item.id}`}
+      onClick={() => props.onClick()}
+      onMouseEnter={() => props.onMouseEnter()}
+      onMouseLeave={() => props.onMouseLeave()}
+      onContextMenu={(event) => props.onContextMenu(event)}
+    >
+      <div className="treeRowLine">
+        {isFolder ? (
+          <button
+            type="button"
+            className="treeToggle"
+            onClick={(event) => props.onToggleFolder(event)}
+            aria-label={props.expanded ? '收起' : '展开'}
+          >
+            {props.expanded ? '▾' : '▸'}
+          </button>
+        ) : (
+          <span className="treeToggle treeTogglePlaceholder">•</span>
+        )}
+
+        <div className="treeRowTitle">
+          [{props.item.itemType}] {props.item.name || '（未命名）'}
+        </div>
+      </div>
+      <div className="treeRowSub">id: {props.item.id}</div>
+      {props.childLoading ? <div className="treeRowSub">加载子项中…</div> : null}
+      {props.dropHint ? <div className="treeRowSub treeRowDropHint">{props.dropHint}</div> : null}
+    </button>
+  );
+}
+
 function CollectionsMiddle(props: {
   selectedParentId: string | null;
   selectedParentName: string | null;
@@ -1095,6 +1295,10 @@ function CollectionsMiddle(props: {
   onRefresh: () => void;
   onOpenFolder: (item: CollectionsTreeItem) => void;
   onPopupMiddleItemMenu: (itemId: string) => void;
+  onMiddleItemMouseDragStart: (args: { itemId: string; clientX: number; clientY: number }) => void;
+  undoNotice: CollectionsMoveUndoNotice | null;
+  undoBusy: boolean;
+  onUndoMove: () => void;
 }) {
   return (
     <div className="contentPlaceholder" data-testid="collections-center">
@@ -1127,31 +1331,34 @@ function CollectionsMiddle(props: {
         </div>
       ) : null}
 
+      {props.undoNotice ? (
+        <div className="callout" data-testid="collections-undo-callout" style={{ marginTop: 10 }}>
+          已移动「{props.undoNotice.itemName || props.undoNotice.itemId}」，可在短时间内撤销。
+          <div className="calloutActions">
+            <button
+              type="button"
+              className="btnSmall"
+              data-testid="collections-undo-btn"
+              onClick={() => props.onUndoMove()}
+              disabled={props.undoBusy}
+            >
+              {props.undoBusy ? '撤销中…' : '撤销'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="contentList" data-testid="middle-list">
         <div className="contentListTitle">子项列表</div>
         <div className="contentListBody">
           {props.items.map((item) => (
-            <button
+            <CollectionsMiddleDraggableItem
               key={item.id}
-              type="button"
-              className="listRow"
-              data-testid={`middle-list-item-${item.id}`}
-              draggable
-              onClick={() => {
-                if (item.itemType === 'folder') {
-                  props.onOpenFolder(item);
-                }
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                props.onPopupMiddleItemMenu(item.id);
-              }}
-            >
-              <div className="listRowTitle">
-                [{item.itemType}] {item.name || '（未命名）'}
-              </div>
-              <div className="listRowSub">id: {item.id}</div>
-            </button>
+              item={item}
+              onOpenFolder={props.onOpenFolder}
+              onPopupMiddleItemMenu={props.onPopupMiddleItemMenu}
+              onMouseDragStart={props.onMiddleItemMouseDragStart}
+            />
           ))}
 
           {!props.loading && props.items.length === 0 ? (
@@ -2208,9 +2415,19 @@ function MainWindowApp() {
   const [collectionsMiddleHasMore, setCollectionsMiddleHasMore] = useState(false);
   const [collectionsMiddleLoading, setCollectionsMiddleLoading] = useState(false);
   const [collectionsMiddleError, setCollectionsMiddleError] = useState<string | null>(null);
+  const [collectionsDraggingItemId, setCollectionsDraggingItemId] = useState<string | null>(null);
+  const [collectionsDragOverFolderId, setCollectionsDragOverFolderId] = useState<string | null>(
+    null
+  );
+  const [collectionsMouseDragCandidate, setCollectionsMouseDragCandidate] =
+    useState<CollectionsMouseDragCandidate | null>(null);
+  const [collectionsUndoNotice, setCollectionsUndoNotice] =
+    useState<CollectionsMoveUndoNotice | null>(null);
+  const [collectionsUndoBusy, setCollectionsUndoBusy] = useState(false);
 
   const folderTreeViewportRef = useRef<HTMLDivElement | null>(null);
   const hoverExpandTimerRef = useRef<number | null>(null);
+  const collectionsUndoTimerRef = useRef<number | null>(null);
   const collectionsRootInitRef = useRef(false);
 
   useEffect(() => {
@@ -2395,23 +2612,312 @@ function MainWindowApp() {
     [expandFolderNode]
   );
 
-  const handleFolderTreeEdgeScroll = useCallback((event: DragEvent<HTMLDivElement>) => {
+  const clearCollectionsUndoTimer = useCallback(() => {
+    if (collectionsUndoTimerRef.current !== null) {
+      window.clearTimeout(collectionsUndoTimerRef.current);
+      collectionsUndoTimerRef.current = null;
+    }
+  }, []);
+
+  const pushCollectionsUndoNotice = useCallback(
+    (notice: CollectionsMoveUndoNotice) => {
+      clearCollectionsUndoTimer();
+      setCollectionsUndoNotice(notice);
+      setCollectionsUndoBusy(false);
+      collectionsUndoTimerRef.current = window.setTimeout(() => {
+        collectionsUndoTimerRef.current = null;
+        setCollectionsUndoNotice(null);
+      }, DRAG_UNDO_DURATION_MS);
+    },
+    [clearCollectionsUndoTimer]
+  );
+
+  const isCollectionsDescendant = useCallback(
+    (ancestorId: string, nodeId: string) => {
+      let cursor: string | null = nodeId;
+      const visited = new Set<string>();
+      while (cursor) {
+        if (cursor === ancestorId) {
+          return true;
+        }
+        if (visited.has(cursor)) {
+          break;
+        }
+        visited.add(cursor);
+        cursor = collectionsItemsById[cursor]?.parentId ?? null;
+      }
+      return false;
+    },
+    [collectionsItemsById]
+  );
+
+  const getCollectionsMoveBlockedReason = useCallback(
+    (itemId: string, newParentId: string | null): string | null => {
+      const item = collectionsItemsById[itemId];
+      if (!item) {
+        return '被拖拽条目不存在';
+      }
+      if (newParentId !== null) {
+        const parent = collectionsItemsById[newParentId];
+        if (!parent || parent.itemType !== 'folder') {
+          return '仅支持拖入 folder 节点';
+        }
+      }
+      if (item.id === newParentId) {
+        return '不能拖入自身';
+      }
+      if (
+        item.itemType === 'folder' &&
+        newParentId &&
+        isCollectionsDescendant(item.id, newParentId)
+      ) {
+        return '不能拖入自己的子孙节点';
+      }
+      return null;
+    },
+    [collectionsItemsById, isCollectionsDescendant]
+  );
+
+  const applyCollectionsMoveLocally = useCallback(
+    (itemId: string, newParentId: string | null) => {
+      const existing = collectionsItemsById[itemId];
+      if (!existing) {
+        return null;
+      }
+      const previousParentId = existing.parentId;
+      if (previousParentId === newParentId) {
+        return {
+          changed: false,
+          previousParentId,
+          previousItem: existing,
+        };
+      }
+
+      const nextItem: CollectionsTreeItem = {
+        ...existing,
+        parentId: newParentId,
+      };
+
+      setCollectionsItemsById((prev) => ({
+        ...prev,
+        [itemId]: nextItem,
+      }));
+
+      setCollectionsChildIdsByParent((prev) => {
+        const previousParentKey = previousParentId ?? COLLECTIONS_ROOT_KEY;
+        const nextParentKey = newParentId ?? COLLECTIONS_ROOT_KEY;
+        const next = { ...prev };
+        if (next[previousParentKey]) {
+          next[previousParentKey] = next[previousParentKey].filter((id) => id !== itemId);
+        }
+        if (next[nextParentKey]) {
+          const without = next[nextParentKey].filter((id) => id !== itemId);
+          next[nextParentKey] = [...without, itemId];
+        }
+        return next;
+      });
+
+      setCollectionsMiddleItems((prev) => {
+        const without = prev.filter((item) => item.id !== itemId);
+        if (collectionsMiddleParentId === newParentId) {
+          return [...without, nextItem].sort(
+            (a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt)
+          );
+        }
+        return without;
+      });
+
+      return {
+        changed: true,
+        previousParentId,
+        previousItem: existing,
+      };
+    },
+    [collectionsItemsById, collectionsMiddleParentId]
+  );
+
+  const runCollectionsMove = useCallback(
+    async (args: { itemId: string; newParentId: string | null; allowUndo: boolean }) => {
+      const blockedReason = getCollectionsMoveBlockedReason(args.itemId, args.newParentId);
+      if (blockedReason) {
+        setCollectionsMiddleError(`移动失败：${blockedReason}`);
+        return false;
+      }
+
+      const optimistic = applyCollectionsMoveLocally(args.itemId, args.newParentId);
+      if (!optimistic) {
+        setCollectionsMiddleError('移动失败：找不到该条目');
+        return false;
+      }
+
+      if (!optimistic.changed) {
+        return true;
+      }
+
+      const api = getXinliuCollectionsApi();
+      const move = api?.move;
+      if (typeof move !== 'function') {
+        applyCollectionsMoveLocally(args.itemId, optimistic.previousParentId);
+        setCollectionsMiddleError('移动失败：Collections move API 不可用（preload 未注入）');
+        return false;
+      }
+
+      try {
+        const result = await move({ itemId: args.itemId, newParentId: args.newParentId });
+        if (!result.ok) {
+          applyCollectionsMoveLocally(args.itemId, optimistic.previousParentId);
+          setCollectionsMiddleError(`${result.error.message}（${result.error.code}）`);
+          return false;
+        }
+
+        setCollectionsMiddleError(null);
+        if (args.allowUndo) {
+          pushCollectionsUndoNotice({
+            itemId: args.itemId,
+            itemName: optimistic.previousItem.name || '（未命名）',
+            fromParentId: optimistic.previousParentId,
+            toParentId: args.newParentId,
+          });
+        }
+        return true;
+      } catch (error) {
+        applyCollectionsMoveLocally(args.itemId, optimistic.previousParentId);
+        setCollectionsMiddleError(`移动异常：${String(error)}`);
+        return false;
+      }
+    },
+    [applyCollectionsMoveLocally, getCollectionsMoveBlockedReason, pushCollectionsUndoNotice]
+  );
+
+  const undoCollectionsMove = useCallback(async () => {
+    if (!collectionsUndoNotice) {
+      return;
+    }
+    setCollectionsUndoBusy(true);
+    const ok = await runCollectionsMove({
+      itemId: collectionsUndoNotice.itemId,
+      newParentId: collectionsUndoNotice.fromParentId,
+      allowUndo: false,
+    });
+    setCollectionsUndoBusy(false);
+    if (ok) {
+      clearCollectionsUndoTimer();
+      setCollectionsUndoNotice(null);
+    }
+  }, [clearCollectionsUndoTimer, collectionsUndoNotice, runCollectionsMove]);
+
+  const onCollectionsMiddleItemMouseDragStart = useCallback(
+    (args: { itemId: string; clientX: number; clientY: number }) => {
+      setCollectionsMouseDragCandidate({
+        itemId: args.itemId,
+        startX: args.clientX,
+        startY: args.clientY,
+      });
+    },
+    []
+  );
+
+  const handleFolderTreeEdgeScrollByClientY = useCallback((clientY: number | null) => {
     const container = folderTreeViewportRef.current;
-    if (!container) {
+    if (!container || clientY === null) {
       return;
     }
     const rect = container.getBoundingClientRect();
-    const y = event.clientY - rect.top;
+    const y = clientY - rect.top;
     if (y < TREE_EDGE_SCROLL_THRESHOLD_PX) {
       container.scrollTop -= TREE_EDGE_SCROLL_STEP_PX;
-      event.preventDefault();
       return;
     }
     if (y > rect.height - TREE_EDGE_SCROLL_THRESHOLD_PX) {
       container.scrollTop += TREE_EDGE_SCROLL_STEP_PX;
-      event.preventDefault();
     }
   }, []);
+
+  const dndSensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    })
+  );
+
+  const handleCollectionsDragStart = useCallback((event: DragStartEvent) => {
+    setCollectionsMouseDragCandidate(null);
+    setCollectionsDraggingItemId(parseMiddleListItemIdFromDnd(event.active.id));
+    setCollectionsDragOverFolderId(null);
+  }, []);
+
+  const handleCollectionsDragMove = useCallback(
+    (event: DragMoveEvent) => {
+      if (!collectionsDraggingItemId) {
+        return;
+      }
+      const translated = event.active.rect.current.translated;
+      const clientY = readPointerClientY(
+        event.activatorEvent,
+        translated
+          ? {
+              top: translated.top,
+              bottom: translated.bottom,
+            }
+          : null
+      );
+      handleFolderTreeEdgeScrollByClientY(clientY);
+    },
+    [collectionsDraggingItemId, handleFolderTreeEdgeScrollByClientY]
+  );
+
+  const handleCollectionsDragOver = useCallback(
+    (event: DragOverEvent) => {
+      if (!collectionsDraggingItemId) {
+        return;
+      }
+      const folderId = parseFolderNodeIdFromDnd(event.over?.id);
+      setCollectionsDragOverFolderId(folderId);
+      if (!folderId) {
+        clearHoverExpandTimer();
+        return;
+      }
+      const folderItem = collectionsItemsById[folderId];
+      if (folderItem?.itemType === 'folder') {
+        scheduleHoverExpand(folderItem);
+      }
+    },
+    [clearHoverExpandTimer, collectionsDraggingItemId, collectionsItemsById, scheduleHoverExpand]
+  );
+
+  const resetCollectionsDragState = useCallback(() => {
+    setCollectionsDraggingItemId(null);
+    setCollectionsDragOverFolderId(null);
+    setCollectionsMouseDragCandidate(null);
+    clearHoverExpandTimer();
+  }, [clearHoverExpandTimer]);
+
+  const handleCollectionsDragCancel = useCallback(
+    (_event: DragCancelEvent) => {
+      resetCollectionsDragState();
+    },
+    [resetCollectionsDragState]
+  );
+
+  const handleCollectionsDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const draggedItemId = parseMiddleListItemIdFromDnd(event.active.id);
+      const overFolderId = parseFolderNodeIdFromDnd(event.over?.id);
+      resetCollectionsDragState();
+
+      if (!draggedItemId || !overFolderId) {
+        return;
+      }
+
+      void runCollectionsMove({
+        itemId: draggedItemId,
+        newParentId: overFolderId,
+        allowUndo: true,
+      });
+    },
+    [resetCollectionsDragState, runCollectionsMove]
+  );
 
   useEffect(() => {
     if (collectionsRootInitRef.current) {
@@ -2431,8 +2937,50 @@ function MainWindowApp() {
   useEffect(() => {
     return () => {
       clearHoverExpandTimer();
+      clearCollectionsUndoTimer();
     };
-  }, [clearHoverExpandTimer]);
+  }, [clearCollectionsUndoTimer, clearHoverExpandTimer]);
+
+  useEffect(() => {
+    const handleWindowMouseUp = (event: MouseEvent) => {
+      const candidate = collectionsMouseDragCandidate;
+      if (!candidate) {
+        return;
+      }
+      setCollectionsMouseDragCandidate(null);
+
+      const distance = Math.hypot(
+        event.clientX - candidate.startX,
+        event.clientY - candidate.startY
+      );
+      if (distance < MOUSE_DRAG_MIN_DISTANCE_PX) {
+        return;
+      }
+
+      const eventTargetElement = event.target instanceof Element ? event.target : null;
+      const hitElement =
+        eventTargetElement ?? document.elementFromPoint(event.clientX, event.clientY) ?? null;
+      const folderNodeElement = hitElement?.closest<HTMLElement>(
+        '[data-testid^="folder-tree-node-"]'
+      );
+      const folderNodeTestId =
+        folderNodeElement?.dataset.testid ?? folderNodeElement?.getAttribute('data-testid');
+      const folderId = parseFolderNodeIdFromDnd(folderNodeTestId ?? null);
+      if (!folderId) {
+        return;
+      }
+
+      void runCollectionsMove({
+        itemId: candidate.itemId,
+        newParentId: folderId,
+        allowUndo: true,
+      });
+    };
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => {
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [collectionsMouseDragCandidate, runCollectionsMove]);
 
   const renderCollectionTreeNodes = (parentId: string | null, depth: number): JSX.Element[] => {
     const parentKey = parentId ?? COLLECTIONS_ROOT_KEY;
@@ -2449,49 +2997,43 @@ function MainWindowApp() {
       const expanded = Boolean(collectionsExpanded[item.id]);
       const childLoading = Boolean(collectionsLoadingParent[item.id]);
       const selected = collectionsSelectedNodeId === item.id;
+      const isActiveDropTarget =
+        collectionsDraggingItemId !== null && collectionsDragOverFolderId === item.id;
+      const blockedReason =
+        isActiveDropTarget && collectionsDraggingItemId
+          ? getCollectionsMoveBlockedReason(collectionsDraggingItemId, item.id)
+          : null;
+      const dropState: 'idle' | 'valid' | 'invalid' = isActiveDropTarget
+        ? blockedReason
+          ? 'invalid'
+          : 'valid'
+        : 'idle';
+      const dropHint = isActiveDropTarget ? (blockedReason ?? '释放后移动到该 folder') : null;
 
       nodes.push(
         <div key={item.id} className="treeNodeWrap" style={{ marginLeft: depth * 14 }}>
-          <button
-            type="button"
-            className={`treeRow ${selected ? 'treeRowSelected' : ''}`}
-            data-testid={`folder-tree-node-${item.id}`}
-            draggable
+          <CollectionsTreeNodeButton
+            item={item}
+            selected={selected}
+            expanded={expanded}
+            childLoading={childLoading}
+            dropState={dropState}
+            dropHint={dropHint}
             onClick={() => onCollectionNodeClick(item)}
             onMouseEnter={() => scheduleHoverExpand(item)}
             onMouseLeave={() => clearHoverExpandTimer()}
-            onContextMenu={(e) => {
+            onToggleFolder={(event) => {
+              event.stopPropagation();
+              void toggleFolderNode(item.id);
+            }}
+            onContextMenu={(event) => {
               if (!isFolder) {
                 return;
               }
-              e.preventDefault();
+              event.preventDefault();
               void safePopupFolderMenu(item.id);
             }}
-          >
-            <div className="treeRowLine">
-              {isFolder ? (
-                <button
-                  type="button"
-                  className="treeToggle"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void toggleFolderNode(item.id);
-                  }}
-                  aria-label={expanded ? '收起' : '展开'}
-                >
-                  {expanded ? '▾' : '▸'}
-                </button>
-              ) : (
-                <span className="treeToggle treeTogglePlaceholder">•</span>
-              )}
-
-              <div className="treeRowTitle">
-                [{item.itemType}] {item.name || '（未命名）'}
-              </div>
-            </div>
-            <div className="treeRowSub">id: {item.id}</div>
-            {childLoading ? <div className="treeRowSub">加载子项中…</div> : null}
-          </button>
+          />
 
           {isFolder && expanded ? renderCollectionTreeNodes(item.id, depth + 1) : null}
         </div>
@@ -3133,279 +3675,290 @@ function MainWindowApp() {
     <div className="app">
       <Titlebar title={routeMeta.label} />
 
-      <main className="triptych">
-        <aside className="pane paneLeft" data-testid="triptych-left" aria-label="左栏">
-          <div className="paneHeader">
-            <div className="paneTitle">导航</div>
-            <div className="paneSub">Triptych · 三栏骨架</div>
-          </div>
-
-          <nav className="nav" aria-label="主导航">
-            <NavItem
-              active={route === 'notes'}
-              meta={ROUTES[0]}
-              testId="nav-notes"
-              onClick={() => setRoute('notes')}
-            />
-            <NavItem
-              active={route === 'collections'}
-              meta={ROUTES[1]}
-              testId="nav-collections"
-              onClick={() => setRoute('collections')}
-            />
-            <NavItem
-              active={route === 'todo'}
-              meta={ROUTES[2]}
-              testId="nav-todo"
-              onClick={() => setRoute('todo')}
-            />
-            <div className="navDivider" />
-            <NavItem
-              active={route === 'settings'}
-              meta={ROUTES[3]}
-              testId="nav-settings"
-              onClick={() => openSettingsRoute()}
-            />
-            <NavItem
-              active={route === 'conflicts'}
-              meta={ROUTES[4]}
-              testId="nav-conflicts"
-              onClick={() => setRoute('conflicts')}
-            />
-
-            <div className="navDivider" />
-            <div className="tree" data-testid="folder-tree">
-              <div className="treeTitle">Collections / Folder 树</div>
-              <div className="treeBody folderTreeBody">
-                <button
-                  type="button"
-                  className={`treeRow ${collectionsSelectedNodeId === null ? 'treeRowSelected' : ''}`}
-                  data-testid="folder-tree-root"
-                  onClick={() => selectCollectionsRoot()}
-                >
-                  <div className="treeRowTitle">[root] 根节点</div>
-                  <div className="treeRowSub">单击查看 root 的直接子项</div>
-                </button>
-
-                <div
-                  ref={folderTreeViewportRef}
-                  className="folderTreeViewport"
-                  role="tree"
-                  aria-label="Collections Tree"
-                  tabIndex={0}
-                  onKeyDown={() => {}}
-                  onDragOver={(e) => handleFolderTreeEdgeScroll(e)}
-                  onDrag={(e) => handleFolderTreeEdgeScroll(e)}
-                >
-                  {collectionsLoadingParent[COLLECTIONS_ROOT_KEY] ? (
-                    <div className="fine">加载根节点中…</div>
-                  ) : null}
-                  {renderCollectionTreeNodes(null, 0)}
-                </div>
-
-                {collectionsTreeError ? (
-                  <div className="callout calloutWarn">{collectionsTreeError}</div>
-                ) : null}
-              </div>
+      <DndContext
+        sensors={dndSensors}
+        onDragStart={handleCollectionsDragStart}
+        onDragMove={handleCollectionsDragMove}
+        onDragOver={handleCollectionsDragOver}
+        onDragEnd={handleCollectionsDragEnd}
+        onDragCancel={handleCollectionsDragCancel}
+      >
+        <main className="triptych">
+          <aside className="pane paneLeft" data-testid="triptych-left" aria-label="左栏">
+            <div className="paneHeader">
+              <div className="paneTitle">导航</div>
+              <div className="paneSub">Triptych · 三栏骨架</div>
             </div>
-          </nav>
 
-          <div className="paneFooter">
-            <div className="fine">提示：左栏负责定位，中栏负责内容，右栏负责上下文。</div>
-          </div>
-        </aside>
-
-        <section className="pane paneMiddle" data-testid="triptych-middle" aria-label="中栏">
-          <div className="paneHeader">
-            <div className="paneTitle">{routeMeta.label}</div>
-            <div className="paneSub">{routeMeta.hint}</div>
-          </div>
-
-          {route === 'settings' ? (
-            <SettingsContent
-              shortcutsStatus={shortcutsStatus}
-              shortcutsError={shortcutsError}
-              shortcutsDraft={shortcutsDraft}
-              storageRootStatus={storageRootStatus}
-              storageRootError={storageRootError}
-              storageRootApiAvailable={Boolean(getXinliuStorageRootApi())}
-              closeBehaviorStatus={closeBehaviorStatus}
-              closeBehaviorError={closeBehaviorError}
-              closeBehaviorApiAvailable={Boolean(getXinliuCloseBehaviorApi())}
-              diagnosticsStatus={diagnosticsStatus}
-              diagnosticsError={diagnosticsError}
-              diagnosticsApiAvailable={Boolean(getXinliuDiagnosticsApi())}
-              updaterStatus={updaterStatus}
-              updaterError={updaterError}
-              updaterApiAvailable={Boolean(getXinliuUpdaterApi())}
-              storageRootRestartRequired={storageRootRestartRequired}
-              storageRootLastMigration={storageRootLastMigration}
-              onUpdateDraft={updateDraft}
-              onSaveOne={(id) => void saveOne(id)}
-              onResetOne={(id) => void resetOne(id)}
-              onResetAll={() => void resetAll()}
-              onChooseAndMigrateStorageRoot={() => void chooseAndMigrateStorageRoot()}
-              onRestartNow={() => void restartNow()}
-              onSetCloseBehavior={(behavior) => void setCloseBehavior(behavior)}
-              onResetCloseToTrayHint={() => void resetCloseToTrayHint()}
-              onSaveFlowBaseUrl={saveFlowBaseUrl}
-              onSaveMemosBaseUrl={saveMemosBaseUrl}
-              onCheckUpdates={() => void checkUpdates()}
-              onInstallUpdateNow={() => void installUpdateNow()}
-              onDeferInstall={() => void deferInstall()}
-            />
-          ) : route === 'notes' ? (
-            <NotesListCenter
-              apiAvailable={Boolean(getXinliuNotesApi())}
-              scope={notesScope}
-              items={notesItems}
-              hasMore={notesHasMore}
-              loading={notesLoading}
-              error={notesError}
-              actionError={notesActionError}
-              actionBusyKey={notesActionBusyKey}
-              pendingHardDeleteKey={notesPendingHardDeleteKey}
-              onChangeScope={(scope) => {
-                setNotesScope(scope);
-                setNotesPendingHardDeleteKey(null);
-                setNotesActionError(null);
-              }}
-              onRefresh={() => void refreshNotesList()}
-              onDelete={(item) => void runNotesAction(item, 'delete')}
-              onRestore={(item) => void runNotesAction(item, 'restore')}
-              onPrepareHardDelete={(item) =>
-                setNotesPendingHardDeleteKey(`${item.provider}-${item.id}`)
-              }
-              onCancelHardDelete={() => setNotesPendingHardDeleteKey(null)}
-              onConfirmHardDelete={(item) => void runNotesAction(item, 'hardDelete')}
-            />
-          ) : route === 'conflicts' ? (
-            <ConflictsCenter
-              apiAvailable={Boolean(getXinliuConflictsApi())}
-              loading={conflictsLoading}
-              flowItems={flowConflicts}
-              notesItems={notesConflicts}
-              error={conflictsError}
-              actionError={conflictsActionError}
-              actionBusyKey={conflictsActionBusyKey}
-              pendingForceOutboxId={conflictsPendingForceOutboxId}
-              notesCompareLocalUuid={notesCompareLocalUuid}
-              onRefresh={() => void refreshConflicts()}
-              onApplyServer={(outboxId) => void runResolveFlowConflict(outboxId, 'apply_server')}
-              onKeepLocalCopy={(outboxId) =>
-                void runResolveFlowConflict(outboxId, 'keep_local_copy')
-              }
-              onPrepareForceOverwrite={(outboxId) => setConflictsPendingForceOutboxId(outboxId)}
-              onCancelForceOverwrite={() => setConflictsPendingForceOutboxId(null)}
-              onConfirmForceOverwrite={(outboxId) =>
-                void runResolveFlowConflict(outboxId, 'force_overwrite')
-              }
-              onToggleNotesCompare={(localUuid) =>
-                setNotesCompareLocalUuid((current) => (current === localUuid ? null : localUuid))
-              }
-              onCopyNotes={(content) => void safeCopyTextToClipboard(content)}
-            />
-          ) : route === 'collections' ? (
-            <CollectionsMiddle
-              selectedParentId={collectionsMiddleParentId}
-              selectedParentName={
-                collectionsMiddleParentId
-                  ? (collectionsItemsById[collectionsMiddleParentId]?.name ?? null)
-                  : null
-              }
-              items={collectionsMiddleItems}
-              hasMore={collectionsMiddleHasMore}
-              loading={collectionsMiddleLoading}
-              error={collectionsMiddleError}
-              apiAvailable={Boolean(getXinliuCollectionsApi())}
-              onRefresh={() => void loadCollectionsMiddle(collectionsMiddleParentId)}
-              onOpenFolder={(item) => onCollectionNodeClick(item)}
-              onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
-            />
-          ) : (
-            <>
-              <DefaultRoutePlaceholder
-                routeMeta={routeMeta}
-                middleItems={placeholderMiddleItems}
-                onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
+            <nav className="nav" aria-label="主导航">
+              <NavItem
+                active={route === 'notes'}
+                meta={ROUTES[0]}
+                testId="nav-notes"
+                onClick={() => setRoute('notes')}
               />
-            </>
-          )}
-        </section>
+              <NavItem
+                active={route === 'collections'}
+                meta={ROUTES[1]}
+                testId="nav-collections"
+                onClick={() => setRoute('collections')}
+              />
+              <NavItem
+                active={route === 'todo'}
+                meta={ROUTES[2]}
+                testId="nav-todo"
+                onClick={() => setRoute('todo')}
+              />
+              <div className="navDivider" />
+              <NavItem
+                active={route === 'settings'}
+                meta={ROUTES[3]}
+                testId="nav-settings"
+                onClick={() => openSettingsRoute()}
+              />
+              <NavItem
+                active={route === 'conflicts'}
+                meta={ROUTES[4]}
+                testId="nav-conflicts"
+                onClick={() => setRoute('conflicts')}
+              />
 
-        <aside className="pane paneRight" data-testid="triptych-right" aria-label="右栏">
-          <div className="paneHeader">
-            <div className="paneTitle">上下文</div>
-            <div className="paneSub">为当前页面提供补充信息与快捷操作</div>
-          </div>
+              <div className="navDivider" />
+              <div className="tree" data-testid="folder-tree">
+                <div className="treeTitle">Collections / Folder 树</div>
+                <div className="treeBody folderTreeBody">
+                  <button
+                    type="button"
+                    className={`treeRow ${collectionsSelectedNodeId === null ? 'treeRowSelected' : ''}`}
+                    data-testid="folder-tree-root"
+                    onClick={() => selectCollectionsRoot()}
+                  >
+                    <div className="treeRowTitle">[root] 根节点</div>
+                    <div className="treeRowSub">单击查看 root 的直接子项</div>
+                  </button>
 
-          <div className="rightStack">
-            <GlobalSearchBox />
+                  <div
+                    ref={folderTreeViewportRef}
+                    className="folderTreeViewport"
+                    role="tree"
+                    aria-label="Collections Tree"
+                    tabIndex={0}
+                    onKeyDown={() => {}}
+                  >
+                    {collectionsLoadingParent[COLLECTIONS_ROOT_KEY] ? (
+                      <div className="fine">加载根节点中…</div>
+                    ) : null}
+                    {renderCollectionTreeNodes(null, 0)}
+                  </div>
 
-            {route === 'notes' ? <NotesEditorCard /> : null}
-
-            <div className="rightCard" data-testid="share-export">
-              <div className="rightCardTitle">分享 / 导出</div>
-              <div className="rightCardBody">
-                <div className="fine">
-                  导出当前页面的可读文本（当前为占位内容；后续接入编辑器/选中条目）。
+                  {collectionsTreeError ? (
+                    <div className="callout calloutWarn">{collectionsTreeError}</div>
+                  ) : null}
                 </div>
-
-                <div className="btnRow" style={{ marginTop: 10 }}>
-                  <button
-                    type="button"
-                    className="btnSmall"
-                    onClick={() => void runExport('text')}
-                    disabled={exportBusy}
-                  >
-                    {exportBusy ? '导出中…' : '导出纯文本'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btnSmall"
-                    onClick={() => void runExport('markdown')}
-                    disabled={exportBusy}
-                  >
-                    {exportBusy ? '导出中…' : '导出 Markdown'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btnSmall"
-                    data-testid="export-copy"
-                    onClick={() => void safeCopyTextToClipboard(exportContentForCopy)}
-                  >
-                    复制文本
-                  </button>
-                </div>
-
-                {exportError ? <div className="callout calloutWarn">{exportError}</div> : null}
               </div>
+            </nav>
+
+            <div className="paneFooter">
+              <div className="fine">提示：左栏负责定位，中栏负责内容，右栏负责上下文。</div>
+            </div>
+          </aside>
+
+          <section className="pane paneMiddle" data-testid="triptych-middle" aria-label="中栏">
+            <div className="paneHeader">
+              <div className="paneTitle">{routeMeta.label}</div>
+              <div className="paneSub">{routeMeta.hint}</div>
             </div>
 
-            <div className="rightCard">
-              <div className="rightCardTitle">调试信息</div>
-              <div className="rightCardBody">
-                <div className="kvRow">
-                  <div className="k">当前路由</div>
-                  <div className="v">{routeMeta.key}</div>
+            {route === 'settings' ? (
+              <SettingsContent
+                shortcutsStatus={shortcutsStatus}
+                shortcutsError={shortcutsError}
+                shortcutsDraft={shortcutsDraft}
+                storageRootStatus={storageRootStatus}
+                storageRootError={storageRootError}
+                storageRootApiAvailable={Boolean(getXinliuStorageRootApi())}
+                closeBehaviorStatus={closeBehaviorStatus}
+                closeBehaviorError={closeBehaviorError}
+                closeBehaviorApiAvailable={Boolean(getXinliuCloseBehaviorApi())}
+                diagnosticsStatus={diagnosticsStatus}
+                diagnosticsError={diagnosticsError}
+                diagnosticsApiAvailable={Boolean(getXinliuDiagnosticsApi())}
+                updaterStatus={updaterStatus}
+                updaterError={updaterError}
+                updaterApiAvailable={Boolean(getXinliuUpdaterApi())}
+                storageRootRestartRequired={storageRootRestartRequired}
+                storageRootLastMigration={storageRootLastMigration}
+                onUpdateDraft={updateDraft}
+                onSaveOne={(id) => void saveOne(id)}
+                onResetOne={(id) => void resetOne(id)}
+                onResetAll={() => void resetAll()}
+                onChooseAndMigrateStorageRoot={() => void chooseAndMigrateStorageRoot()}
+                onRestartNow={() => void restartNow()}
+                onSetCloseBehavior={(behavior) => void setCloseBehavior(behavior)}
+                onResetCloseToTrayHint={() => void resetCloseToTrayHint()}
+                onSaveFlowBaseUrl={saveFlowBaseUrl}
+                onSaveMemosBaseUrl={saveMemosBaseUrl}
+                onCheckUpdates={() => void checkUpdates()}
+                onInstallUpdateNow={() => void installUpdateNow()}
+                onDeferInstall={() => void deferInstall()}
+              />
+            ) : route === 'notes' ? (
+              <NotesListCenter
+                apiAvailable={Boolean(getXinliuNotesApi())}
+                scope={notesScope}
+                items={notesItems}
+                hasMore={notesHasMore}
+                loading={notesLoading}
+                error={notesError}
+                actionError={notesActionError}
+                actionBusyKey={notesActionBusyKey}
+                pendingHardDeleteKey={notesPendingHardDeleteKey}
+                onChangeScope={(scope) => {
+                  setNotesScope(scope);
+                  setNotesPendingHardDeleteKey(null);
+                  setNotesActionError(null);
+                }}
+                onRefresh={() => void refreshNotesList()}
+                onDelete={(item) => void runNotesAction(item, 'delete')}
+                onRestore={(item) => void runNotesAction(item, 'restore')}
+                onPrepareHardDelete={(item) =>
+                  setNotesPendingHardDeleteKey(`${item.provider}-${item.id}`)
+                }
+                onCancelHardDelete={() => setNotesPendingHardDeleteKey(null)}
+                onConfirmHardDelete={(item) => void runNotesAction(item, 'hardDelete')}
+              />
+            ) : route === 'conflicts' ? (
+              <ConflictsCenter
+                apiAvailable={Boolean(getXinliuConflictsApi())}
+                loading={conflictsLoading}
+                flowItems={flowConflicts}
+                notesItems={notesConflicts}
+                error={conflictsError}
+                actionError={conflictsActionError}
+                actionBusyKey={conflictsActionBusyKey}
+                pendingForceOutboxId={conflictsPendingForceOutboxId}
+                notesCompareLocalUuid={notesCompareLocalUuid}
+                onRefresh={() => void refreshConflicts()}
+                onApplyServer={(outboxId) => void runResolveFlowConflict(outboxId, 'apply_server')}
+                onKeepLocalCopy={(outboxId) =>
+                  void runResolveFlowConflict(outboxId, 'keep_local_copy')
+                }
+                onPrepareForceOverwrite={(outboxId) => setConflictsPendingForceOutboxId(outboxId)}
+                onCancelForceOverwrite={() => setConflictsPendingForceOutboxId(null)}
+                onConfirmForceOverwrite={(outboxId) =>
+                  void runResolveFlowConflict(outboxId, 'force_overwrite')
+                }
+                onToggleNotesCompare={(localUuid) =>
+                  setNotesCompareLocalUuid((current) => (current === localUuid ? null : localUuid))
+                }
+                onCopyNotes={(content) => void safeCopyTextToClipboard(content)}
+              />
+            ) : route === 'collections' ? (
+              <CollectionsMiddle
+                selectedParentId={collectionsMiddleParentId}
+                selectedParentName={
+                  collectionsMiddleParentId
+                    ? (collectionsItemsById[collectionsMiddleParentId]?.name ?? null)
+                    : null
+                }
+                items={collectionsMiddleItems}
+                hasMore={collectionsMiddleHasMore}
+                loading={collectionsMiddleLoading}
+                error={collectionsMiddleError}
+                apiAvailable={Boolean(getXinliuCollectionsApi())}
+                onRefresh={() => void loadCollectionsMiddle(collectionsMiddleParentId)}
+                onOpenFolder={(item) => onCollectionNodeClick(item)}
+                onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
+                onMiddleItemMouseDragStart={onCollectionsMiddleItemMouseDragStart}
+                undoNotice={collectionsUndoNotice}
+                undoBusy={collectionsUndoBusy}
+                onUndoMove={() => void undoCollectionsMove()}
+              />
+            ) : (
+              <>
+                <DefaultRoutePlaceholder
+                  routeMeta={routeMeta}
+                  middleItems={placeholderMiddleItems}
+                  onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
+                />
+              </>
+            )}
+          </section>
+
+          <aside className="pane paneRight" data-testid="triptych-right" aria-label="右栏">
+            <div className="paneHeader">
+              <div className="paneTitle">上下文</div>
+              <div className="paneSub">为当前页面提供补充信息与快捷操作</div>
+            </div>
+
+            <div className="rightStack">
+              <GlobalSearchBox />
+
+              {route === 'notes' ? <NotesEditorCard /> : null}
+
+              <div className="rightCard" data-testid="share-export">
+                <div className="rightCardTitle">分享 / 导出</div>
+                <div className="rightCardBody">
+                  <div className="fine">
+                    导出当前页面的可读文本（当前为占位内容；后续接入编辑器/选中条目）。
+                  </div>
+
+                  <div className="btnRow" style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btnSmall"
+                      onClick={() => void runExport('text')}
+                      disabled={exportBusy}
+                    >
+                      {exportBusy ? '导出中…' : '导出纯文本'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btnSmall"
+                      onClick={() => void runExport('markdown')}
+                      disabled={exportBusy}
+                    >
+                      {exportBusy ? '导出中…' : '导出 Markdown'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btnSmall"
+                      data-testid="export-copy"
+                      onClick={() => void safeCopyTextToClipboard(exportContentForCopy)}
+                    >
+                      复制文本
+                    </button>
+                  </div>
+
+                  {exportError ? <div className="callout calloutWarn">{exportError}</div> : null}
                 </div>
-                <div className="kvRow">
-                  <div className="k">说明</div>
-                  <div className="v">{routeMeta.hint}</div>
-                </div>
-                <div className="kvRow">
-                  <div className="k">最近右键命令</div>
-                  <div className="v">
-                    {lastContextMenuSelection
-                      ? `${lastContextMenuSelection.command} @ ${lastContextMenuSelection.target.kind}`
-                      : '-'}
+              </div>
+
+              <div className="rightCard">
+                <div className="rightCardTitle">调试信息</div>
+                <div className="rightCardBody">
+                  <div className="kvRow">
+                    <div className="k">当前路由</div>
+                    <div className="v">{routeMeta.key}</div>
+                  </div>
+                  <div className="kvRow">
+                    <div className="k">说明</div>
+                    <div className="v">{routeMeta.hint}</div>
+                  </div>
+                  <div className="kvRow">
+                    <div className="k">最近右键命令</div>
+                    <div className="v">
+                      {lastContextMenuSelection
+                        ? `${lastContextMenuSelection.command} @ ${lastContextMenuSelection.target.kind}`
+                        : '-'}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </aside>
-      </main>
+          </aside>
+        </main>
+      </DndContext>
     </div>
   );
 }

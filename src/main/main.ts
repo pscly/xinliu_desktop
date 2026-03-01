@@ -107,9 +107,28 @@ type WithMainDb = <T>(run: (db: Database.Database) => T) => T;
 
 let withMainDbRef: WithMainDb | null = null;
 let e2eCollectionsSeeded = false;
+let e2eCollectionsFallbackWarned = false;
+
+type E2eCollectionItem = {
+  id: string;
+  itemType: 'folder';
+  parentId: string | null;
+  name: string;
+  color: string | null;
+  refType: null;
+  refId: null;
+  sortOrder: number;
+  clientUpdatedAtMs: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+
+let e2eCollectionsFallbackItemsById: Record<string, E2eCollectionItem> | null = null;
 
 const E2E_COLLECTION_ROOT_ID = 'e2e_folder_root';
 const E2E_COLLECTION_CHILD_ID = 'e2e_folder_child';
+const E2E_COLLECTION_TARGET_ID = 'e2e_folder_target';
 
 function seedE2eCollectionsTreeIfNeeded(db: Database.Database): void {
   if ((process.env.XINLIU_E2E ?? '').trim() !== '1') {
@@ -204,7 +223,199 @@ function seedE2eCollectionsTreeIfNeeded(db: Database.Database): void {
     updated_at: nowIso,
   });
 
+  db.prepare(
+    `
+      INSERT OR IGNORE INTO collection_items (
+        id,
+        item_type,
+        parent_id,
+        name,
+        color,
+        ref_type,
+        ref_id,
+        sort_order,
+        client_updated_at_ms,
+        created_at,
+        updated_at,
+        deleted_at
+      ) VALUES (
+        @id,
+        @item_type,
+        @parent_id,
+        @name,
+        NULL,
+        NULL,
+        NULL,
+        @sort_order,
+        @client_updated_at_ms,
+        @created_at,
+        @updated_at,
+        NULL
+      )
+    `
+  ).run({
+    id: E2E_COLLECTION_TARGET_ID,
+    item_type: 'folder',
+    parent_id: null,
+    name: 'E2E Target Folder',
+    sort_order: 1,
+    client_updated_at_ms: nowMs + 2,
+    created_at: nowIso,
+    updated_at: nowIso,
+  });
+
   e2eCollectionsSeeded = true;
+}
+
+function isE2eCollectionsFallbackError(error: unknown): boolean {
+  if ((process.env.XINLIU_E2E ?? '').trim() !== '1') {
+    return false;
+  }
+  const message = String(error);
+  return (
+    message.includes('Module did not self-register') && message.includes('better_sqlite3.node')
+  );
+}
+
+function getE2eCollectionsFallbackItemsById(): Record<string, E2eCollectionItem> {
+  if (e2eCollectionsFallbackItemsById) {
+    return e2eCollectionsFallbackItemsById;
+  }
+
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  e2eCollectionsFallbackItemsById = {
+    [E2E_COLLECTION_ROOT_ID]: {
+      id: E2E_COLLECTION_ROOT_ID,
+      itemType: 'folder',
+      parentId: null,
+      name: 'E2E Root Folder',
+      color: null,
+      refType: null,
+      refId: null,
+      sortOrder: 0,
+      clientUpdatedAtMs: nowMs,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      deletedAt: null,
+    },
+    [E2E_COLLECTION_CHILD_ID]: {
+      id: E2E_COLLECTION_CHILD_ID,
+      itemType: 'folder',
+      parentId: E2E_COLLECTION_ROOT_ID,
+      name: 'E2E Child Folder',
+      color: null,
+      refType: null,
+      refId: null,
+      sortOrder: 0,
+      clientUpdatedAtMs: nowMs + 1,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      deletedAt: null,
+    },
+    [E2E_COLLECTION_TARGET_ID]: {
+      id: E2E_COLLECTION_TARGET_ID,
+      itemType: 'folder',
+      parentId: null,
+      name: 'E2E Target Folder',
+      color: null,
+      refType: null,
+      refId: null,
+      sortOrder: 1,
+      clientUpdatedAtMs: nowMs + 2,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      deletedAt: null,
+    },
+  };
+  return e2eCollectionsFallbackItemsById;
+}
+
+function listCollectionsFromE2eFallback(args: {
+  parentId: string | null;
+  limit: number;
+  offset: number;
+}) {
+  const byId = getE2eCollectionsFallbackItemsById();
+  const rows = Object.values(byId)
+    .filter((item) => item.deletedAt === null && item.parentId === args.parentId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt));
+  const paged = rows.slice(args.offset, args.offset + args.limit + 1);
+  return {
+    items: paged.slice(0, args.limit),
+    hasMore: paged.length > args.limit,
+  };
+}
+
+function moveCollectionInE2eFallback(itemId: string, newParentId: string | null) {
+  const byId = getE2eCollectionsFallbackItemsById();
+  const item = byId[itemId];
+  if (!item || item.deletedAt !== null) {
+    throw new Error('collection item 不存在');
+  }
+
+  if (newParentId !== null) {
+    const parent = byId[newParentId];
+    if (!parent) {
+      throw new Error('parent 不存在');
+    }
+    if (parent.deletedAt !== null) {
+      throw new Error('parent 必须是未删除的 folder');
+    }
+    if (parent.itemType !== 'folder') {
+      throw new Error('parent 必须是 folder');
+    }
+  }
+
+  if (newParentId === itemId) {
+    throw new Error('不能把 parent_id 设置为自己');
+  }
+
+  if (newParentId !== null && item.itemType === 'folder') {
+    let cursor: string | null = newParentId;
+    const visited = new Set<string>();
+    while (cursor) {
+      if (cursor === itemId) {
+        throw new Error('不能把 folder 移动到其子孙节点下');
+      }
+      if (visited.has(cursor)) {
+        break;
+      }
+      visited.add(cursor);
+      cursor = byId[cursor]?.parentId ?? null;
+    }
+  }
+
+  const nowMs = Date.now();
+  const nextClientUpdatedAtMs = Math.max(nowMs, item.clientUpdatedAtMs + 1);
+  byId[itemId] = {
+    ...item,
+    parentId: newParentId,
+    clientUpdatedAtMs: nextClientUpdatedAtMs,
+    updatedAt: new Date(nextClientUpdatedAtMs).toISOString(),
+  };
+
+  return {
+    itemId,
+    parentId: newParentId,
+  };
+}
+
+function withCollectionsDbOrE2eFallback<T>(runDb: () => T, runFallback: () => T): T {
+  try {
+    return runDb();
+  } catch (error) {
+    if (!isE2eCollectionsFallbackError(error)) {
+      throw error;
+    }
+    if (!e2eCollectionsFallbackWarned) {
+      console.warn(
+        'Collections E2E 回退到内存数据（better-sqlite3 在 Playwright/Electron 环境加载失败）'
+      );
+      e2eCollectionsFallbackWarned = true;
+    }
+    return runFallback();
+  }
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -644,31 +855,62 @@ app.whenReady().then(async () => {
     },
     collections: {
       listRoots: ({ limit, offset }) =>
-        withMainDb((db) => {
-          const items = createCollectionsRepo(db).listCollectionItems({
-            parentId: null,
-            includeDeleted: false,
-            limit: limit + 1,
-            offset,
-          });
-          return {
-            items: items.slice(0, limit),
-            hasMore: items.length > limit,
-          };
-        }),
+        withCollectionsDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              const items = createCollectionsRepo(db).listCollectionItems({
+                parentId: null,
+                includeDeleted: false,
+                limit: limit + 1,
+                offset,
+              });
+              return {
+                items: items.slice(0, limit),
+                hasMore: items.length > limit,
+              };
+            }),
+          () =>
+            listCollectionsFromE2eFallback({
+              parentId: null,
+              limit,
+              offset,
+            })
+        ),
       listChildren: ({ parentId, limit, offset }) =>
-        withMainDb((db) => {
-          const items = createCollectionsRepo(db).listCollectionItems({
-            parentId,
-            includeDeleted: false,
-            limit: limit + 1,
-            offset,
-          });
-          return {
-            items: items.slice(0, limit),
-            hasMore: items.length > limit,
-          };
-        }),
+        withCollectionsDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              const items = createCollectionsRepo(db).listCollectionItems({
+                parentId,
+                includeDeleted: false,
+                limit: limit + 1,
+                offset,
+              });
+              return {
+                items: items.slice(0, limit),
+                hasMore: items.length > limit,
+              };
+            }),
+          () =>
+            listCollectionsFromE2eFallback({
+              parentId,
+              limit,
+              offset,
+            })
+        ),
+      move: ({ itemId, newParentId }) =>
+        withCollectionsDbOrE2eFallback(
+          () =>
+            withMainDb((db) => {
+              const repo = createCollectionsRepo(db);
+              repo.patchCollectionItem({ id: itemId, parentId: newParentId });
+              return {
+                itemId,
+                parentId: newParentId,
+              };
+            }),
+          () => moveCollectionInE2eFallback(itemId, newParentId)
+        ),
     },
     notes: {
       createDraft: ({ content }) =>

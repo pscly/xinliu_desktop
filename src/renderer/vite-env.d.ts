@@ -6,6 +6,8 @@ import type {
   CollectionsListChildrenPayload,
   CollectionsListResult,
   CollectionsListRootsPayload,
+  CollectionsMovePayload,
+  CollectionsMoveResult,
   ContextMenuDidSelectPayload,
   DiagnosticsSetFlowBaseUrlPayload,
   DiagnosticsSetMemosBaseUrlPayload,
@@ -141,6 +143,7 @@ declare global {
         listChildren: (
           payload: CollectionsListChildrenPayload
         ) => Promise<IpcResult<CollectionsListResult>>;
+        move: (payload: CollectionsMovePayload) => Promise<IpcResult<CollectionsMoveResult>>;
       };
       updater: {
         getStatus: () => Promise<IpcResult<UpdaterStatus>>;

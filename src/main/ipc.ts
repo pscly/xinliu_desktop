@@ -8,6 +8,8 @@ import type {
   CollectionsListChildrenPayload,
   CollectionsListResult,
   CollectionsListRootsPayload,
+  CollectionsMovePayload,
+  CollectionsMoveResult,
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
   DiagnosticsSetFlowBaseUrlPayload,
@@ -115,6 +117,9 @@ export interface RegisterIpcHandlersDeps {
     listChildren: (
       payload: CollectionsListChildrenPayload
     ) => CollectionsListResult | Promise<CollectionsListResult>;
+    move: (
+      payload: CollectionsMovePayload
+    ) => CollectionsMoveResult | Promise<CollectionsMoveResult>;
   };
   pathGate: PathGate;
   fileAccess: {
@@ -534,6 +539,31 @@ function validateCollectionsListChildrenPayload(
   }
 
   return ok({ parentId: parentId.trim(), limit: page.value.limit, offset: page.value.offset });
+}
+
+function validateCollectionsMovePayload(payload: unknown): IpcResult<CollectionsMovePayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const itemId = payload['itemId'];
+  const newParentId = payload['newParentId'];
+
+  if (typeof itemId !== 'string' || itemId.trim().length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  if (
+    newParentId !== null &&
+    (typeof newParentId !== 'string' || newParentId.trim().length === 0)
+  ) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  return ok({
+    itemId: itemId.trim(),
+    newParentId: newParentId === null ? null : newParentId.trim(),
+  });
 }
 
 function validateSearchQueryPayload(payload: unknown): IpcResult<SearchQueryPayload> {
@@ -1234,6 +1264,19 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, deps: RegisterIpcHandl
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.collections.move,
+    makeHandlerWithErrorMessage<CollectionsMoveResult>({
+      channel: IPC_CHANNELS.collections.move,
+      deps,
+      rateLimiter,
+      validate: validateCollectionsMovePayload,
+      run: async (validatedPayload) => {
+        return deps.collections.move(validatedPayload as CollectionsMovePayload);
+      },
+    })
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.notes.createDraft,
     makeHandlerWithErrorMessage<NotesCreateDraftResult>({
       channel: IPC_CHANNELS.notes.createDraft,
@@ -1652,6 +1695,7 @@ export const __test__ = {
   validateContextMenuPopupFolderPayload,
   validateCollectionsListRootsPayload,
   validateCollectionsListChildrenPayload,
+  validateCollectionsMovePayload,
   validateSearchQueryPayload,
   validateNotesListItemsPayload,
   validateNotesIdPayload,

@@ -41,6 +41,7 @@ export const IPC_CHANNELS = {
   collections: {
     listRoots: `${IPC_NAMESPACE}:collections:listRoots`,
     listChildren: `${IPC_NAMESPACE}:collections:listChildren`,
+    move: `${IPC_NAMESPACE}:collections:move`,
   },
   notes: {
     createDraft: `${IPC_NAMESPACE}:notes:createDraft`,
@@ -266,6 +267,16 @@ export interface CollectionsListChildrenPayload {
 export interface CollectionsListResult {
   items: CollectionsTreeItem[];
   hasMore: boolean;
+}
+
+export interface CollectionsMovePayload {
+  itemId: string;
+  newParentId: string | null;
+}
+
+export interface CollectionsMoveResult {
+  itemId: string;
+  parentId: string | null;
 }
 
 export type ShortcutId = 'openQuickCapture' | 'openMainAndFocusSearch';

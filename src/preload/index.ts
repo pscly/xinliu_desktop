@@ -7,6 +7,8 @@ import type {
   CollectionsListChildrenPayload,
   CollectionsListResult,
   CollectionsListRootsPayload,
+  CollectionsMovePayload,
+  CollectionsMoveResult,
   ContextMenuDidSelectPayload,
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
@@ -177,6 +179,11 @@ contextBridge.exposeInMainWorld('xinliu', {
       invokeIpc<CollectionsListResult>(
         IPC_CHANNELS.collections.listChildren,
         payload satisfies CollectionsListChildrenPayload
+      ),
+    move: (payload: CollectionsMovePayload) =>
+      invokeIpc<CollectionsMoveResult>(
+        IPC_CHANNELS.collections.move,
+        payload satisfies CollectionsMovePayload
       ),
   },
   notes: {

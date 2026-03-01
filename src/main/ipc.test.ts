@@ -65,6 +65,7 @@ describe('src/main/ipc', () => {
       collections: {
         listRoots: () => ({ items: [], hasMore: false }),
         listChildren: () => ({ items: [], hasMore: false }),
+        move: ({ itemId, newParentId }) => ({ itemId, parentId: newParentId }),
       },
       conflicts: {
         listFlow: () => ({ items: [] }),
@@ -201,6 +202,7 @@ describe('src/main/ipc', () => {
       collections: {
         listRoots: () => ({ items: [], hasMore: false }),
         listChildren: () => ({ items: [], hasMore: false }),
+        move: ({ itemId, newParentId }) => ({ itemId, parentId: newParentId }),
       },
       conflicts: {
         listFlow: () => ({ items: [] }),
@@ -325,6 +327,7 @@ describe('src/main/ipc', () => {
       collections: {
         listRoots: () => ({ items: [], hasMore: false }),
         listChildren: () => ({ items: [], hasMore: false }),
+        move: ({ itemId, newParentId }) => ({ itemId, parentId: newParentId }),
       },
       conflicts: {
         listFlow: () => ({ items: [] }),
@@ -449,6 +452,7 @@ describe('src/main/ipc', () => {
       collections: {
         listRoots: () => ({ items: [], hasMore: false }),
         listChildren: () => ({ items: [], hasMore: false }),
+        move: ({ itemId, newParentId }) => ({ itemId, parentId: newParentId }),
       },
       conflicts: {
         listFlow: () => ({ items: [] }),
