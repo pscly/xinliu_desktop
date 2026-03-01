@@ -289,6 +289,12 @@ function buildXinliuStub(overrides: {
               nextRunAtMs: null,
               consecutiveFailures: 0,
               lastErrorMessage: null,
+              summary: {
+                pullCursor: 0,
+                outboxPendingCount: 0,
+                outboxRejectedConflictCount: 0,
+                lastRequestId: null,
+              },
             },
             memos: {
               running: false,
@@ -296,6 +302,11 @@ function buildXinliuStub(overrides: {
               nextRunAtMs: null,
               consecutiveFailures: 0,
               lastErrorMessage: null,
+              summary: {
+                dirtyCount: 0,
+                failedCount: 0,
+                lastRequestId: null,
+              },
             },
           },
         }) satisfies IpcResult<SyncStatus>,
@@ -375,6 +386,8 @@ describe('<App />', () => {
     expect(screen.getByTestId('check-updates')).toBeTruthy();
     expect(screen.getByTestId('sync-now-flow')).toBeTruthy();
     expect(screen.getByTestId('sync-now-memos')).toBeTruthy();
+    expect(screen.getAllByTestId('sync-flow').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByTestId('sync-memos').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByTestId('settings-shortcuts')).toBeTruthy();
     expect(screen.getByTestId('settings-backend')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-copy-flow-request-id')).toBeTruthy();

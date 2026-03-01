@@ -130,6 +130,77 @@ function createFakeDbWithMemos(localUuids: string[]): Database.Database {
   return dbLike as unknown as Database.Database;
 }
 
+function createFakeDbForSyncSummary(args: {
+  flowCursorValueJson: string | null;
+  outboxPendingCount: number;
+  outboxRejectedConflictCount: number;
+  flowLastRequestId: string | null;
+  memosDirtyCount: number;
+  memosFailedCount: number;
+  memosLastRequestId: string | null;
+}): Database.Database {
+  const dbLike = {
+    prepare: (sql: string) => {
+      if (sql.includes('FROM sync_state')) {
+        return {
+          get: () => ({ value_json: args.flowCursorValueJson }),
+          all: () => [],
+        };
+      }
+
+      if (sql.includes('FROM outbox_mutations') && sql.includes('WHERE status = @status')) {
+        return {
+          get: (params?: { status?: string }) => {
+            if (params?.status === 'PENDING') {
+              return { c: args.outboxPendingCount };
+            }
+            if (params?.status === 'REJECTED_CONFLICT') {
+              return { c: args.outboxRejectedConflictCount };
+            }
+            return { c: 0 };
+          },
+          all: () => [],
+        };
+      }
+
+      if (sql.includes('SELECT request_id') && sql.includes('FROM outbox_mutations')) {
+        return {
+          get: () => ({ request_id: args.flowLastRequestId }),
+          all: () => [],
+        };
+      }
+
+      if (sql.includes("sync_status = 'DIRTY'")) {
+        return {
+          get: () => ({ c: args.memosDirtyCount }),
+          all: () => [],
+        };
+      }
+
+      if (sql.includes("sync_status = 'FAILED'")) {
+        return {
+          get: () => ({ c: args.memosFailedCount }),
+          all: () => [],
+        };
+      }
+
+      if (sql.includes('SELECT conflict_request_id') && sql.includes('FROM memos')) {
+        return {
+          get: () => ({ conflict_request_id: args.memosLastRequestId }),
+          all: () => [],
+        };
+      }
+
+      return {
+        get: () => undefined,
+        all: () => [],
+      };
+    },
+  };
+
+  return dbLike as unknown as Database.Database;
+}
+
 describe('src/main/sync/syncController', () => {
   const deviceIdentity: DeviceIdentity = {
     deviceId: 'device-id-1',
@@ -253,5 +324,40 @@ describe('src/main/sync/syncController', () => {
     expect(vi.mocked(runFlowSyncPush)).toHaveBeenCalledTimes(0);
     expect(vi.mocked(runFlowSyncPull)).toHaveBeenCalledTimes(0);
     expect(vi.mocked(runMemosSyncOneMemoJob)).toHaveBeenCalledTimes(0);
+  });
+
+  it('getStatus 返回调度状态与 Flow/Memos 摘要统计', async () => {
+    const db = createFakeDbForSyncSummary({
+      flowCursorValueJson: JSON.stringify({ cursor: 123 }),
+      outboxPendingCount: 7,
+      outboxRejectedConflictCount: 2,
+      flowLastRequestId: 'flow-req-123',
+      memosDirtyCount: 9,
+      memosFailedCount: 3,
+      memosLastRequestId: 'memo-req-abc',
+    });
+
+    const controller = createSyncController({
+      getFlowBaseUrl: () => 'https://xl.pscly.cc',
+      getMemosBaseUrl: () => 'https://memos.pscly.cc',
+      getToken: async () => 'token-1',
+      getDeviceIdentity: () => deviceIdentity,
+      getStorageRootAbsPath: () => '/tmp/xinliu',
+      withMainDbAsync: async (run) => run(db),
+      sleepMs: async () => undefined,
+      createScheduler: (schedulerOptions) => createInlineScheduler(schedulerOptions),
+    });
+
+    controller.start();
+    const status = await controller.getStatus();
+
+    expect(status.flow.summary.pullCursor).toBe(123);
+    expect(status.flow.summary.outboxPendingCount).toBe(7);
+    expect(status.flow.summary.outboxRejectedConflictCount).toBe(2);
+    expect(status.flow.summary.lastRequestId).toBe('flow-req-123');
+
+    expect(status.memos.summary.dirtyCount).toBe(9);
+    expect(status.memos.summary.failedCount).toBe(3);
+    expect(status.memos.summary.lastRequestId).toBe('memo-req-abc');
   });
 });

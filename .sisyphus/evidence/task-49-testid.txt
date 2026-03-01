@@ -1,0 +1,8 @@
+Task 49 testid 证据
+生成时间：2026-03-02
+
+$ rg -n "data-testid=\"sync-flow\"" src/renderer -S
+src/renderer/App.tsx:339:          <div className="contentCard" data-testid="sync-flow">
+
+$ rg -n "data-testid=\"sync-memos\"" src/renderer -S
+src/renderer/App.tsx:395:          <div className="contentCard" data-testid="sync-memos">

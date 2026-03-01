@@ -169,10 +169,31 @@ export interface SyncLaneStatus {
   lastErrorMessage: string | null;
 }
 
+export interface SyncFlowSummary {
+  pullCursor: number;
+  outboxPendingCount: number;
+  outboxRejectedConflictCount: number;
+  lastRequestId: string | null;
+}
+
+export interface SyncMemosSummary {
+  dirtyCount: number;
+  failedCount: number;
+  lastRequestId: string | null;
+}
+
+export interface SyncFlowLaneStatus extends SyncLaneStatus {
+  summary: SyncFlowSummary;
+}
+
+export interface SyncMemosLaneStatus extends SyncLaneStatus {
+  summary: SyncMemosSummary;
+}
+
 export interface SyncStatus {
   updatedAtMs: number;
-  flow: SyncLaneStatus;
-  memos: SyncLaneStatus;
+  flow: SyncFlowLaneStatus;
+  memos: SyncMemosLaneStatus;
 }
 
 export type SyncNowFlowPayload = EmptyPayload;

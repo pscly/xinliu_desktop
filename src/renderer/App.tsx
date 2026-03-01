@@ -41,6 +41,7 @@ import type {
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
   StorageRootStatus,
+  SyncStatus,
   TodoListItem,
   TodoScope,
   UpdaterStatus,
@@ -261,6 +262,201 @@ async function safeCopyTextToClipboard(text: string): Promise<void> {
     document.execCommand('copy');
     document.body.removeChild(ta);
   } catch {}
+}
+
+function formatSyncAtMs(value: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return '-';
+  }
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return String(value);
+  }
+}
+
+function SyncSummaryPanel(props: {
+  apiAvailable: boolean;
+  status: SyncStatus | null;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+  compact?: boolean;
+}) {
+  const [expanded, setExpanded] = useState<{ flow: boolean; memos: boolean }>({
+    flow: false,
+    memos: false,
+  });
+
+  const toggleExpand = (lane: 'flow' | 'memos') => {
+    setExpanded((prev) => ({ ...prev, [lane]: !prev[lane] }));
+  };
+
+  const containerClass = props.compact ? 'rightCard' : 'settingsSection';
+  const headerClass = props.compact ? 'rightCardTitle' : 'settingsSectionTitle';
+
+  return (
+    <section
+      className={containerClass}
+      data-testid={props.compact ? 'left-sync-summary' : 'settings-sync-summary'}
+    >
+      <div className={props.compact ? 'rightCardBody' : undefined}>
+        <div className={props.compact ? undefined : 'settingsSectionHeader'}>
+          <div>
+            <div className={headerClass}>同步状态摘要</div>
+            {!props.compact ? (
+              <div className="settingsSectionSub">Flow / Memos 独立统计（renderer 不直连 DB）</div>
+            ) : (
+              <div className="fine">Flow / Memos 独立统计</div>
+            )}
+          </div>
+          {!props.compact ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => props.onRefresh()}
+              disabled={!props.apiAvailable || props.loading}
+            >
+              {props.loading ? '刷新中…' : '刷新状态'}
+            </button>
+          ) : null}
+        </div>
+
+        {props.compact ? (
+          <div className="btnRow" style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              className="btnSmall"
+              onClick={() => props.onRefresh()}
+              disabled={!props.apiAvailable || props.loading}
+            >
+              {props.loading ? '刷新中…' : '刷新状态'}
+            </button>
+          </div>
+        ) : null}
+
+        <div className="contentGrid" style={{ marginTop: 10 }}>
+          <div className="contentCard" data-testid="sync-flow">
+            <div className="contentCardTitle">Flow</div>
+            <div className="contentCardBody">
+              <div className="kvRow">
+                <div className="k">pull cursor</div>
+                <div className="v">{props.status?.flow.summary.pullCursor ?? 0}</div>
+              </div>
+              <div className="kvRow">
+                <div className="k">outbox pending</div>
+                <div className="v">{props.status?.flow.summary.outboxPendingCount ?? 0}</div>
+              </div>
+              <div className="kvRow">
+                <div className="k">rejected_conflict</div>
+                <div className="v">
+                  {props.status?.flow.summary.outboxRejectedConflictCount ?? 0}
+                </div>
+              </div>
+              <div className="kvRow">
+                <div className="k">request_id</div>
+                <div className="v">
+                  <code>{props.status?.flow.summary.lastRequestId ?? '-'}</code>
+                  <button
+                    type="button"
+                    className="btn btnGhost"
+                    style={{ marginLeft: 8 }}
+                    disabled={!props.status?.flow.summary.lastRequestId}
+                    onClick={() =>
+                      void safeCopyTextToClipboard(props.status?.flow.summary.lastRequestId ?? '')
+                    }
+                  >
+                    复制
+                  </button>
+                </div>
+              </div>
+              <div className="kvRow">
+                <div className="k">最近运行</div>
+                <div className="v">{formatSyncAtMs(props.status?.flow.lastRunAtMs ?? null)}</div>
+              </div>
+              <div className="btnRow" style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="btnSmall"
+                  onClick={() => toggleExpand('flow')}
+                  disabled={!props.status?.flow.lastErrorMessage}
+                >
+                  {expanded.flow ? '收起错误' : '展开错误'}
+                </button>
+              </div>
+              {expanded.flow && props.status?.flow.lastErrorMessage ? (
+                <pre className="codeLike" style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>
+                  {props.status.flow.lastErrorMessage}
+                </pre>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="contentCard" data-testid="sync-memos">
+            <div className="contentCardTitle">Memos</div>
+            <div className="contentCardBody">
+              <div className="kvRow">
+                <div className="k">DIRTY</div>
+                <div className="v">{props.status?.memos.summary.dirtyCount ?? 0}</div>
+              </div>
+              <div className="kvRow">
+                <div className="k">FAILED</div>
+                <div className="v">{props.status?.memos.summary.failedCount ?? 0}</div>
+              </div>
+              <div className="kvRow">
+                <div className="k">request_id</div>
+                <div className="v">
+                  <code>{props.status?.memos.summary.lastRequestId ?? '-'}</code>
+                  <button
+                    type="button"
+                    className="btn btnGhost"
+                    style={{ marginLeft: 8 }}
+                    disabled={!props.status?.memos.summary.lastRequestId}
+                    onClick={() =>
+                      void safeCopyTextToClipboard(props.status?.memos.summary.lastRequestId ?? '')
+                    }
+                  >
+                    复制
+                  </button>
+                </div>
+              </div>
+              <div className="kvRow">
+                <div className="k">最近运行</div>
+                <div className="v">{formatSyncAtMs(props.status?.memos.lastRunAtMs ?? null)}</div>
+              </div>
+              <div className="btnRow" style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="btnSmall"
+                  onClick={() => toggleExpand('memos')}
+                  disabled={!props.status?.memos.lastErrorMessage}
+                >
+                  {expanded.memos ? '收起错误' : '展开错误'}
+                </button>
+              </div>
+              {expanded.memos && props.status?.memos.lastErrorMessage ? (
+                <pre className="codeLike" style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>
+                  {props.status.memos.lastErrorMessage}
+                </pre>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {!props.apiAvailable ? (
+          <div className="callout calloutWarn" style={{ marginTop: 8 }}>
+            同步 API 不可用（preload 未注入）
+          </div>
+        ) : null}
+
+        {props.error ? (
+          <div className="callout calloutWarn" style={{ marginTop: 8 }}>
+            {props.error}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
 }
 
 function Icon({ name }: { name: 'min' | 'max' | 'close' }) {
@@ -514,7 +710,10 @@ function SettingsContent(props: {
   updaterError: string | null;
   updaterApiAvailable: boolean;
   syncApiAvailable: boolean;
-  syncError: string | null;
+  syncStatus: SyncStatus | null;
+  syncStatusLoading: boolean;
+  syncStatusError: string | null;
+  syncActionError: string | null;
   syncBusyLane: 'flow' | 'memos' | null;
   storageRootRestartRequired: boolean;
   storageRootLastMigration: (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null;
@@ -531,6 +730,7 @@ function SettingsContent(props: {
   onResetCloseToTrayHint: () => void;
   onSaveFlowBaseUrl: (baseUrl: string) => Promise<void>;
   onSaveMemosBaseUrl: (baseUrl: string) => Promise<void>;
+  onRefreshSyncStatus: () => void;
   onSyncNowFlow: () => void;
   onSyncNowMemos: () => void;
   onCheckUpdates: () => void;
@@ -571,8 +771,12 @@ function SettingsContent(props: {
         />
         <SettingsSyncSection
           apiAvailable={props.syncApiAvailable}
-          error={props.syncError}
+          status={props.syncStatus}
+          statusLoading={props.syncStatusLoading}
+          statusError={props.syncStatusError}
+          actionError={props.syncActionError}
           busyLane={props.syncBusyLane}
+          onRefreshStatus={props.onRefreshSyncStatus}
           onSyncNowFlow={props.onSyncNowFlow}
           onSyncNowMemos={props.onSyncNowMemos}
         />
@@ -838,8 +1042,12 @@ function SettingsUpdaterSection(props: {
 
 function SettingsSyncSection(props: {
   apiAvailable: boolean;
-  error: string | null;
+  status: SyncStatus | null;
+  statusLoading: boolean;
+  statusError: string | null;
+  actionError: string | null;
   busyLane: 'flow' | 'memos' | null;
+  onRefreshStatus: () => void;
   onSyncNowFlow: () => void;
   onSyncNowMemos: () => void;
 }) {
@@ -873,11 +1081,15 @@ function SettingsSyncSection(props: {
         </button>
       </div>
 
-      {!props.apiAvailable ? (
-        <div className="callout calloutWarn">同步 API 不可用（preload 未注入）</div>
-      ) : null}
+      <SyncSummaryPanel
+        apiAvailable={props.apiAvailable}
+        status={props.status}
+        loading={props.statusLoading}
+        error={props.statusError}
+        onRefresh={props.onRefreshStatus}
+      />
 
-      {props.error ? <div className="callout calloutWarn">{props.error}</div> : null}
+      {props.actionError ? <div className="callout calloutWarn">{props.actionError}</div> : null}
     </section>
   );
 }
@@ -2898,7 +3110,10 @@ function MainWindowApp() {
 
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus | null>(null);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncStatusSnapshot, setSyncStatusSnapshot] = useState<SyncStatus | null>(null);
+  const [syncStatusLoading, setSyncStatusLoading] = useState(false);
+  const [syncStatusError, setSyncStatusError] = useState<string | null>(null);
+  const [syncActionError, setSyncActionError] = useState<string | null>(null);
   const [syncBusyLane, setSyncBusyLane] = useState<'flow' | 'memos' | null>(null);
 
   const [notesScope, setNotesScope] = useState<NotesScope>('timeline');
@@ -3817,6 +4032,33 @@ function MainWindowApp() {
     setUpdaterStatus(res.value);
   };
 
+  const refreshSyncStatus = useCallback(async () => {
+    const api = getXinliuSyncApi();
+    const fn = api?.getStatus;
+    if (typeof fn !== 'function') {
+      setSyncStatusSnapshot(null);
+      setSyncStatusError('同步 API 不可用（preload 未注入）');
+      return;
+    }
+
+    setSyncStatusLoading(true);
+    try {
+      const res = await fn();
+      if (!res.ok) {
+        setSyncStatusSnapshot(null);
+        setSyncStatusError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setSyncStatusSnapshot(res.value);
+      setSyncStatusError(null);
+    } catch (error) {
+      setSyncStatusSnapshot(null);
+      setSyncStatusError(`读取同步状态异常：${String(error)}`);
+    } finally {
+      setSyncStatusLoading(false);
+    }
+  }, []);
+
   const refreshNotesList = useCallback(async () => {
     const api = getXinliuNotesApi();
     if (!api) {
@@ -4026,32 +4268,33 @@ function MainWindowApp() {
   const triggerSyncNow = async (lane: 'flow' | 'memos') => {
     const api = getXinliuSyncApi();
     if (!api) {
-      setSyncError('同步 API 不可用（preload 未注入）');
+      setSyncActionError('同步 API 不可用（preload 未注入）');
       return;
     }
 
     const fn = lane === 'flow' ? api.syncNowFlow : api.syncNowMemos;
     if (typeof fn !== 'function') {
-      setSyncError('同步 API 不可用（preload 未注入）');
+      setSyncActionError('同步 API 不可用（preload 未注入）');
       return;
     }
 
     setSyncBusyLane(lane);
-    setSyncError(null);
+    setSyncActionError(null);
     try {
       const res = await fn();
       if (!res.ok) {
-        setSyncError(`${res.error.message}（${res.error.code}）`);
+        setSyncActionError(`${res.error.message}（${res.error.code}）`);
         return;
       }
       if (!res.value.runOk) {
-        setSyncError(res.value.message ?? '同步未执行');
+        setSyncActionError(res.value.message ?? '同步未执行');
         return;
       }
-      setSyncError(null);
+      setSyncActionError(null);
     } catch (error) {
-      setSyncError(`手动同步异常：${String(error)}`);
+      setSyncActionError(`手动同步异常：${String(error)}`);
     } finally {
+      void refreshSyncStatus();
       setSyncBusyLane(null);
     }
   };
@@ -4064,8 +4307,13 @@ function MainWindowApp() {
       refreshDiagnostics(),
       refreshCloseBehavior(),
       refreshUpdater(),
+      refreshSyncStatus(),
     ]);
   };
+
+  useEffect(() => {
+    void refreshSyncStatus();
+  }, [refreshSyncStatus]);
 
   useEffect(() => {
     if (route === 'notes') {
@@ -4318,6 +4566,15 @@ function MainWindowApp() {
               </div>
             </nav>
 
+            <SyncSummaryPanel
+              apiAvailable={Boolean(getXinliuSyncApi())}
+              status={syncStatusSnapshot}
+              loading={syncStatusLoading}
+              error={syncStatusError}
+              onRefresh={() => void refreshSyncStatus()}
+              compact
+            />
+
             <div className="paneFooter">
               <div className="fine">提示：左栏负责定位，中栏负责内容，右栏负责上下文。</div>
             </div>
@@ -4347,7 +4604,10 @@ function MainWindowApp() {
                 updaterError={updaterError}
                 updaterApiAvailable={Boolean(getXinliuUpdaterApi())}
                 syncApiAvailable={Boolean(getXinliuSyncApi())}
-                syncError={syncError}
+                syncStatus={syncStatusSnapshot}
+                syncStatusLoading={syncStatusLoading}
+                syncStatusError={syncStatusError}
+                syncActionError={syncActionError}
                 syncBusyLane={syncBusyLane}
                 storageRootRestartRequired={storageRootRestartRequired}
                 storageRootLastMigration={storageRootLastMigration}
@@ -4361,6 +4621,7 @@ function MainWindowApp() {
                 onResetCloseToTrayHint={() => void resetCloseToTrayHint()}
                 onSaveFlowBaseUrl={saveFlowBaseUrl}
                 onSaveMemosBaseUrl={saveMemosBaseUrl}
+                onRefreshSyncStatus={() => void refreshSyncStatus()}
                 onSyncNowFlow={() => void triggerSyncNow('flow')}
                 onSyncNowMemos={() => void triggerSyncNow('memos')}
                 onCheckUpdates={() => void checkUpdates()}
