@@ -75,6 +75,7 @@ test('Task 46：中栏拖拽到左栏 folder（乐观更新 + 撤销）', async 
   });
 
   let page: Awaited<ReturnType<typeof electronApp.firstWindow>> | null = null;
+  let hasUndoVisibleScreenshot = false;
 
   try {
     page = await electronApp.firstWindow();
@@ -102,14 +103,18 @@ test('Task 46：中栏拖拽到左栏 folder（乐观更新 + 撤销）', async 
     await expect.poll(async () => childMiddleItem.count(), { timeout: 10_000 }).toBe(0);
     const undoButton = page.getByTestId('collections-undo-btn');
     await expect(undoButton).toBeVisible();
+
+    await page.screenshot({ path: evidencePng, fullPage: true });
+    hasUndoVisibleScreenshot = true;
+
     await undoButton.click();
 
     await expect(page.getByTestId('middle-list-item-e2e_folder_child')).toBeVisible();
-
-    await page.screenshot({ path: evidencePng, fullPage: true });
   } finally {
     try {
-      await page?.screenshot({ path: evidencePng, fullPage: true });
+      if (!hasUndoVisibleScreenshot) {
+        await page?.screenshot({ path: evidencePng, fullPage: true });
+      }
     } catch {}
     try {
       await electronApp.close();

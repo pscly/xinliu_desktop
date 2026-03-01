@@ -1185,6 +1185,30 @@ function CollectionsMiddleDraggableItem(props: {
     zIndex: isDragging ? 2 : undefined,
   };
 
+  const mergedOnMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
+      if (event.button === 0) {
+        props.onMouseDragStart({
+          itemId: props.item.id,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        });
+      }
+      listeners?.onMouseDown?.(event);
+    },
+    [listeners, props.item.id, props.onMouseDragStart]
+  );
+
+  const mergedListeners = useMemo(() => {
+    if (!listeners) {
+      return undefined;
+    }
+    return {
+      ...listeners,
+      onMouseDown: mergedOnMouseDown,
+    };
+  }, [listeners, mergedOnMouseDown]);
+
   return (
     <button
       ref={setNodeRef}
@@ -1201,18 +1225,8 @@ function CollectionsMiddleDraggableItem(props: {
         e.preventDefault();
         props.onPopupMiddleItemMenu(props.item.id);
       }}
-      onMouseDown={(e) => {
-        if (e.button !== 0) {
-          return;
-        }
-        props.onMouseDragStart({
-          itemId: props.item.id,
-          clientX: e.clientX,
-          clientY: e.clientY,
-        });
-      }}
       {...attributes}
-      {...listeners}
+      {...mergedListeners}
     >
       <div className="listRowTitle">
         [{props.item.itemType}] {props.item.name || '（未命名）'}

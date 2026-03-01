@@ -356,3 +356,6 @@
 - 乐观更新+撤销的关键是记录“原父节点/新父节点”而不是只记录 itemId；这样撤销动作可以显式回放一次 move，且能复用同一 IPC 路径，避免出现 UI 回滚与数据库状态不一致。
 - 树拖拽交互与 Task 45 的 hover/edge-scroll 可共存：hover 展开保持 800ms 常量，edge scroll 用 pointer 的 Y 位置驱动，不依赖原生 DragEvent，能更稳定覆盖 dnd-kit 手势。
 - E2E 断言建议以“中栏条目即时消失 + 撤销入口可见 + 撤销后条目恢复”为最小闭环，截图作为补充证据，减少对过多中间态样式的脆弱依赖。
+
+- [2026-03-01] Task 46（Playwright Electron E2E）跑用例前先执行一次 `npm run build`，否则可能复用旧 `dist/`，导致用例行为与截图证据不稳定（看起来像“偶发/玄学”）。
+- [2026-03-01] Task 46 证据截图 `.sisyphus/evidence/task-46-dnd.png` 必须能看到撤销入口（`collections-undo-*`），避免截图落在“撤销完成后”导致无法证明撤销功能确实存在。
