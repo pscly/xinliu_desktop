@@ -1,0 +1,65 @@
+## Task 44 证据
+
+### 1) 虚拟列表实现检索
+
+命令：`rg -n "virtual" src/renderer -S`
+
+输出：
+src/renderer/App.test.tsx:856:      expect(screen.getAllByTestId('notes-virtual-row').length).toBeGreaterThan(0);
+src/renderer/App.test.tsx:859:    const initialRowCount = screen.getAllByTestId('notes-virtual-row').length;
+src/renderer/App.test.tsx:863:    const viewport = screen.getByTestId('notes-virtual-viewport');
+src/renderer/App.test.tsx:870:    const afterScrollCount = screen.getAllByTestId('notes-virtual-row').length;
+src/renderer/styles.css:406:.notesVirtualViewport {
+src/renderer/styles.css:416:.notesVirtualSpacer {
+src/renderer/styles.css:420:.notesVirtualInner {
+src/renderer/App.tsx:1528:const NOTES_VIRTUAL_ROW_HEIGHT = 132;
+src/renderer/App.tsx:1529:const NOTES_VIRTUAL_VIEWPORT_HEIGHT = 560;
+src/renderer/App.tsx:1530:const NOTES_VIRTUAL_OVERSCAN = 4;
+src/renderer/App.tsx:1650:        data-testid="notes-virtual-viewport"
+src/renderer/App.tsx:1666:                  data-testid="notes-virtual-row"
+
+### 2) 全量验证（Node 20）
+
+命令：`source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build`
+
+关键输出：
+- `Now using node v20.20.0 (npm v10.8.2)`
+- `Test Files  43 passed (43)`
+- `Tests  146 passed (146)`
+- `> xinliu-desktop@0.0.0 typecheck`
+- `> xinliu-desktop@0.0.0 build`
+- `✓ built in 1.18s`
+
+---
+
+## Task 44 修正补充（memos 软删进入回收站）
+
+### 1) 虚拟列表实现检索
+
+命令：`rg -n "virtual" src/renderer -S`
+
+输出：
+src/renderer/App.test.tsx:856:      expect(screen.getAllByTestId('notes-virtual-row').length).toBeGreaterThan(0);
+src/renderer/App.test.tsx:859:    const initialRowCount = screen.getAllByTestId('notes-virtual-row').length;
+src/renderer/App.test.tsx:863:    const viewport = screen.getByTestId('notes-virtual-viewport');
+src/renderer/App.test.tsx:870:    const afterScrollCount = screen.getAllByTestId('notes-virtual-row').length;
+src/renderer/styles.css:406:.notesVirtualViewport {
+src/renderer/styles.css:416:.notesVirtualSpacer {
+src/renderer/styles.css:420:.notesVirtualInner {
+src/renderer/App.tsx:1528:const NOTES_VIRTUAL_ROW_HEIGHT = 132;
+src/renderer/App.tsx:1529:const NOTES_VIRTUAL_VIEWPORT_HEIGHT = 560;
+src/renderer/App.tsx:1530:const NOTES_VIRTUAL_OVERSCAN = 4;
+src/renderer/App.tsx:1650:        data-testid="notes-virtual-viewport"
+src/renderer/App.tsx:1666:                  data-testid="notes-virtual-row"
+
+### 2) npm test 通过关键行
+
+命令：`source ~/.nvm/nvm.sh && nvm use 20.20.0 && npm test && npm run typecheck && npm run build`
+
+关键输出：
+- `Now using node v20.20.0 (npm v10.8.2)`
+- `Test Files  43 passed (43)`
+- `Tests  146 passed (146)`
+- `> xinliu-desktop@0.0.0 typecheck`
+- `> xinliu-desktop@0.0.0 build`
+- `✓ built in 1.31s`

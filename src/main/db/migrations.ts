@@ -623,6 +623,18 @@ export const MIGRATIONS: readonly SqliteMigration[] = [
       `);
     },
   },
+  {
+    version: 9,
+    name: 'memos_soft_delete_ms',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE memos ADD COLUMN deleted_at_ms INTEGER NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_memos_deleted_at_ms
+          ON memos(deleted_at_ms);
+      `);
+    },
+  },
 ];
 
 export function applyMigrations(

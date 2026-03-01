@@ -17,3 +17,9 @@
   - 未暂存改动覆盖 CI/E2E（`.github/workflows/ci.yml`、`playwright.config.ts`、`e2e/updater.spec.ts`）、IPC 合同（`src/shared/ipc.ts`、`src/preload/index.ts`、`src/renderer/vite-env.d.ts`、`src/main/ipc.ts`）与 main 启动接线（`src/main/main.ts`）。
   - 另有未跟踪实现与测试（`src/main/notes/notesDraftRepo.ts`、`src/main/notes/notesDraftRepo.test.ts`、`e2e/task-33-*.spec.ts`）及临时目录 `.tmp/`，若直接继续 Task 40，测试失败归因与回归范围会被放大。
   - 建议先做隔离：将当前改动整理到独立分支或临时提交；Task 40 在干净分支上实施，避免 `src/main/main.ts` 与 `src/main/ipc.ts` 的并行改动产生冲突。
+
+- [2026-03-01] Task 44 inbox 语义仍有业务歧义：当前实现为“memos 中 `sync_status IN (LOCAL_ONLY, DIRTY, SYNCING, FAILED)` + flow_notes 非删除项”，属于最小可解释实现。后续若产品定义 inbox 需按“未归档/未读/待处理”语义收敛，需要补充明确规则并调整 SQL 过滤条件。
+
+- [2026-03-01] Task 44 修正后，inbox 语义仍属于“计划未定义，先按最小可解释实现”：
+  - 目前合同未明确 inbox 的业务语义，暂按 `sync_status` 过滤（`LOCAL_ONLY/DIRTY/SYNCING/FAILED`）并排除软删 `memos.deleted_at_ms IS NOT NULL`。
+  - 若后续产品将 inbox 定义为“待处理箱/收件箱”而非“待同步集合”，需要单独调整 SQL 与 UI 文案，避免语义误导。

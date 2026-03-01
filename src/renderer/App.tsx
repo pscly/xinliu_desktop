@@ -5,6 +5,8 @@ import type {
   ContextMenuDidSelectPayload,
   DiagnosticsStatus,
   FlowConflictItem,
+  NotesListItem,
+  NotesScope,
   NotesSyncStatus,
   NotesConflictItem,
   SearchQueryResult,
@@ -111,6 +113,14 @@ function formatNotesSyncStatus(status: NotesSyncStatus): string {
     return '本地已保存（状态未知）';
   }
   return String(status);
+}
+
+function formatNotesUpdatedAt(updatedAtMs: number): string {
+  try {
+    return new Date(updatedAtMs).toLocaleString();
+  } catch {
+    return String(updatedAtMs);
+  }
 }
 
 async function safePopupMiddleItemMenu(itemId: string) {
@@ -1515,6 +1525,258 @@ function NotesEditorCard() {
   );
 }
 
+const NOTES_VIRTUAL_ROW_HEIGHT = 132;
+const NOTES_VIRTUAL_VIEWPORT_HEIGHT = 560;
+const NOTES_VIRTUAL_OVERSCAN = 4;
+const NOTES_LIST_PAGE_SIZE = 200;
+
+function NotesListCenter(props: {
+  apiAvailable: boolean;
+  scope: NotesScope;
+  items: NotesListItem[];
+  hasMore: boolean;
+  loading: boolean;
+  error: string | null;
+  actionError: string | null;
+  actionBusyKey: string | null;
+  pendingHardDeleteKey: string | null;
+  onChangeScope: (scope: NotesScope) => void;
+  onRefresh: () => void;
+  onDelete: (item: NotesListItem) => void;
+  onRestore: (item: NotesListItem) => void;
+  onPrepareHardDelete: (item: NotesListItem) => void;
+  onCancelHardDelete: () => void;
+  onConfirmHardDelete: (item: NotesListItem) => void;
+}) {
+  const [scrollTop, setScrollTop] = useState(0);
+
+  const visibleCount =
+    Math.ceil(NOTES_VIRTUAL_VIEWPORT_HEIGHT / NOTES_VIRTUAL_ROW_HEIGHT) +
+    NOTES_VIRTUAL_OVERSCAN * 2;
+  const startIndex = Math.max(
+    0,
+    Math.floor(scrollTop / NOTES_VIRTUAL_ROW_HEIGHT) - NOTES_VIRTUAL_OVERSCAN
+  );
+  const endIndex = Math.min(props.items.length, startIndex + visibleCount);
+  const renderedItems = props.items.slice(startIndex, endIndex);
+  const totalHeight = props.items.length * NOTES_VIRTUAL_ROW_HEIGHT;
+  const offsetY = startIndex * NOTES_VIRTUAL_ROW_HEIGHT;
+
+  return (
+    <div className="contentPlaceholder" data-testid="notes-list-center">
+      <div className="contentHero">
+        <div className="contentHeroTitle">Notes 列表</div>
+        <div className="contentHeroSub">
+          时间线 / 收件箱 / 回收站，统一由 Notes IPC 返回完整列表项
+        </div>
+      </div>
+
+      <div className="notesScopeRow" style={{ marginTop: 12 }}>
+        <button
+          type="button"
+          className={`scopeBtn ${props.scope === 'timeline' ? 'scopeBtnActive' : ''}`}
+          data-testid="notes-scope-timeline"
+          onClick={() => props.onChangeScope('timeline')}
+          disabled={props.loading}
+        >
+          时间线
+        </button>
+        <button
+          type="button"
+          className={`scopeBtn ${props.scope === 'inbox' ? 'scopeBtnActive' : ''}`}
+          data-testid="notes-scope-inbox"
+          onClick={() => props.onChangeScope('inbox')}
+          disabled={props.loading}
+        >
+          收件箱
+        </button>
+        <button
+          type="button"
+          className={`scopeBtn ${props.scope === 'trash' ? 'scopeBtnActive' : ''}`}
+          data-testid="notes-scope-trash"
+          onClick={() => props.onChangeScope('trash')}
+          disabled={props.loading}
+        >
+          回收站
+        </button>
+        <button
+          type="button"
+          className="btnSmall"
+          data-testid="notes-refresh"
+          onClick={() => props.onRefresh()}
+          disabled={props.loading || !props.apiAvailable}
+          style={{ marginLeft: 'auto' }}
+        >
+          {props.loading ? '刷新中…' : '刷新'}
+        </button>
+      </div>
+
+      <div className="fine" style={{ marginTop: 8 }} data-testid="notes-list-meta">
+        当前范围：{props.scope} · 条目：{props.items.length}
+        {props.hasMore ? ' · 仅显示当前分页' : ''}
+      </div>
+
+      {!props.apiAvailable ? (
+        <div
+          className="callout calloutWarn"
+          data-testid="notes-list-error"
+          style={{ marginTop: 10 }}
+        >
+          Notes API 不可用（preload 未注入）
+        </div>
+      ) : null}
+
+      {props.error ? (
+        <div
+          className="callout calloutWarn"
+          data-testid="notes-list-error"
+          style={{ marginTop: 10 }}
+        >
+          {props.error}
+        </div>
+      ) : null}
+
+      {props.actionError ? (
+        <div
+          className="callout calloutWarn"
+          data-testid="notes-list-action-error"
+          style={{ marginTop: 10 }}
+        >
+          {props.actionError}
+        </div>
+      ) : null}
+
+      <div
+        className="notesVirtualViewport"
+        data-testid="notes-virtual-viewport"
+        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      >
+        <div className="notesVirtualSpacer" style={{ height: `${Math.max(totalHeight, 1)}px` }}>
+          <div className="notesVirtualInner" style={{ transform: `translateY(${offsetY}px)` }}>
+            {renderedItems.map((item) => {
+              const key = `${item.provider}-${item.id}`;
+              const deleteBusyKey = `delete:${key}`;
+              const restoreBusyKey = `restore:${key}`;
+              const hardDeleteBusyKey = `hardDelete:${key}`;
+              const hardDeleting = props.pendingHardDeleteKey === key;
+
+              return (
+                <div
+                  key={key}
+                  className="listRow notesListRow"
+                  data-testid="notes-virtual-row"
+                  style={{ minHeight: NOTES_VIRTUAL_ROW_HEIGHT - 12, cursor: 'default' }}
+                >
+                  <div className="listRowTitle" data-testid={`notes-item-${key}`}>
+                    {item.title}
+                  </div>
+                  <div className="listRowSub">{item.preview || '（无预览）'}</div>
+                  <div className="notesItemMeta">
+                    <span data-testid={`notes-item-provider-${key}`}>
+                      provider：{item.provider}
+                    </span>
+                    <span data-testid={`notes-item-sync-status-${key}`}>
+                      syncStatus：{formatNotesSyncStatus(item.syncStatus)}
+                    </span>
+                    <span>更新时间：{formatNotesUpdatedAt(item.updatedAtMs)}</span>
+                  </div>
+
+                  {props.scope === 'trash' ? (
+                    <div className="btnRow" style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`notes-item-restore-${key}`}
+                        onClick={() => props.onRestore(item)}
+                        disabled={
+                          !props.apiAvailable ||
+                          props.loading ||
+                          props.actionBusyKey === restoreBusyKey ||
+                          props.actionBusyKey === hardDeleteBusyKey
+                        }
+                      >
+                        恢复
+                      </button>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`notes-item-hard-delete-${key}`}
+                        onClick={() => props.onPrepareHardDelete(item)}
+                        disabled={
+                          !props.apiAvailable ||
+                          props.loading ||
+                          props.actionBusyKey === restoreBusyKey ||
+                          props.actionBusyKey === hardDeleteBusyKey
+                        }
+                      >
+                        彻底删除
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="btnRow" style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`notes-item-delete-${key}`}
+                        onClick={() => props.onDelete(item)}
+                        disabled={
+                          !props.apiAvailable ||
+                          props.loading ||
+                          props.actionBusyKey === deleteBusyKey
+                        }
+                      >
+                        删除
+                      </button>
+                    </div>
+                  )}
+
+                  {hardDeleting ? (
+                    <div
+                      className="callout calloutWarn"
+                      data-testid={`notes-item-hard-delete-panel-${key}`}
+                      style={{ marginTop: 8 }}
+                    >
+                      <div>确认彻底删除？该操作不可恢复。</div>
+                      <div className="btnRow" style={{ marginTop: 8 }}>
+                        <button
+                          type="button"
+                          className="btnSmall"
+                          data-testid={`notes-item-hard-delete-confirm-${key}`}
+                          onClick={() => props.onConfirmHardDelete(item)}
+                          disabled={
+                            !props.apiAvailable || props.actionBusyKey === hardDeleteBusyKey
+                          }
+                        >
+                          确认彻底删除
+                        </button>
+                        <button
+                          type="button"
+                          className="btnSmall"
+                          data-testid={`notes-item-hard-delete-cancel-${key}`}
+                          onClick={() => props.onCancelHardDelete()}
+                          disabled={props.actionBusyKey === hardDeleteBusyKey}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {!props.loading && props.items.length === 0 ? (
+        <div className="fine" data-testid="notes-list-empty" style={{ marginTop: 10 }}>
+          当前范围暂无条目。
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ConflictsCenter(props: {
   apiAvailable: boolean;
   loading: boolean;
@@ -1810,6 +2072,15 @@ function MainWindowApp() {
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus | null>(null);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
 
+  const [notesScope, setNotesScope] = useState<NotesScope>('timeline');
+  const [notesItems, setNotesItems] = useState<NotesListItem[]>([]);
+  const [notesHasMore, setNotesHasMore] = useState(false);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const [notesActionError, setNotesActionError] = useState<string | null>(null);
+  const [notesActionBusyKey, setNotesActionBusyKey] = useState<string | null>(null);
+  const [notesPendingHardDeleteKey, setNotesPendingHardDeleteKey] = useState<string | null>(null);
+
   const [flowConflicts, setFlowConflicts] = useState<FlowConflictItem[]>([]);
   const [notesConflicts, setNotesConflicts] = useState<NotesConflictItem[]>([]);
   const [conflictsLoading, setConflictsLoading] = useState(false);
@@ -2091,6 +2362,80 @@ function MainWindowApp() {
     setUpdaterStatus(res.value);
   };
 
+  const refreshNotesList = useCallback(async () => {
+    const api = getXinliuNotesApi();
+    if (!api) {
+      setNotesItems([]);
+      setNotesHasMore(false);
+      setNotesError('Notes API 不可用（preload 未注入）');
+      return;
+    }
+
+    setNotesLoading(true);
+    setNotesError(null);
+    try {
+      const res = await api.listItems({
+        scope: notesScope,
+        page: 0,
+        pageSize: NOTES_LIST_PAGE_SIZE,
+      });
+      if (!res.ok) {
+        setNotesItems([]);
+        setNotesHasMore(false);
+        setNotesError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+
+      setNotesItems(res.value.items);
+      setNotesHasMore(res.value.hasMore);
+    } catch (e) {
+      setNotesItems([]);
+      setNotesHasMore(false);
+      setNotesError(`Notes 列表加载异常：${String(e)}`);
+    } finally {
+      setNotesLoading(false);
+    }
+  }, [notesScope]);
+
+  const runNotesAction = useCallback(
+    async (item: NotesListItem, action: 'delete' | 'restore' | 'hardDelete') => {
+      const api = getXinliuNotesApi();
+      if (!api) {
+        setNotesActionError('Notes API 不可用（preload 未注入）');
+        return;
+      }
+
+      const itemKey = `${item.provider}-${item.id}`;
+      const actionKey = `${action}:${itemKey}`;
+      setNotesActionError(null);
+      setNotesActionBusyKey(actionKey);
+
+      try {
+        const res =
+          action === 'delete'
+            ? await api.delete({ id: item.id, provider: item.provider })
+            : action === 'restore'
+              ? await api.restore({ id: item.id, provider: item.provider })
+              : await api.hardDelete({ id: item.id, provider: item.provider });
+
+        if (!res.ok) {
+          setNotesActionError(`${res.error.message}（${res.error.code}）`);
+          return;
+        }
+
+        if (action === 'hardDelete') {
+          setNotesPendingHardDeleteKey(null);
+        }
+        await refreshNotesList();
+      } catch (e) {
+        setNotesActionError(`Notes 操作异常：${String(e)}`);
+      } finally {
+        setNotesActionBusyKey(null);
+      }
+    },
+    [refreshNotesList]
+  );
+
   const refreshConflicts = useCallback(async () => {
     const api = getXinliuConflictsApi();
     if (!api) {
@@ -2233,6 +2578,16 @@ function MainWindowApp() {
       refreshUpdater(),
     ]);
   };
+
+  useEffect(() => {
+    if (route === 'notes') {
+      void refreshNotesList();
+      return;
+    }
+    setNotesPendingHardDeleteKey(null);
+    setNotesActionError(null);
+    setNotesActionBusyKey(null);
+  }, [refreshNotesList, route]);
 
   useEffect(() => {
     if (route === 'conflicts') {
@@ -2497,6 +2852,31 @@ function MainWindowApp() {
               onCheckUpdates={() => void checkUpdates()}
               onInstallUpdateNow={() => void installUpdateNow()}
               onDeferInstall={() => void deferInstall()}
+            />
+          ) : route === 'notes' ? (
+            <NotesListCenter
+              apiAvailable={Boolean(getXinliuNotesApi())}
+              scope={notesScope}
+              items={notesItems}
+              hasMore={notesHasMore}
+              loading={notesLoading}
+              error={notesError}
+              actionError={notesActionError}
+              actionBusyKey={notesActionBusyKey}
+              pendingHardDeleteKey={notesPendingHardDeleteKey}
+              onChangeScope={(scope) => {
+                setNotesScope(scope);
+                setNotesPendingHardDeleteKey(null);
+                setNotesActionError(null);
+              }}
+              onRefresh={() => void refreshNotesList()}
+              onDelete={(item) => void runNotesAction(item, 'delete')}
+              onRestore={(item) => void runNotesAction(item, 'restore')}
+              onPrepareHardDelete={(item) =>
+                setNotesPendingHardDeleteKey(`${item.provider}-${item.id}`)
+              }
+              onCancelHardDelete={() => setNotesPendingHardDeleteKey(null)}
+              onConfirmHardDelete={(item) => void runNotesAction(item, 'hardDelete')}
             />
           ) : route === 'conflicts' ? (
             <ConflictsCenter

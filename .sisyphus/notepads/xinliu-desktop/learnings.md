@@ -323,3 +323,19 @@
 - preload 未注入降级需要“双重兜底”：交互层禁用保存按钮 + 文案层给出明确提示（“后端配置 API 不可用（preload 未注入，保存已禁用）”），这样 jsdom 与 E2E 都能稳定断言。
 - IPC 新增 diagnostics 写通道后，`src/main/ipc.test.ts` 除了 expected channel 列表自动覆盖外，deps stub 也必须同步补齐 `setFlowBaseUrl/setMemosBaseUrl`，否则会在类型层直接失败。
 - Base URL 规则必须单点复用 `normalizeBaseUrl`：校验/标准化放在 main 层，renderer 只消费 `IpcResult`，可以避免双端各写一套规则导致行为不一致。
+
+## [2026-03-01 19:35] - Task 44 Notes 列表虚拟化与删除流
+
+- Notes 列表虚拟化采用固定行高窗口化：`NOTES_VIRTUAL_ROW_HEIGHT=132`、`NOTES_VIRTUAL_VIEWPORT_HEIGHT=560`、`NOTES_VIRTUAL_OVERSCAN=4`。DOM 只渲染 `slice(startIndex, endIndex)`，并通过 `translateY(offsetY)` 定位，避免大列表全量节点渲染。
+- Notes 列表 testid 约定（稳定且可批量断言）：`notes-virtual-viewport`（滚动容器）、`notes-virtual-row`（每个虚拟行）、`notes-scope-timeline/inbox/trash`（范围切换）、`notes-item-provider-<provider>-<id>`、`notes-item-sync-status-<provider>-<id>`、`notes-item-hard-delete-panel-<provider>-<id>`（二次确认面板）。
+- 删除确认遵循“组件内面板”模式：不使用 `window.confirm`，而是使用 `pendingHardDeleteKey` 驱动确认区块渲染，这与冲突中心 force_overwrite 的交互模式一致，便于无头测试稳定断言。
+- main 侧 `notes.listItems` 采用单 SQL 合并查询（`UNION ALL`）直接返回 `NotesListItem[]` 所需字段，不走“先拉 id 再逐条详情 IPC”路径，从源头避免 N+1 查询风暴。
+
+## [2026-03-01 19:42] - Task 44 修正：memos 软删字段与 scope SQL 对齐
+
+- 为了让 memos 与 flow_notes 在“回收站/恢复/彻底删除”行为一致，schema 在 migration v9 新增 `memos.deleted_at_ms INTEGER NULL` + `idx_memos_deleted_at_ms` 索引；时间单位使用毫秒，与 memos 的 `created_at_ms/updated_at_ms` 保持同一时基。
+- Notes scope SQL 语义更新：
+  - `timeline`：`memos.deleted_at_ms IS NULL` + `notes.deleted_at IS NULL`
+  - `inbox`：在既有 `sync_status IN (LOCAL_ONLY, DIRTY, SYNCING, FAILED)` 基础上追加 `memos.deleted_at_ms IS NULL`；flow_notes 仍要求 `deleted_at IS NULL`
+  - `trash`：合并 `memos.deleted_at_ms IS NOT NULL` 与 `notes.deleted_at IS NOT NULL`
+- memos 动作语义固定：`deleteItem` 软删（更新 `deleted_at_ms/updated_at_ms`）、`restoreItem` 清除软删标记并刷新 `updated_at_ms`、`hardDeleteItem` 物理删除。这样 renderer 无需区分 provider 即可走统一删除流。

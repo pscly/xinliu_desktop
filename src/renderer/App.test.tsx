@@ -14,6 +14,7 @@ import type {
   IpcVoid,
   NotesConflictListResult,
   NotesGetDraftResult,
+  NotesListItemsResult,
   SearchQueryResult,
   SearchRebuildIndexResult,
   ShortcutsStatus,
@@ -35,6 +36,10 @@ function buildXinliuStub(overrides: {
   createDraft?: XinliuNotesApi['createDraft'];
   upsertDraft?: XinliuNotesApi['upsertDraft'];
   getDraft?: XinliuNotesApi['getDraft'];
+  listItems?: XinliuNotesApi['listItems'];
+  deleteItem?: XinliuNotesApi['delete'];
+  restoreItem?: XinliuNotesApi['restore'];
+  hardDeleteItem?: XinliuNotesApi['hardDelete'];
   listFlowConflicts?: NonNullable<NonNullable<Window['xinliu']>['conflicts']>['listFlow'];
   listNotesConflicts?: NonNullable<NonNullable<Window['xinliu']>['conflicts']>['listNotes'];
   resolveFlowApplyServer?: NonNullable<
@@ -182,14 +187,22 @@ function buildXinliuStub(overrides: {
               },
             },
           }) satisfies IpcResult<NotesGetDraftResult>),
-      listItems: async () =>
-        ({ ok: true, value: { items: [], hasMore: false } }) satisfies IpcResult<{
-          items: [];
-          hasMore: boolean;
-        }>,
-      delete: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
-      restore: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
-      hardDelete: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      listItems:
+        overrides.listItems ??
+        (async () =>
+          ({
+            ok: true,
+            value: { items: [], hasMore: false },
+          }) satisfies IpcResult<NotesListItemsResult>),
+      delete:
+        overrides.deleteItem ??
+        (async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>),
+      restore:
+        overrides.restoreItem ??
+        (async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>),
+      hardDelete:
+        overrides.hardDeleteItem ??
+        (async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>),
     },
     conflicts: {
       listFlow:
@@ -777,6 +790,145 @@ describe('<App />', () => {
       { timeout: 3000 }
     );
 
+    delete window.xinliu;
+  });
+
+  it('Notes 列表：scope 切换会驱动 notes.listItems 的 scope 参数', async () => {
+    const listItems = vi.fn<XinliuNotesApi['listItems']>().mockImplementation(async ({ scope }) => {
+      return {
+        ok: true,
+        value: {
+          items: [
+            {
+              id: `${scope}_1`,
+              provider: 'memos',
+              title: `title-${scope}`,
+              preview: `preview-${scope}`,
+              updatedAtMs: 123,
+              syncStatus: 'DIRTY',
+            },
+          ],
+          hasMore: false,
+        },
+      };
+    });
+
+    window.xinliu = buildXinliuStub({ listItems });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(listItems).toHaveBeenCalledWith({ scope: 'timeline', page: 0, pageSize: 200 });
+    });
+
+    fireEvent.click(screen.getByTestId('notes-scope-inbox'));
+    await waitFor(() => {
+      expect(listItems).toHaveBeenCalledWith({ scope: 'inbox', page: 0, pageSize: 200 });
+    });
+
+    fireEvent.click(screen.getByTestId('notes-scope-trash'));
+    await waitFor(() => {
+      expect(listItems).toHaveBeenCalledWith({ scope: 'trash', page: 0, pageSize: 200 });
+    });
+
+    delete window.xinliu;
+  });
+
+  it('Notes 列表：虚拟列表只渲染窗口附近条目，不一次性渲染全量 DOM', async () => {
+    const listItems = vi.fn<XinliuNotesApi['listItems']>().mockResolvedValue({
+      ok: true,
+      value: {
+        items: Array.from({ length: 220 }).map((_, idx) => ({
+          id: `memo_${idx}`,
+          provider: 'memos' as const,
+          title: `第 ${idx} 条笔记`,
+          preview: `这是第 ${idx} 条的预览`,
+          updatedAtMs: 1000 + idx,
+          syncStatus: 'DIRTY' as const,
+        })),
+        hasMore: false,
+      },
+    });
+
+    window.xinliu = buildXinliuStub({ listItems });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('notes-virtual-row').length).toBeGreaterThan(0);
+    });
+
+    const initialRowCount = screen.getAllByTestId('notes-virtual-row').length;
+    expect(initialRowCount).toBeLessThan(40);
+    expect(screen.queryByText('第 200 条笔记')).toBeNull();
+
+    const viewport = screen.getByTestId('notes-virtual-viewport');
+    fireEvent.scroll(viewport, { target: { scrollTop: 27000 } });
+
+    await waitFor(() => {
+      expect(screen.getByText('第 200 条笔记')).toBeTruthy();
+    });
+
+    const afterScrollCount = screen.getAllByTestId('notes-virtual-row').length;
+    expect(afterScrollCount).toBeLessThan(40);
+
+    delete window.xinliu;
+  });
+
+  it('Notes 列表：回收站支持恢复与彻底删除二次确认（不使用 window.confirm）', async () => {
+    const listItems = vi.fn<XinliuNotesApi['listItems']>().mockImplementation(async ({ scope }) => {
+      if (scope !== 'trash') {
+        return { ok: true, value: { items: [], hasMore: false } };
+      }
+      return {
+        ok: true,
+        value: {
+          items: [
+            {
+              id: 'trash_1',
+              provider: 'flow_notes',
+              title: '回收站条目',
+              preview: '等待恢复或删除',
+              updatedAtMs: 321,
+              syncStatus: 'UNKNOWN',
+            },
+          ],
+          hasMore: false,
+        },
+      };
+    });
+    const restoreItem = vi.fn(async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>);
+    const hardDeleteItem = vi.fn(
+      async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>
+    );
+    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(() => true);
+
+    window.xinliu = buildXinliuStub({ listItems, restoreItem, hardDeleteItem });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(listItems).toHaveBeenCalledWith({ scope: 'timeline', page: 0, pageSize: 200 });
+    });
+
+    fireEvent.click(screen.getByTestId('notes-scope-trash'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notes-item-flow_notes-trash_1')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('notes-item-restore-flow_notes-trash_1'));
+    await waitFor(() => {
+      expect(restoreItem).toHaveBeenCalledWith({ id: 'trash_1', provider: 'flow_notes' });
+    });
+
+    fireEvent.click(screen.getByTestId('notes-item-hard-delete-flow_notes-trash_1'));
+    expect(screen.getByTestId('notes-item-hard-delete-panel-flow_notes-trash_1')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('notes-item-hard-delete-confirm-flow_notes-trash_1'));
+    await waitFor(() => {
+      expect(hardDeleteItem).toHaveBeenCalledWith({ id: 'trash_1', provider: 'flow_notes' });
+    });
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
     delete window.xinliu;
   });
 

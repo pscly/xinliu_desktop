@@ -49,6 +49,7 @@ import { createPathGate } from './pathGate/pathGate';
 import { createUpdaterController } from './updater/updaterController';
 import { createElectronUpdaterAdapter } from './updater/electronUpdaterAdapter';
 import { createNotesDraftRepo } from './notes/notesDraftRepo';
+import { createNotesListRepo } from './notes/notesListRepo';
 import { createNotesConflictsService } from './notes/notesConflicts';
 import {
   listFlowConflicts,
@@ -565,17 +566,27 @@ app.whenReady().then(async () => {
             },
           };
         }),
-      listItems: () => {
-        throw new Error('Notes.listItems 未实现');
+      listItems: ({ scope, page, pageSize }) =>
+        withMainDb((db) => {
+          return createNotesListRepo(db).listItems({ scope, page, pageSize });
+        }),
+      delete: ({ id, provider }) => {
+        withMainDb((db) => {
+          createNotesListRepo(db).deleteItem({ id, provider });
+        });
+        return null;
       },
-      delete: () => {
-        throw new Error('Notes.delete 未实现');
+      restore: ({ id, provider }) => {
+        withMainDb((db) => {
+          createNotesListRepo(db).restoreItem({ id, provider });
+        });
+        return null;
       },
-      restore: () => {
-        throw new Error('Notes.restore 未实现');
-      },
-      hardDelete: () => {
-        throw new Error('Notes.hardDelete 未实现');
+      hardDelete: ({ id, provider }) => {
+        withMainDb((db) => {
+          createNotesListRepo(db).hardDeleteItem({ id, provider });
+        });
+        return null;
       },
     },
     conflicts: {
