@@ -749,7 +749,7 @@ Wave 5（E2E + 发布）
     Evidence: .sisyphus/evidence/task-42-auth.txt
   ```
 
-- [ ] 43. 设置页：后端与网络配置（Flow/Memos Base URL、provider 状态、复制 request_id）
+- [x] 43. 设置页：后端与网络配置（Flow/Memos Base URL、provider 状态、复制 request_id）
 
   **What to do**:
   - 设置页提供“后端/网络”区域：
