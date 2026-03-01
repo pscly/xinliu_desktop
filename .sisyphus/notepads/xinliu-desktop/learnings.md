@@ -377,3 +377,6 @@
 - E2E seed（XINLIU_E2E=1）：
   - todo_list：`e2e_todo_list_inbox`
   - todo_item：`e2e_todo_item_1`、`e2e_todo_item_2`
+
+- Task 47 的 testid `<id>` 必须与后端/本地数据的 todo_item_id 保持同一标识，不做 UI 层二次映射，避免 E2E 选择器与真实数据脱节。
+- 硬删二次确认在 UI 层必须走 `todo-item-hard-delete-panel-<id>` 的确认面板与 confirm/cancel 按钮，禁止 `window.confirm`，否则 Playwright 无头环境易出现不可控弹窗与用例不稳定。
