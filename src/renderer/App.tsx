@@ -4,7 +4,9 @@ import type {
   CloseBehaviorStatus,
   ContextMenuDidSelectPayload,
   DiagnosticsStatus,
+  FlowConflictItem,
   NotesSyncStatus,
+  NotesConflictItem,
   SearchQueryResult,
   SearchResultItem,
   ShortcutId,
@@ -43,6 +45,7 @@ type XinliuSearchApi = NonNullable<Window['xinliu']>['search'];
 type XinliuFileAccessApi = NonNullable<Window['xinliu']>['fileAccess'];
 type XinliuUpdaterApi = NonNullable<Window['xinliu']>['updater'];
 type XinliuNotesApi = NonNullable<Window['xinliu']>['notes'];
+type XinliuConflictsApi = NonNullable<Window['xinliu']>['conflicts'];
 
 function getXinliuWindowApi(): XinliuWindowApi | undefined {
   return window.xinliu?.window;
@@ -82,6 +85,10 @@ function getXinliuUpdaterApi(): XinliuUpdaterApi | undefined {
 
 function getXinliuNotesApi(): XinliuNotesApi | undefined {
   return window.xinliu?.notes;
+}
+
+function getXinliuConflictsApi(): XinliuConflictsApi | undefined {
+  return window.xinliu?.conflicts;
 }
 
 function formatNotesSyncStatus(status: NotesSyncStatus): string {
@@ -1434,6 +1441,243 @@ function NotesEditorCard() {
   );
 }
 
+function ConflictsCenter(props: {
+  apiAvailable: boolean;
+  loading: boolean;
+  flowItems: FlowConflictItem[];
+  notesItems: NotesConflictItem[];
+  error: string | null;
+  actionError: string | null;
+  actionBusyKey: string | null;
+  pendingForceOutboxId: string | null;
+  notesCompareLocalUuid: string | null;
+  onRefresh: () => void;
+  onApplyServer: (outboxId: string) => void;
+  onKeepLocalCopy: (outboxId: string) => void;
+  onPrepareForceOverwrite: (outboxId: string) => void;
+  onCancelForceOverwrite: () => void;
+  onConfirmForceOverwrite: (outboxId: string) => void;
+  onToggleNotesCompare: (localUuid: string) => void;
+  onCopyNotes: (content: string) => void;
+}) {
+  const formatMs = (ms: number) => {
+    try {
+      return new Date(ms).toLocaleString();
+    } catch {
+      return String(ms);
+    }
+  };
+
+  return (
+    <div className="contentPlaceholder" data-testid="conflicts-center">
+      <div className="contentHero">
+        <div className="contentHeroTitle">冲突中心</div>
+        <div className="contentHeroSub">聚合 Flow rejected/server snapshot 与 Notes 冲突副本</div>
+      </div>
+
+      <div className="btnRow" style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          className="btn"
+          data-testid="conflicts-refresh"
+          onClick={() => props.onRefresh()}
+          disabled={props.loading || !props.apiAvailable}
+        >
+          {props.loading ? '刷新中…' : '刷新冲突'}
+        </button>
+        <div className="fine">
+          Flow：{props.flowItems.length} 条 · Notes：{props.notesItems.length} 条
+        </div>
+      </div>
+
+      {!props.apiAvailable ? (
+        <div className="callout calloutWarn">冲突中心 API 不可用（preload 未注入）</div>
+      ) : null}
+
+      {props.error ? (
+        <div className="callout calloutWarn" data-testid="conflicts-error">
+          {props.error}
+        </div>
+      ) : null}
+
+      {props.actionError ? (
+        <div className="callout calloutWarn" data-testid="conflicts-action-error">
+          {props.actionError}
+        </div>
+      ) : null}
+
+      <div className="contentGrid">
+        <div className="contentCard" data-testid="conflicts-flow-list">
+          <div className="contentCardTitle">Flow 冲突（REJECTED_CONFLICT）</div>
+          <div className="contentCardBody">
+            {props.flowItems.length === 0 ? (
+              <div className="fine">暂无 Flow 冲突。</div>
+            ) : (
+              props.flowItems.map((item) => {
+                const applyKey = `apply_server:${item.outboxId}`;
+                const keepKey = `keep_local_copy:${item.outboxId}`;
+                const forceKey = `force_overwrite:${item.outboxId}`;
+                return (
+                  <div
+                    key={item.outboxId}
+                    className="listRow"
+                    data-testid={`conflicts-flow-item-${item.outboxId}`}
+                    style={{ cursor: 'default' }}
+                  >
+                    <div className="listRowTitle">
+                      {item.resource} · {item.op} · {item.entityId}
+                    </div>
+                    <div className="listRowSub">outboxId: {item.outboxId}</div>
+                    <div className="listRowSub">updatedAt: {formatMs(item.updatedAtMs)}</div>
+                    <div className="listRowSub">requestId: {item.requestId ?? '-'}</div>
+                    <div className="fine" style={{ marginTop: 6 }}>
+                      server snapshot：
+                      {item.serverSnapshot ? JSON.stringify(item.serverSnapshot) : '无'}
+                    </div>
+
+                    <div className="btnRow" style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`conflicts-flow-apply-server-${item.outboxId}`}
+                        onClick={() => props.onApplyServer(item.outboxId)}
+                        disabled={
+                          !props.apiAvailable || props.loading || props.actionBusyKey === applyKey
+                        }
+                      >
+                        应用服务端版本
+                      </button>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`conflicts-flow-keep-local-${item.outboxId}`}
+                        onClick={() => props.onKeepLocalCopy(item.outboxId)}
+                        disabled={
+                          !props.apiAvailable || props.loading || props.actionBusyKey === keepKey
+                        }
+                      >
+                        保留本地副本
+                      </button>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`conflicts-flow-force-overwrite-${item.outboxId}`}
+                        onClick={() => props.onPrepareForceOverwrite(item.outboxId)}
+                        disabled={
+                          !props.apiAvailable || props.loading || props.actionBusyKey === forceKey
+                        }
+                      >
+                        强制覆盖
+                      </button>
+                    </div>
+
+                    {props.pendingForceOutboxId === item.outboxId ? (
+                      <div
+                        className="callout calloutWarn"
+                        data-testid={`conflicts-flow-force-confirm-panel-${item.outboxId}`}
+                        style={{ marginTop: 8 }}
+                      >
+                        <div>确认强制覆盖？这会基于本地版本强制推进 client_updated_at_ms。</div>
+                        <div className="btnRow" style={{ marginTop: 8 }}>
+                          <button
+                            type="button"
+                            className="btnSmall"
+                            data-testid={`conflicts-flow-force-confirm-${item.outboxId}`}
+                            onClick={() => props.onConfirmForceOverwrite(item.outboxId)}
+                            disabled={
+                              !props.apiAvailable ||
+                              props.loading ||
+                              props.actionBusyKey === forceKey
+                            }
+                          >
+                            确认强制覆盖
+                          </button>
+                          <button
+                            type="button"
+                            className="btnSmall"
+                            data-testid={`conflicts-flow-force-cancel-${item.outboxId}`}
+                            onClick={() => props.onCancelForceOverwrite()}
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="contentCard" data-testid="conflicts-notes-list">
+          <div className="contentCardTitle">Notes 冲突副本（copy vs original）</div>
+          <div className="contentCardBody">
+            {props.notesItems.length === 0 ? (
+              <div className="fine">暂无 Notes 冲突副本。</div>
+            ) : (
+              props.notesItems.map((item) => {
+                const expanded = props.notesCompareLocalUuid === item.localUuid;
+                return (
+                  <div
+                    key={item.localUuid}
+                    className="listRow"
+                    data-testid={`conflicts-notes-item-${item.localUuid}`}
+                    style={{ cursor: 'default' }}
+                  >
+                    <div className="listRowTitle">copy: {item.localUuid}</div>
+                    <div className="listRowSub">original: {item.originalLocalUuid}</div>
+                    <div className="listRowSub">updatedAt: {formatMs(item.updatedAtMs)}</div>
+                    <div className="listRowSub">requestId: {item.conflictRequestId ?? '-'}</div>
+
+                    <div className="btnRow" style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`conflicts-notes-compare-${item.localUuid}`}
+                        onClick={() => props.onToggleNotesCompare(item.localUuid)}
+                      >
+                        {expanded ? '收起对比' : '对比'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btnSmall"
+                        data-testid={`conflicts-notes-copy-${item.localUuid}`}
+                        onClick={() => props.onCopyNotes(item.copyContent)}
+                      >
+                        复制副本
+                      </button>
+                    </div>
+
+                    {expanded ? (
+                      <div
+                        className="callout"
+                        data-testid={`conflicts-notes-compare-panel-${item.localUuid}`}
+                        style={{ marginTop: 8 }}
+                      >
+                        <div className="fine">原文</div>
+                        <pre className="codeLike" style={{ whiteSpace: 'pre-wrap' }}>
+                          {item.originalContent ?? '（原文不存在或已删除）'}
+                        </pre>
+                        <div className="fine" style={{ marginTop: 6 }}>
+                          副本
+                        </div>
+                        <pre className="codeLike" style={{ whiteSpace: 'pre-wrap' }}>
+                          {item.copyContent}
+                        </pre>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MainWindowApp() {
   const [route, setRoute] = useState<RouteKey>('notes');
   const routeMeta = useMemo(() => ROUTES.find((r) => r.key === route)!, [route]);
@@ -1466,6 +1710,17 @@ function MainWindowApp() {
 
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus | null>(null);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
+
+  const [flowConflicts, setFlowConflicts] = useState<FlowConflictItem[]>([]);
+  const [notesConflicts, setNotesConflicts] = useState<NotesConflictItem[]>([]);
+  const [conflictsLoading, setConflictsLoading] = useState(false);
+  const [conflictsError, setConflictsError] = useState<string | null>(null);
+  const [conflictsActionError, setConflictsActionError] = useState<string | null>(null);
+  const [conflictsActionBusyKey, setConflictsActionBusyKey] = useState<string | null>(null);
+  const [conflictsPendingForceOutboxId, setConflictsPendingForceOutboxId] = useState<string | null>(
+    null
+  );
+  const [notesCompareLocalUuid, setNotesCompareLocalUuid] = useState<string | null>(null);
 
   useEffect(() => {
     const api = getXinliuContextMenuApi();
@@ -1510,15 +1765,6 @@ function MainWindowApp() {
     if (route === 'todo') {
       return [
         { id: 'todo_1', title: '示例任务：实现右键菜单', sub: '右键：打开 / 移动到 / 删除 / 导出' },
-      ];
-    }
-    if (route === 'conflicts') {
-      return [
-        {
-          id: 'conflict_1',
-          title: '示例冲突：标题不一致',
-          sub: '右键：打开 / 移动到 / 删除 / 导出',
-        },
       ];
     }
     return [];
@@ -1706,6 +1952,80 @@ function MainWindowApp() {
     setUpdaterStatus(res.value);
   };
 
+  const refreshConflicts = useCallback(async () => {
+    const api = getXinliuConflictsApi();
+    if (!api) {
+      setFlowConflicts([]);
+      setNotesConflicts([]);
+      setConflictsError('冲突中心 API 不可用（preload 未注入）');
+      return;
+    }
+
+    setConflictsLoading(true);
+    setConflictsError(null);
+    try {
+      const [flowRes, notesRes] = await Promise.all([api.listFlow(), api.listNotes()]);
+
+      const errors: string[] = [];
+      if (flowRes.ok) {
+        setFlowConflicts(flowRes.value.items);
+      } else {
+        setFlowConflicts([]);
+        errors.push(`Flow 冲突加载失败：${flowRes.error.message}（${flowRes.error.code}）`);
+      }
+
+      if (notesRes.ok) {
+        setNotesConflicts(notesRes.value.items);
+      } else {
+        setNotesConflicts([]);
+        errors.push(`Notes 冲突加载失败：${notesRes.error.message}（${notesRes.error.code}）`);
+      }
+
+      setConflictsError(errors.length > 0 ? errors.join('；') : null);
+    } catch (e) {
+      setFlowConflicts([]);
+      setNotesConflicts([]);
+      setConflictsError(`冲突中心加载异常：${String(e)}`);
+    } finally {
+      setConflictsLoading(false);
+    }
+  }, []);
+
+  const runResolveFlowConflict = useCallback(
+    async (outboxId: string, strategy: 'apply_server' | 'keep_local_copy' | 'force_overwrite') => {
+      const api = getXinliuConflictsApi();
+      if (!api) {
+        setConflictsActionError('冲突中心 API 不可用（preload 未注入）');
+        return;
+      }
+
+      setConflictsActionError(null);
+      const actionKey = `${strategy}:${outboxId}`;
+      setConflictsActionBusyKey(actionKey);
+      try {
+        const res =
+          strategy === 'apply_server'
+            ? await api.resolveFlowApplyServer({ outboxId })
+            : strategy === 'keep_local_copy'
+              ? await api.resolveFlowKeepLocalCopy({ outboxId })
+              : await api.resolveFlowForceOverwrite({ outboxId });
+
+        if (!res.ok) {
+          setConflictsActionError(`裁决失败：${res.error.message}（${res.error.code}）`);
+          return;
+        }
+
+        setConflictsPendingForceOutboxId(null);
+        await refreshConflicts();
+      } catch (e) {
+        setConflictsActionError(`裁决异常：${String(e)}`);
+      } finally {
+        setConflictsActionBusyKey(null);
+      }
+    },
+    [refreshConflicts]
+  );
+
   const updateDraft = (
     id: ShortcutId,
     patch: Partial<{ accelerator: string; enabled: boolean }>
@@ -1774,6 +2094,16 @@ function MainWindowApp() {
       refreshUpdater(),
     ]);
   };
+
+  useEffect(() => {
+    if (route === 'conflicts') {
+      void refreshConflicts();
+      return;
+    }
+    setConflictsPendingForceOutboxId(null);
+    setNotesCompareLocalUuid(null);
+    setConflictsActionError(null);
+  }, [refreshConflicts, route]);
 
   const checkUpdates = async () => {
     const api = getXinliuUpdaterApi();
@@ -2027,6 +2357,32 @@ function MainWindowApp() {
               onInstallUpdateNow={() => void installUpdateNow()}
               onDeferInstall={() => void deferInstall()}
             />
+          ) : route === 'conflicts' ? (
+            <ConflictsCenter
+              apiAvailable={Boolean(getXinliuConflictsApi())}
+              loading={conflictsLoading}
+              flowItems={flowConflicts}
+              notesItems={notesConflicts}
+              error={conflictsError}
+              actionError={conflictsActionError}
+              actionBusyKey={conflictsActionBusyKey}
+              pendingForceOutboxId={conflictsPendingForceOutboxId}
+              notesCompareLocalUuid={notesCompareLocalUuid}
+              onRefresh={() => void refreshConflicts()}
+              onApplyServer={(outboxId) => void runResolveFlowConflict(outboxId, 'apply_server')}
+              onKeepLocalCopy={(outboxId) =>
+                void runResolveFlowConflict(outboxId, 'keep_local_copy')
+              }
+              onPrepareForceOverwrite={(outboxId) => setConflictsPendingForceOutboxId(outboxId)}
+              onCancelForceOverwrite={() => setConflictsPendingForceOutboxId(null)}
+              onConfirmForceOverwrite={(outboxId) =>
+                void runResolveFlowConflict(outboxId, 'force_overwrite')
+              }
+              onToggleNotesCompare={(localUuid) =>
+                setNotesCompareLocalUuid((current) => (current === localUuid ? null : localUuid))
+              }
+              onCopyNotes={(content) => void safeCopyTextToClipboard(content)}
+            />
           ) : (
             <>
               <DefaultRoutePlaceholder
@@ -2034,26 +2390,6 @@ function MainWindowApp() {
                 middleItems={demoMiddleItems}
                 onPopupMiddleItemMenu={(itemId) => void safePopupMiddleItemMenu(itemId)}
               />
-
-              {route === 'conflicts' ? (
-                <div className="callout" style={{ marginTop: 12 }}>
-                  <div className="fine">
-                    对比入口（占位）：后续由冲突中心展示本地副本与服务端版本的差异。
-                  </div>
-                  <div className="btnRow" style={{ marginTop: 10 }}>
-                    <button
-                      type="button"
-                      className="btnSmall"
-                      data-testid="conflict-compare"
-                      onClick={() => {
-                        console.warn('[conflicts] 对比入口占位，Task 41 将落地完整冲突中心');
-                      }}
-                    >
-                      打开对比
-                    </button>
-                  </div>
-                </div>
-              ) : null}
             </>
           )}
         </section>

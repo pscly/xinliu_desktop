@@ -5,6 +5,9 @@ import type {
   CloseBehaviorStatus,
   ContextMenuDidSelectPayload,
   DiagnosticsStatus,
+  FlowConflictListResult,
+  FlowConflictResolvePayload,
+  FlowConflictResolveResult,
   FileAccessReadTextFilePayload,
   FileAccessReadTextFileResult,
   FileAccessShowOpenDialogPayload,
@@ -16,6 +19,7 @@ import type {
   IpcVoid,
   NotesCreateDraftPayload,
   NotesCreateDraftResult,
+  NotesConflictListResult,
   NotesDeleteResult,
   NotesGetDraftPayload,
   NotesGetDraftResult,
@@ -86,6 +90,19 @@ declare global {
         delete: (payload: NotesIdPayload) => Promise<IpcResult<NotesDeleteResult>>;
         restore: (payload: NotesIdPayload) => Promise<IpcResult<NotesRestoreResult>>;
         hardDelete: (payload: NotesIdPayload) => Promise<IpcResult<NotesHardDeleteResult>>;
+      };
+      conflicts?: {
+        listFlow: () => Promise<IpcResult<FlowConflictListResult>>;
+        listNotes: () => Promise<IpcResult<NotesConflictListResult>>;
+        resolveFlowApplyServer: (
+          payload: FlowConflictResolvePayload
+        ) => Promise<IpcResult<FlowConflictResolveResult>>;
+        resolveFlowKeepLocalCopy: (
+          payload: FlowConflictResolvePayload
+        ) => Promise<IpcResult<FlowConflictResolveResult>>;
+        resolveFlowForceOverwrite: (
+          payload: FlowConflictResolvePayload
+        ) => Promise<IpcResult<FlowConflictResolveResult>>;
       };
       search: {
         query: (payload: SearchQueryPayload) => Promise<IpcResult<SearchQueryResult>>;

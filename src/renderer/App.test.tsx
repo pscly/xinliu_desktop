@@ -5,11 +5,14 @@ import type {
   CloseBehaviorSetPayload,
   CloseBehaviorStatus,
   DiagnosticsStatus,
+  FlowConflictListResult,
+  FlowConflictResolveResult,
   FileAccessReadTextFileResult,
   FileAccessShowOpenDialogResult,
   FileAccessShowSaveDialogResult,
   IpcResult,
   IpcVoid,
+  NotesConflictListResult,
   NotesGetDraftResult,
   SearchQueryResult,
   SearchRebuildIndexResult,
@@ -32,6 +35,17 @@ function buildXinliuStub(overrides: {
   createDraft?: XinliuNotesApi['createDraft'];
   upsertDraft?: XinliuNotesApi['upsertDraft'];
   getDraft?: XinliuNotesApi['getDraft'];
+  listFlowConflicts?: NonNullable<NonNullable<Window['xinliu']>['conflicts']>['listFlow'];
+  listNotesConflicts?: NonNullable<NonNullable<Window['xinliu']>['conflicts']>['listNotes'];
+  resolveFlowApplyServer?: NonNullable<
+    NonNullable<Window['xinliu']>['conflicts']
+  >['resolveFlowApplyServer'];
+  resolveFlowKeepLocalCopy?: NonNullable<
+    NonNullable<Window['xinliu']>['conflicts']
+  >['resolveFlowKeepLocalCopy'];
+  resolveFlowForceOverwrite?: NonNullable<
+    NonNullable<Window['xinliu']>['conflicts']
+  >['resolveFlowForceOverwrite'];
 }): NonNullable<Window['xinliu']> {
   return {
     versions: { electron: '0', chrome: '0', node: '0' },
@@ -175,6 +189,55 @@ function buildXinliuStub(overrides: {
       restore: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       hardDelete: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
     },
+    conflicts: {
+      listFlow:
+        overrides.listFlowConflicts ??
+        (async () =>
+          ({ ok: true, value: { items: [] } }) satisfies IpcResult<FlowConflictListResult>),
+      listNotes:
+        overrides.listNotesConflicts ??
+        (async () =>
+          ({ ok: true, value: { items: [] } }) satisfies IpcResult<NotesConflictListResult>),
+      resolveFlowApplyServer:
+        overrides.resolveFlowApplyServer ??
+        (async ({ outboxId }) =>
+          ({
+            ok: true,
+            value: {
+              outboxId,
+              resolved: true,
+              strategy: 'apply_server',
+              bumpedClientUpdatedAtMs: null,
+              copiedEntityId: null,
+            } satisfies FlowConflictResolveResult,
+          }) satisfies IpcResult<FlowConflictResolveResult>),
+      resolveFlowKeepLocalCopy:
+        overrides.resolveFlowKeepLocalCopy ??
+        (async ({ outboxId }) =>
+          ({
+            ok: true,
+            value: {
+              outboxId,
+              resolved: true,
+              strategy: 'keep_local_copy',
+              bumpedClientUpdatedAtMs: null,
+              copiedEntityId: 'copy_local_id',
+            } satisfies FlowConflictResolveResult,
+          }) satisfies IpcResult<FlowConflictResolveResult>),
+      resolveFlowForceOverwrite:
+        overrides.resolveFlowForceOverwrite ??
+        (async ({ outboxId }) =>
+          ({
+            ok: true,
+            value: {
+              outboxId,
+              resolved: true,
+              strategy: 'force_overwrite',
+              bumpedClientUpdatedAtMs: 123,
+              copiedEntityId: null,
+            } satisfies FlowConflictResolveResult,
+          }) satisfies IpcResult<FlowConflictResolveResult>),
+    },
     updater: {
       getStatus: async () =>
         ({
@@ -236,6 +299,203 @@ describe('<App />', () => {
     expect(screen.getByTestId('diagnostics-copy-memos-request-id')).toBeTruthy();
     fireEvent.click(screen.getByTestId('nav-conflicts'));
     expect(screen.getAllByText('冲突').length).toBeGreaterThan(0);
+  });
+
+  it('冲突中心：进入冲突路由后渲染 Flow/Notes 两类真实列表', async () => {
+    const listFlow = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: {
+            items: [
+              {
+                outboxId: 'obx_render_1',
+                resource: 'todo_item',
+                op: 'upsert',
+                entityId: 'todo_1',
+                clientUpdatedAtMs: 10,
+                updatedAtMs: 11,
+                requestId: 'req_render_1',
+                localData: { title: '本地版本' },
+                serverSnapshot: { id: 'todo_1', title: '服务端版本' },
+              },
+            ],
+          } satisfies FlowConflictListResult,
+        }) satisfies IpcResult<FlowConflictListResult>
+    );
+
+    const listNotes = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: {
+            items: [
+              {
+                localUuid: 'memo_copy_1',
+                originalLocalUuid: 'memo_original_1',
+                conflictRequestId: 'memo_req_1',
+                updatedAtMs: 22,
+                copyContent: '副本正文',
+                originalContent: '原文正文',
+              },
+            ],
+          } satisfies NotesConflictListResult,
+        }) satisfies IpcResult<NotesConflictListResult>
+    );
+
+    window.xinliu = buildXinliuStub({
+      listFlowConflicts: listFlow,
+      listNotesConflicts: listNotes,
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('nav-conflicts'));
+
+    expect(await screen.findByTestId('conflicts-flow-list')).toBeTruthy();
+    expect(await screen.findByTestId('conflicts-notes-list')).toBeTruthy();
+
+    expect(screen.getByTestId('conflicts-flow-item-obx_render_1')).toBeTruthy();
+    expect(screen.getByTestId('conflicts-flow-apply-server-obx_render_1')).toBeTruthy();
+    expect(screen.getByTestId('conflicts-flow-keep-local-obx_render_1')).toBeTruthy();
+    expect(screen.getByTestId('conflicts-flow-force-overwrite-obx_render_1')).toBeTruthy();
+
+    expect(screen.getByTestId('conflicts-notes-item-memo_copy_1')).toBeTruthy();
+    expect(screen.getByTestId('conflicts-notes-compare-memo_copy_1')).toBeTruthy();
+    expect(screen.getByTestId('conflicts-notes-copy-memo_copy_1')).toBeTruthy();
+
+    delete window.xinliu;
+  });
+
+  it('冲突中心：点击 apply_server 会调用裁决并刷新列表', async () => {
+    const listFlow = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: {
+            items: [
+              {
+                outboxId: 'obx_apply_1',
+                resource: 'todo_item',
+                op: 'upsert',
+                entityId: 'todo_apply_1',
+                clientUpdatedAtMs: 100,
+                updatedAtMs: 101,
+                requestId: 'req_apply_1',
+                localData: { title: 'local' },
+                serverSnapshot: { title: 'server' },
+              },
+            ],
+          } satisfies FlowConflictListResult,
+        }) satisfies IpcResult<FlowConflictListResult>
+    );
+    const listNotes = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: { items: [] } satisfies NotesConflictListResult,
+        }) satisfies IpcResult<NotesConflictListResult>
+    );
+    const resolveApply = vi.fn(
+      async ({ outboxId }: { outboxId: string }) =>
+        ({
+          ok: true,
+          value: {
+            outboxId,
+            resolved: true,
+            strategy: 'apply_server',
+            bumpedClientUpdatedAtMs: null,
+            copiedEntityId: null,
+          } satisfies FlowConflictResolveResult,
+        }) satisfies IpcResult<FlowConflictResolveResult>
+    );
+
+    window.xinliu = buildXinliuStub({
+      listFlowConflicts: listFlow,
+      listNotesConflicts: listNotes,
+      resolveFlowApplyServer: resolveApply,
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('nav-conflicts'));
+
+    const applyBtn = await screen.findByTestId('conflicts-flow-apply-server-obx_apply_1');
+    fireEvent.click(applyBtn);
+
+    await waitFor(() => {
+      expect(resolveApply).toHaveBeenCalledTimes(1);
+    });
+    expect(resolveApply).toHaveBeenCalledWith({ outboxId: 'obx_apply_1' });
+
+    await waitFor(() => {
+      expect(listFlow.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(listNotes.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    delete window.xinliu;
+  });
+
+  it('冲突中心：force_overwrite 必须二次确认后才执行', async () => {
+    const listFlow = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: {
+            items: [
+              {
+                outboxId: 'obx_force_1',
+                resource: 'todo_item',
+                op: 'upsert',
+                entityId: 'todo_force_1',
+                clientUpdatedAtMs: 200,
+                updatedAtMs: 201,
+                requestId: 'req_force_1',
+                localData: { title: 'local force' },
+                serverSnapshot: { title: 'server force' },
+              },
+            ],
+          } satisfies FlowConflictListResult,
+        }) satisfies IpcResult<FlowConflictListResult>
+    );
+    const resolveForce = vi.fn(
+      async ({ outboxId }: { outboxId: string }) =>
+        ({
+          ok: true,
+          value: {
+            outboxId,
+            resolved: true,
+            strategy: 'force_overwrite',
+            bumpedClientUpdatedAtMs: 999,
+            copiedEntityId: null,
+          } satisfies FlowConflictResolveResult,
+        }) satisfies IpcResult<FlowConflictResolveResult>
+    );
+
+    window.xinliu = buildXinliuStub({
+      listFlowConflicts: listFlow,
+      resolveFlowForceOverwrite: resolveForce,
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('nav-conflicts'));
+
+    const forceBtn = await screen.findByTestId('conflicts-flow-force-overwrite-obx_force_1');
+    fireEvent.click(forceBtn);
+
+    const confirmBtn = await screen.findByTestId('conflicts-flow-force-confirm-obx_force_1');
+    expect(screen.getByTestId('conflicts-flow-force-confirm-panel-obx_force_1')).toBeTruthy();
+
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(resolveForce).toHaveBeenCalledTimes(1);
+    });
+    expect(resolveForce).toHaveBeenCalledWith({ outboxId: 'obx_force_1' });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('conflicts-flow-force-confirm-panel-obx_force_1')).toBeNull();
+    });
+
+    delete window.xinliu;
   });
 
   it('Notes 编辑器：可以新建草稿并进入可编辑状态', async () => {

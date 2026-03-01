@@ -8,6 +8,9 @@ import type {
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
   DiagnosticsStatus,
+  FlowConflictListResult,
+  FlowConflictResolvePayload,
+  FlowConflictResolveResult,
   FileAccessReadTextFilePayload,
   FileAccessReadTextFileResult,
   FileAccessShowOpenDialogPayload,
@@ -20,6 +23,7 @@ import type {
   IpcVoid,
   NotesCreateDraftPayload,
   NotesCreateDraftResult,
+  NotesConflictListResult,
   NotesDeleteResult,
   NotesGetDraftPayload,
   NotesGetDraftResult,
@@ -174,6 +178,27 @@ contextBridge.exposeInMainWorld('xinliu', {
       invokeIpc<NotesHardDeleteResult>(
         IPC_CHANNELS.notes.hardDelete,
         payload satisfies NotesIdPayload
+      ),
+  },
+  conflicts: {
+    listFlow: () =>
+      invokeIpc<FlowConflictListResult>(IPC_CHANNELS.conflicts.listFlow, EMPTY_PAYLOAD),
+    listNotes: () =>
+      invokeIpc<NotesConflictListResult>(IPC_CHANNELS.conflicts.listNotes, EMPTY_PAYLOAD),
+    resolveFlowApplyServer: (payload: FlowConflictResolvePayload) =>
+      invokeIpc<FlowConflictResolveResult>(
+        IPC_CHANNELS.conflicts.resolveFlowApplyServer,
+        payload satisfies FlowConflictResolvePayload
+      ),
+    resolveFlowKeepLocalCopy: (payload: FlowConflictResolvePayload) =>
+      invokeIpc<FlowConflictResolveResult>(
+        IPC_CHANNELS.conflicts.resolveFlowKeepLocalCopy,
+        payload satisfies FlowConflictResolvePayload
+      ),
+    resolveFlowForceOverwrite: (payload: FlowConflictResolvePayload) =>
+      invokeIpc<FlowConflictResolveResult>(
+        IPC_CHANNELS.conflicts.resolveFlowForceOverwrite,
+        payload satisfies FlowConflictResolvePayload
       ),
   },
   search: {

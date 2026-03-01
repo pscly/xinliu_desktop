@@ -300,3 +300,13 @@
 - [2026-02-28] Task 40 回填折中：由于当前 `collection_items` schema 没有 `ref_local_uuid`，只能临时用 `ref_id=local_uuid` 承载待回填关联；风险是 `ref_id` 语义复用会增加歧义，后续若引入双轨字段（local/server）需要补一次数据迁移把历史占位值清洗到专用字段。
 
 - [2026-02-28] 工作区隔离提交经验：先按“功能闭环 + 依赖顺序”做路径分组，再逐个 `git status --porcelain=v1` 校验 staged 集合，可显著降低混杂改动误提交风险；对于 `better-sqlite3` 的 Node ABI 变化，建议在切换 Node 主版本后立即执行 `npm rebuild better-sqlite3`，避免测试结果受原生模块不匹配干扰。
+
+## [2026-03-01 18:26] - Task 41 冲突中心（renderer 接线）
+
+- 冲突中心 API 接线模式：`window.xinliu.conflicts` 统一走 preload `invokeIpc` 返回 `IpcResult`，避免 renderer 直接接触 IPC channel 细节；方法集合固定为 `listFlow/listNotes/resolveFlowApplyServer/resolveFlowKeepLocalCopy/resolveFlowForceOverwrite`。
+- 冲突页刷新策略：进入 `conflicts` 路由时自动 `Promise.all(listFlow,listNotes)` 拉取；任一裁决动作成功后立即再次刷新两类列表，确保 UI 与 DB 状态一致；失败只展示可解释错误文案，不 throw。
+- 强制覆盖二次确认：不用 `window.confirm`，改为组件内 state 渲染确认区块（`pendingForceOutboxId`）+ 明确确认按钮，测试稳定且可追踪。
+- 本次新增并固定的冲突页 `data-testid` 契约：
+  - 总体与容器：`conflicts-center`、`conflicts-refresh`、`conflicts-error`、`conflicts-action-error`、`conflicts-flow-list`、`conflicts-notes-list`
+  - Flow 列表与动作：`conflicts-flow-item-<outboxId>`、`conflicts-flow-apply-server-<outboxId>`、`conflicts-flow-keep-local-<outboxId>`、`conflicts-flow-force-overwrite-<outboxId>`、`conflicts-flow-force-confirm-panel-<outboxId>`、`conflicts-flow-force-confirm-<outboxId>`、`conflicts-flow-force-cancel-<outboxId>`
+  - Notes 列表与入口：`conflicts-notes-item-<localUuid>`、`conflicts-notes-compare-<localUuid>`、`conflicts-notes-copy-<localUuid>`、`conflicts-notes-compare-panel-<localUuid>`
