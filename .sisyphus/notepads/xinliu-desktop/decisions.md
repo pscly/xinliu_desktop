@@ -15,3 +15,5 @@
 - [2026-02-26] Task 22（仅 UI）：Storage Root 设置区块复用现有 `.settingsSection/.callout/.btn/.kvRow` 样式，不新增依赖、不扩展全局样式；迁移后“需要重启”的可见契约用 `data-testid="settings-restart-required"` 固定，便于离线确定性单测与后续 E2E 定位。
 
 - [2026-02-26] 修正说明：Task 22 并非“仅 UI”。除 renderer 设置页展示/提示外，还包含 main 侧 storage-root.json 配置读写、Storage Root 迁移引擎（staging->rename 提交、失败回滚清理）、IPC/preload/shared 类型与重启（`app.relaunch()` + `app.exit(0)`）接线。该条目仅修正表述，不改变既有实现。
+
+- [2026-03-01] Task 43 采用 `desktop.flow_base_url` 与 `desktop.memos_base_url` 作为 `user_settings` 持久化 key；设置页 testid 固定为 `settings-backend`（替代旧 `diagnostics-panel`），并保留 request_id 复制 testid 以兼容既有排障流。

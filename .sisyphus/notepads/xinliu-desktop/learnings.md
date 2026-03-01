@@ -316,3 +316,10 @@
 - 当计划或 E2E 需要“全局可检索”的冲突页入口时，建议在 `route='conflicts'` 的真实 UI 区域保留一个唯一 `data-testid="conflict-compare"`，并与按条目 testid（如 `conflicts-notes-compare-<id>`）并存：前者用于快速定位，后者用于精确交互。
 - 为避免选择器歧义，`conflict-compare` 不应在 map 列表中重复出现；放在 Notes 冲突卡片 header 最稳妥。
 - 入口按钮应具备“存在即合理”行为：有数据时执行最小可解释动作（展开首条 Notes 对比），无数据时 `disabled`，这样既满足验收检索，也不会引入无意义点击分支。
+
+## [2026-03-01 19:05] - Task 43 设置页后端/网络配置（Base URL 可编辑持久化）
+
+- diagnostics 从只读展示升级为可编辑保存时，renderer 侧建议将输入草稿 state 与后端状态分离；保存成功后统一 `refreshDiagnostics()` 回拉主进程标准化值，避免本地草稿与真实配置漂移。
+- preload 未注入降级需要“双重兜底”：交互层禁用保存按钮 + 文案层给出明确提示（“后端配置 API 不可用（preload 未注入，保存已禁用）”），这样 jsdom 与 E2E 都能稳定断言。
+- IPC 新增 diagnostics 写通道后，`src/main/ipc.test.ts` 除了 expected channel 列表自动覆盖外，deps stub 也必须同步补齐 `setFlowBaseUrl/setMemosBaseUrl`，否则会在类型层直接失败。
+- Base URL 规则必须单点复用 `normalizeBaseUrl`：校验/标准化放在 main 层，renderer 只消费 `IpcResult`，可以避免双端各写一套规则导致行为不一致。

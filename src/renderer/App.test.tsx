@@ -124,6 +124,8 @@ function buildXinliuStub(overrides: {
             lastRequestIds: { memos_request_id: null, flow_request_id: null },
           } satisfies DiagnosticsStatus,
         }) satisfies IpcResult<DiagnosticsStatus>,
+      setFlowBaseUrl: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+      setMemosBaseUrl: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
     },
     contextMenu: {
       popupMiddleItem: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
@@ -294,11 +296,103 @@ describe('<App />', () => {
     expect(screen.getByTestId('settings-updater')).toBeTruthy();
     expect(screen.getByTestId('check-updates')).toBeTruthy();
     expect(screen.getByTestId('settings-shortcuts')).toBeTruthy();
-    expect(screen.getByTestId('diagnostics-panel')).toBeTruthy();
+    expect(screen.getByTestId('settings-backend')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-copy-flow-request-id')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-copy-memos-request-id')).toBeTruthy();
+    expect((screen.getByTestId('backend-flow-base-url-save') as HTMLButtonElement).disabled).toBe(
+      true
+    );
+    expect((screen.getByTestId('backend-memos-base-url-save') as HTMLButtonElement).disabled).toBe(
+      true
+    );
     fireEvent.click(screen.getByTestId('nav-conflicts'));
     expect(screen.getAllByText('冲突').length).toBeGreaterThan(0);
+  });
+
+  it('设置页：保存 Base URL 会调用 diagnostics API 并刷新展示', async () => {
+    const getStatus = vi
+      .fn<NonNullable<NonNullable<Window['xinliu']>['diagnostics']>['getStatus']>()
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          flowBaseUrl: 'https://xl.pscly.cc',
+          memosBaseUrl: null,
+          notesProvider: null,
+          notesProviderKind: null,
+          lastDegradeReason: null,
+          lastRequestIds: { memos_request_id: null, flow_request_id: null },
+        } satisfies DiagnosticsStatus,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          flowBaseUrl: 'https://flow.example.com/api',
+          memosBaseUrl: null,
+          notesProvider: null,
+          notesProviderKind: null,
+          lastDegradeReason: null,
+          lastRequestIds: { memos_request_id: null, flow_request_id: null },
+        } satisfies DiagnosticsStatus,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          flowBaseUrl: 'https://flow.example.com/api',
+          memosBaseUrl: 'https://memos.example.com/v1',
+          notesProvider: null,
+          notesProviderKind: null,
+          lastDegradeReason: null,
+          lastRequestIds: { memos_request_id: null, flow_request_id: null },
+        } satisfies DiagnosticsStatus,
+      });
+
+    const setFlowBaseUrl = vi.fn(
+      async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>
+    );
+    const setMemosBaseUrl = vi.fn(
+      async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>
+    );
+
+    const stub = buildXinliuStub({});
+    stub.diagnostics.getStatus = getStatus;
+    stub.diagnostics.setFlowBaseUrl = setFlowBaseUrl;
+    stub.diagnostics.setMemosBaseUrl = setMemosBaseUrl;
+    window.xinliu = stub;
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('nav-settings'));
+
+    expect(await screen.findByTestId('settings-backend')).toBeTruthy();
+
+    const flowInput = screen.getByTestId('backend-flow-base-url-input') as HTMLInputElement;
+    fireEvent.change(flowInput, { target: { value: 'https://flow.example.com/api/' } });
+    fireEvent.click(screen.getByTestId('backend-flow-base-url-save'));
+
+    await waitFor(() => {
+      expect(setFlowBaseUrl).toHaveBeenCalledTimes(1);
+    });
+    expect(setFlowBaseUrl).toHaveBeenCalledWith({ baseUrl: 'https://flow.example.com/api/' });
+    await waitFor(() => {
+      expect((screen.getByTestId('backend-flow-base-url-input') as HTMLInputElement).value).toBe(
+        'https://flow.example.com/api'
+      );
+    });
+
+    const memosInput = screen.getByTestId('backend-memos-base-url-input') as HTMLInputElement;
+    fireEvent.change(memosInput, { target: { value: 'https://memos.example.com/v1/' } });
+    fireEvent.click(screen.getByTestId('backend-memos-base-url-save'));
+
+    await waitFor(() => {
+      expect(setMemosBaseUrl).toHaveBeenCalledTimes(1);
+    });
+    expect(setMemosBaseUrl).toHaveBeenCalledWith({ baseUrl: 'https://memos.example.com/v1/' });
+    await waitFor(() => {
+      expect((screen.getByTestId('backend-memos-base-url-input') as HTMLInputElement).value).toBe(
+        'https://memos.example.com/v1'
+      );
+    });
+
+    delete window.xinliu;
   });
 
   it('冲突中心：进入冲突路由后渲染 Flow/Notes 两类真实列表', async () => {
@@ -819,6 +913,8 @@ describe('<App />', () => {
               lastRequestIds: { memos_request_id: null, flow_request_id: null },
             } satisfies DiagnosticsStatus,
           }) satisfies IpcResult<DiagnosticsStatus>,
+        setFlowBaseUrl: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        setMemosBaseUrl: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       contextMenu: {
         popupMiddleItem: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
@@ -941,6 +1037,8 @@ describe('<App />', () => {
               lastRequestIds: { memos_request_id: null, flow_request_id: null },
             } satisfies DiagnosticsStatus,
           }) satisfies IpcResult<DiagnosticsStatus>,
+        setFlowBaseUrl: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        setMemosBaseUrl: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       contextMenu: {
         popupMiddleItem: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
@@ -1071,6 +1169,8 @@ describe('<App />', () => {
               lastRequestIds: { memos_request_id: null, flow_request_id: null },
             } satisfies DiagnosticsStatus,
           }) satisfies IpcResult<DiagnosticsStatus>,
+        setFlowBaseUrl: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
+        setMemosBaseUrl: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       },
       contextMenu: {
         popupMiddleItem: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,

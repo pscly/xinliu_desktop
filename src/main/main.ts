@@ -20,6 +20,7 @@ import type { WebContents } from 'electron';
 import Database from 'better-sqlite3';
 
 import { IPC_EVENTS } from '../shared/ipc';
+import { normalizeBaseUrl } from '../shared/url';
 import { registerIpcHandlers } from './ipc';
 import { createQuickCaptureController } from './quickCapture/quickCaptureController';
 import { createQuickCaptureWindowManager } from './quickCapture/quickCaptureWindowManager';
@@ -60,6 +61,11 @@ import {
   writeCloseBehavior,
   writeCloseToTrayHintShown,
 } from './userSettings/closeBehaviorSettings';
+import {
+  readBackendSettingsStatus,
+  writeFlowBaseUrlRaw,
+  writeMemosBaseUrlRaw,
+} from './userSettings/backendSettings';
 
 const closeToTray = createCloseToTrayController();
 
@@ -349,8 +355,6 @@ app.whenReady().then(async () => {
   shortcutsManager.registerAll();
   installShortcutsCleanupOnWillQuit(app, shortcutsManager);
 
-  const diagnostics = createDiagnosticsController();
-
   const pathGate = createPathGate();
 
   const releasesUrl = 'https://github.com/pscly/xinliu_desktop/releases';
@@ -383,6 +387,20 @@ app.whenReady().then(async () => {
   };
 
   withMainDbRef = withMainDb;
+
+  const initialBackendSettings = (() => {
+    try {
+      return withMainDb((db) => readBackendSettingsStatus(db));
+    } catch (error) {
+      console.warn(String(error));
+      return { flowBaseUrlRaw: null, memosBaseUrlRaw: null };
+    }
+  })();
+
+  const diagnostics = createDiagnosticsController({
+    flowBaseUrlRaw: initialBackendSettings.flowBaseUrlRaw,
+    memosBaseUrlRaw: initialBackendSettings.memosBaseUrlRaw,
+  });
 
   const initialCloseBehaviorStatus = (() => {
     try {
@@ -501,6 +519,25 @@ app.whenReady().then(async () => {
     },
     diagnostics: {
       getStatus: () => diagnostics.getStatus(),
+      setFlowBaseUrl: ({ baseUrl }) => {
+        const normalized = normalizeBaseUrl(baseUrl);
+        try {
+          withMainDb((db) => writeFlowBaseUrlRaw(db, normalized));
+        } catch {
+          throw new Error('保存 Flow Base URL 失败，请稍后重试');
+        }
+        diagnostics.setFlowBaseUrlRaw(normalized);
+      },
+      setMemosBaseUrl: ({ baseUrl }) => {
+        const trimmed = baseUrl.trim();
+        const normalized = trimmed.length > 0 ? normalizeBaseUrl(trimmed) : null;
+        try {
+          withMainDb((db) => writeMemosBaseUrlRaw(db, normalized));
+        } catch {
+          throw new Error('保存 Memos Base URL 失败，请稍后重试');
+        }
+        diagnostics.setMemosBaseUrlRaw(normalized);
+      },
     },
     notes: {
       createDraft: ({ content }) =>

@@ -31,6 +31,8 @@ export const IPC_CHANNELS = {
   },
   diagnostics: {
     getStatus: `${IPC_NAMESPACE}:diagnostics:getStatus`,
+    setFlowBaseUrl: `${IPC_NAMESPACE}:diagnostics:setFlowBaseUrl`,
+    setMemosBaseUrl: `${IPC_NAMESPACE}:diagnostics:setMemosBaseUrl`,
   },
   contextMenu: {
     popupMiddleItem: `${IPC_NAMESPACE}:contextMenu:popupMiddleItem`,
@@ -522,4 +524,12 @@ export interface DiagnosticsStatus {
     memos_request_id: string | null;
     flow_request_id: string | null;
   };
+}
+
+export interface DiagnosticsSetFlowBaseUrlPayload {
+  baseUrl: string;
+}
+
+export interface DiagnosticsSetMemosBaseUrlPayload {
+  baseUrl: string;
 }

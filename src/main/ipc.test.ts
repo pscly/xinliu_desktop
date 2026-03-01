@@ -59,6 +59,8 @@ describe('src/main/ipc', () => {
           lastDegradeReason: null,
           lastRequestIds: { memos_request_id: null, flow_request_id: null },
         }),
+        setFlowBaseUrl: () => {},
+        setMemosBaseUrl: () => {},
       },
       conflicts: {
         listFlow: () => ({ items: [] }),
@@ -188,6 +190,8 @@ describe('src/main/ipc', () => {
           lastDegradeReason: null,
           lastRequestIds: { memos_request_id: null, flow_request_id: null },
         }),
+        setFlowBaseUrl: () => {},
+        setMemosBaseUrl: () => {},
       },
       conflicts: {
         listFlow: () => ({ items: [] }),
@@ -306,6 +310,8 @@ describe('src/main/ipc', () => {
           lastDegradeReason: null,
           lastRequestIds: { memos_request_id: null, flow_request_id: null },
         }),
+        setFlowBaseUrl: () => {},
+        setMemosBaseUrl: () => {},
       },
       conflicts: {
         listFlow: () => ({ items: [] }),
@@ -424,6 +430,8 @@ describe('src/main/ipc', () => {
           lastDegradeReason: null,
           lastRequestIds: { memos_request_id: null, flow_request_id: null },
         }),
+        setFlowBaseUrl: () => {},
+        setMemosBaseUrl: () => {},
       },
       conflicts: {
         listFlow: () => ({ items: [] }),

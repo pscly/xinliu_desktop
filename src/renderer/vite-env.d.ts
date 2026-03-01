@@ -4,6 +4,8 @@ import type {
   CloseBehaviorSetPayload,
   CloseBehaviorStatus,
   ContextMenuDidSelectPayload,
+  DiagnosticsSetFlowBaseUrlPayload,
+  DiagnosticsSetMemosBaseUrlPayload,
   DiagnosticsStatus,
   FlowConflictListResult,
   FlowConflictResolvePayload,
@@ -79,6 +81,10 @@ declare global {
       };
       diagnostics: {
         getStatus: () => Promise<IpcResult<DiagnosticsStatus>>;
+        setFlowBaseUrl: (payload: DiagnosticsSetFlowBaseUrlPayload) => Promise<IpcResult<IpcVoid>>;
+        setMemosBaseUrl: (
+          payload: DiagnosticsSetMemosBaseUrlPayload
+        ) => Promise<IpcResult<IpcVoid>>;
       };
       notes?: {
         createDraft: (

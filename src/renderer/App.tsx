@@ -474,6 +474,8 @@ function SettingsContent(props: {
   onRestartNow: () => void;
   onSetCloseBehavior: (behavior: 'hide' | 'quit') => void;
   onResetCloseToTrayHint: () => void;
+  onSaveFlowBaseUrl: (baseUrl: string) => Promise<void>;
+  onSaveMemosBaseUrl: (baseUrl: string) => Promise<void>;
   onCheckUpdates: () => void;
   onInstallUpdateNow: () => void;
   onDeferInstall: () => void;
@@ -514,6 +516,8 @@ function SettingsContent(props: {
           status={props.diagnosticsStatus}
           error={props.diagnosticsError}
           apiAvailable={props.diagnosticsApiAvailable}
+          onSaveFlowBaseUrl={props.onSaveFlowBaseUrl}
+          onSaveMemosBaseUrl={props.onSaveMemosBaseUrl}
         />
         <SettingsShortcutsSection
           status={props.shortcutsStatus}
@@ -852,9 +856,39 @@ function SettingsDiagnosticsSection(props: {
   status: DiagnosticsStatus | null;
   error: string | null;
   apiAvailable: boolean;
+  onSaveFlowBaseUrl: (baseUrl: string) => Promise<void>;
+  onSaveMemosBaseUrl: (baseUrl: string) => Promise<void>;
 }) {
-  const flowBaseUrl = props.status?.flowBaseUrl ?? '-';
-  const memosBaseUrl = props.status?.memosBaseUrl ?? '-';
+  const [flowBaseUrlDraft, setFlowBaseUrlDraft] = useState('');
+  const [memosBaseUrlDraft, setMemosBaseUrlDraft] = useState('');
+  const [savingFlowBaseUrl, setSavingFlowBaseUrl] = useState(false);
+  const [savingMemosBaseUrl, setSavingMemosBaseUrl] = useState(false);
+
+  useEffect(() => {
+    setFlowBaseUrlDraft(props.status?.flowBaseUrl ?? '');
+  }, [props.status?.flowBaseUrl]);
+
+  useEffect(() => {
+    setMemosBaseUrlDraft(props.status?.memosBaseUrl ?? '');
+  }, [props.status?.memosBaseUrl]);
+
+  const saveFlowBaseUrl = async () => {
+    setSavingFlowBaseUrl(true);
+    try {
+      await props.onSaveFlowBaseUrl(flowBaseUrlDraft);
+    } finally {
+      setSavingFlowBaseUrl(false);
+    }
+  };
+
+  const saveMemosBaseUrl = async () => {
+    setSavingMemosBaseUrl(true);
+    try {
+      await props.onSaveMemosBaseUrl(memosBaseUrlDraft);
+    } finally {
+      setSavingMemosBaseUrl(false);
+    }
+  };
 
   const providerText =
     props.status?.notesProvider === 'memos' && props.status?.notesProviderKind === 'direct'
@@ -872,12 +906,12 @@ function SettingsDiagnosticsSection(props: {
   const flowRequestId = props.status?.lastRequestIds.flow_request_id ?? null;
 
   return (
-    <section className="settingsSection" data-testid="diagnostics-panel">
+    <section className="settingsSection" data-testid="settings-backend">
       <div className="settingsSectionHeader">
         <div>
-          <div className="settingsSectionTitle">诊断</div>
+          <div className="settingsSectionTitle">后端与网络</div>
           <div className="settingsSectionSub">
-            用于排障：不展示 token；日志会强制脱敏（Authorization/Token/绝对路径）
+            用于排障：不展示 token 明文；日志会强制脱敏（Authorization/Token/绝对路径）
           </div>
         </div>
       </div>
@@ -885,11 +919,51 @@ function SettingsDiagnosticsSection(props: {
       <div className="rightCardBody">
         <div className="kvRow">
           <div className="k">Flow Base URL</div>
-          <div className="v">{flowBaseUrl}</div>
+          <div className="v">
+            <input
+              className="textInput"
+              data-testid="backend-flow-base-url-input"
+              value={flowBaseUrlDraft}
+              onChange={(e) => setFlowBaseUrlDraft(e.currentTarget.value)}
+              placeholder="https://xl.pscly.cc"
+              disabled={!props.apiAvailable || savingFlowBaseUrl}
+              aria-label="Flow Base URL"
+            />
+            <button
+              type="button"
+              className="btn btnGhost"
+              data-testid="backend-flow-base-url-save"
+              disabled={!props.apiAvailable || savingFlowBaseUrl}
+              onClick={() => void saveFlowBaseUrl()}
+              style={{ marginLeft: 8 }}
+            >
+              {savingFlowBaseUrl ? '保存中…' : '保存'}
+            </button>
+          </div>
         </div>
         <div className="kvRow">
           <div className="k">Memos Base URL</div>
-          <div className="v">{memosBaseUrl}</div>
+          <div className="v">
+            <input
+              className="textInput"
+              data-testid="backend-memos-base-url-input"
+              value={memosBaseUrlDraft}
+              onChange={(e) => setMemosBaseUrlDraft(e.currentTarget.value)}
+              placeholder="留空则禁用直连 Memos"
+              disabled={!props.apiAvailable || savingMemosBaseUrl}
+              aria-label="Memos Base URL"
+            />
+            <button
+              type="button"
+              className="btn btnGhost"
+              data-testid="backend-memos-base-url-save"
+              disabled={!props.apiAvailable || savingMemosBaseUrl}
+              onClick={() => void saveMemosBaseUrl()}
+              style={{ marginLeft: 8 }}
+            >
+              {savingMemosBaseUrl ? '保存中…' : '保存'}
+            </button>
+          </div>
         </div>
         <div className="kvRow">
           <div className="k">Notes Provider</div>
@@ -936,7 +1010,7 @@ function SettingsDiagnosticsSection(props: {
       </div>
 
       {!props.apiAvailable ? (
-        <div className="callout calloutWarn">诊断 API 不可用（preload 未注入）</div>
+        <div className="callout calloutWarn">后端配置 API 不可用（preload 未注入，保存已禁用）</div>
       ) : null}
 
       {props.error ? <div className="callout calloutWarn">{props.error}</div> : null}
@@ -1924,7 +1998,7 @@ function MainWindowApp() {
     const api = getXinliuDiagnosticsApi();
     if (!api) {
       setDiagnosticsStatus(null);
-      setDiagnosticsError('诊断 API 不可用（preload 未注入）');
+      setDiagnosticsError('后端配置 API 不可用（preload 未注入）');
       return;
     }
 
@@ -1937,6 +2011,46 @@ function MainWindowApp() {
 
     setDiagnosticsError(null);
     setDiagnosticsStatus(res.value);
+  };
+
+  const saveFlowBaseUrl = async (baseUrl: string) => {
+    const api = getXinliuDiagnosticsApi();
+    const fn = api?.setFlowBaseUrl;
+    if (typeof fn !== 'function') {
+      setDiagnosticsError('后端配置 API 不可用（preload 未注入）');
+      return;
+    }
+    try {
+      const res = await fn({ baseUrl });
+      if (!res.ok) {
+        setDiagnosticsError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setDiagnosticsError(null);
+      await refreshDiagnostics();
+    } catch (e) {
+      setDiagnosticsError(`保存 Flow Base URL 异常：${String(e)}`);
+    }
+  };
+
+  const saveMemosBaseUrl = async (baseUrl: string) => {
+    const api = getXinliuDiagnosticsApi();
+    const fn = api?.setMemosBaseUrl;
+    if (typeof fn !== 'function') {
+      setDiagnosticsError('后端配置 API 不可用（preload 未注入）');
+      return;
+    }
+    try {
+      const res = await fn({ baseUrl });
+      if (!res.ok) {
+        setDiagnosticsError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      setDiagnosticsError(null);
+      await refreshDiagnostics();
+    } catch (e) {
+      setDiagnosticsError(`保存 Memos Base URL 异常：${String(e)}`);
+    }
   };
 
   const refreshCloseBehavior = async () => {
@@ -2378,6 +2492,8 @@ function MainWindowApp() {
               onRestartNow={() => void restartNow()}
               onSetCloseBehavior={(behavior) => void setCloseBehavior(behavior)}
               onResetCloseToTrayHint={() => void resetCloseToTrayHint()}
+              onSaveFlowBaseUrl={saveFlowBaseUrl}
+              onSaveMemosBaseUrl={saveMemosBaseUrl}
               onCheckUpdates={() => void checkUpdates()}
               onInstallUpdateNow={() => void installUpdateNow()}
               onDeferInstall={() => void deferInstall()}

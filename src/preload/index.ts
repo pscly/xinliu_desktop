@@ -7,6 +7,8 @@ import type {
   ContextMenuDidSelectPayload,
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
+  DiagnosticsSetFlowBaseUrlPayload,
+  DiagnosticsSetMemosBaseUrlPayload,
   DiagnosticsStatus,
   FlowConflictListResult,
   FlowConflictResolvePayload,
@@ -128,6 +130,16 @@ contextBridge.exposeInMainWorld('xinliu', {
   diagnostics: {
     getStatus: () =>
       invokeIpc<DiagnosticsStatus>(IPC_CHANNELS.diagnostics.getStatus, EMPTY_PAYLOAD),
+    setFlowBaseUrl: (payload: DiagnosticsSetFlowBaseUrlPayload) =>
+      invokeIpc<IpcVoid>(
+        IPC_CHANNELS.diagnostics.setFlowBaseUrl,
+        payload satisfies DiagnosticsSetFlowBaseUrlPayload
+      ),
+    setMemosBaseUrl: (payload: DiagnosticsSetMemosBaseUrlPayload) =>
+      invokeIpc<IpcVoid>(
+        IPC_CHANNELS.diagnostics.setMemosBaseUrl,
+        payload satisfies DiagnosticsSetMemosBaseUrlPayload
+      ),
   },
   contextMenu: {
     popupMiddleItem: (itemId: string) =>

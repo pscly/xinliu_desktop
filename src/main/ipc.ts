@@ -7,6 +7,8 @@ import type {
   CloseBehaviorStatus,
   ContextMenuPopupFolderPayload,
   ContextMenuPopupMiddleItemPayload,
+  DiagnosticsSetFlowBaseUrlPayload,
+  DiagnosticsSetMemosBaseUrlPayload,
   DiagnosticsStatus,
   EmptyPayload,
   FileAccessReadTextFilePayload,
@@ -100,6 +102,8 @@ export interface RegisterIpcHandlersDeps {
   };
   diagnostics: {
     getStatus: () => DiagnosticsStatus | Promise<DiagnosticsStatus>;
+    setFlowBaseUrl: (payload: DiagnosticsSetFlowBaseUrlPayload) => void | Promise<void>;
+    setMemosBaseUrl: (payload: DiagnosticsSetMemosBaseUrlPayload) => void | Promise<void>;
   };
   pathGate: PathGate;
   fileAccess: {
@@ -375,6 +379,21 @@ function validateCloseBehaviorSetPayload(payload: unknown): IpcResult<CloseBehav
     return err('VALIDATION_ERROR', '参数不合法');
   }
   return ok({ behavior });
+}
+
+function validateDiagnosticsSetBaseUrlPayload(
+  payload: unknown
+): IpcResult<DiagnosticsSetFlowBaseUrlPayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  const baseUrl = payload['baseUrl'];
+  if (typeof baseUrl !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+
+  return ok({ baseUrl });
 }
 
 function validateShortcutsSetConfigPayload(payload: unknown): IpcResult<ShortcutsSetConfigPayload> {
@@ -1097,6 +1116,36 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, deps: RegisterIpcHandl
       rateLimiter,
       validate: validateEmptyPayload,
       run: async () => deps.diagnostics.getStatus(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.diagnostics.setFlowBaseUrl,
+    makeHandlerWithErrorMessage<IpcVoid>({
+      channel: IPC_CHANNELS.diagnostics.setFlowBaseUrl,
+      deps,
+      rateLimiter,
+      validate: validateDiagnosticsSetBaseUrlPayload,
+      run: async (validatedPayload) => {
+        await deps.diagnostics.setFlowBaseUrl(validatedPayload as DiagnosticsSetFlowBaseUrlPayload);
+        return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.diagnostics.setMemosBaseUrl,
+    makeHandlerWithErrorMessage<IpcVoid>({
+      channel: IPC_CHANNELS.diagnostics.setMemosBaseUrl,
+      deps,
+      rateLimiter,
+      validate: validateDiagnosticsSetBaseUrlPayload,
+      run: async (validatedPayload) => {
+        await deps.diagnostics.setMemosBaseUrl(
+          validatedPayload as DiagnosticsSetMemosBaseUrlPayload
+        );
+        return null;
+      },
     })
   );
 
