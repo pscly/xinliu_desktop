@@ -393,3 +393,5 @@
 - 当 `main.ts` 中调度编排逻辑变长时，抽离 `syncController` 比继续堆在 `app.whenReady()` 内更稳：托盘入口、IPC 入口、后台循环都复用同一控制器接口，避免多处逻辑漂移。
 - Flow/Memos 分离的落地关键不是“两个按钮”，而是“两个独立 runOnce”：Flow lane 只关心 `runFlowSyncPush/runFlowSyncPull` 结果，Memos lane 只关心 `runMemosSyncOneMemoJob` 执行结果，失败计数和错误文案不能共享状态。
 - sync 控制器单测适合注入简化 scheduler（内联 fake），只断言 lane 调用边界与引擎调用次数，不绑定真实定时器；这样可以稳定覆盖“互不串扰”与“缺配置可解释失败”这两类关键约束。
+
+- [2026-03-02] Task 48 commit: d9525908540b199a0af8ad7ef2f3574a083a078e feat(sync): 解耦 Flow/Memos 调度并打通手动同步入口
