@@ -339,3 +339,12 @@
   - `inbox`：在既有 `sync_status IN (LOCAL_ONLY, DIRTY, SYNCING, FAILED)` 基础上追加 `memos.deleted_at_ms IS NULL`；flow_notes 仍要求 `deleted_at IS NULL`
   - `trash`：合并 `memos.deleted_at_ms IS NOT NULL` 与 `notes.deleted_at IS NOT NULL`
 - memos 动作语义固定：`deleteItem` 软删（更新 `deleted_at_ms/updated_at_ms`）、`restoreItem` 清除软删标记并刷新 `updated_at_ms`、`hardDeleteItem` 物理删除。这样 renderer 无需区分 provider 即可走统一删除流。
+
+## [2026-03-01 21:19] - Task 45 E2E 修复（ESM + Electron 启动一致性）
+
+- Playwright E2E 在 ESM 模式下，`e2e/*.spec.ts` 里不要再用 `createRequire/require` 与 `__dirname`；推荐直接使用 `process.cwd()` 作为仓库根路径，避免因模块系统差异触发 `require is not defined`。
+- Electron 启动路径建议显式 `import electronPath from 'electron'` 并传给 `_electron.launch({ executablePath })`，确保测试进程和项目依赖使用同一 Electron 可执行文件，减少 ABI/运行时漂移风险。
+- 在 Linux 无头环境里，`xvfb-run -a npm run test:e2e -- e2e/task-45-hover.spec.ts` 是稳定截图与交互的前提；截图落盘要保留在 `finally`，失败也能留证据。
+- 对涉及 native addon（better-sqlite3）的 E2E，建议提供 `XINLIU_E2E=1` 的最小可复现数据兜底路径，避免环境差异导致“功能逻辑正确但测试因模块加载失败而误红”。
+
+- [2026-03-01] Task 45 勘误后实现经验：E2E 的稳定性应通过“SQLite seed + 与生产一致的数据读取链路”达成，而不是在 IPC 层注入静态常量列表。这样可避免测试通过但真实链路未覆盖的假阳性。

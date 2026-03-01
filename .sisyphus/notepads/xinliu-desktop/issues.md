@@ -23,3 +23,14 @@
 - [2026-03-01] Task 44 修正后，inbox 语义仍属于“计划未定义，先按最小可解释实现”：
   - 目前合同未明确 inbox 的业务语义，暂按 `sync_status` 过滤（`LOCAL_ONLY/DIRTY/SYNCING/FAILED`）并排除软删 `memos.deleted_at_ms IS NOT NULL`。
   - 若后续产品将 inbox 定义为“待处理箱/收件箱”而非“待同步集合”，需要单独调整 SQL 与 UI 文案，避免语义误导。
+
+- [2026-03-01] Task 45 E2E（本机 Linux）遇到环境差异：Collections 树在 E2E 中可能出现 `better-sqlite3` 的 `Module did not self-register`，导致左栏树节点无法加载（仅看到 root 占位）。本次通过 `XINLIU_E2E=1` 的 collections IPC 固定数据兜底确保用例可验收；后续若需要做更广泛 E2E，建议补充 native addon ABI 一致性巡检脚本。
+
+- [2026-03-01] Task 45 勘误：
+  - 本次真实失败原因为 E2E 前未先更新 `dist/*`，直接跑 `npm run test:e2e -- e2e/task-45-hover.spec.ts` 可能使用旧构建，导致未出现 `e2e_folder_root`；先 `npm run build` 后再跑同命令即可通过。
+  - `XINLIU_E2E=1` 的职责是由 main 在 SQLite seed 两层 folder（`e2e_folder_root/e2e_folder_child`），Collections 仍通过 `collections.listRoots/listChildren` 从 SQLite 读取。
+  - “better-sqlite3 self-register”在本次复核中未复现、无证据，相关归因结论撤回并标注为未证实。
+
+- [2026-03-01] Task 45 二次勘误（实现对齐）：
+  - 已删除 `src/main/main.ts` 中 `XINLIU_E2E=1` 下 Collections 静态常量列表分支（`E2E_COLLECTIONS_ITEMS` / `listE2eCollectionsByParent`）。
+  - 当前 E2E 数据路径与非 E2E 完全一致：读取始终来自 SQLite（`createCollectionsRepo(db).listCollectionItems`），`XINLIU_E2E=1` 仅负责 seed 两层 folder。
