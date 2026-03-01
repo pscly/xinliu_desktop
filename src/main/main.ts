@@ -48,6 +48,13 @@ import { createPathGate } from './pathGate/pathGate';
 import { createUpdaterController } from './updater/updaterController';
 import { createElectronUpdaterAdapter } from './updater/electronUpdaterAdapter';
 import { createNotesDraftRepo } from './notes/notesDraftRepo';
+import { createNotesConflictsService } from './notes/notesConflicts';
+import {
+  listFlowConflicts,
+  resolveFlowConflictApplyServer,
+  resolveFlowConflictForceOverride,
+  resolveFlowConflictKeepLocalCopy,
+} from './flow/flowConflicts';
 import {
   readCloseBehaviorStatus,
   writeCloseBehavior,
@@ -533,6 +540,49 @@ app.whenReady().then(async () => {
       hardDelete: () => {
         throw new Error('Notes.hardDelete 未实现');
       },
+    },
+    conflicts: {
+      listFlow: () =>
+        withMainDb((db) => {
+          return { items: listFlowConflicts(db) };
+        }),
+      listNotes: () =>
+        withMainDb((db) => {
+          return createNotesConflictsService(db).listNotesConflicts();
+        }),
+      resolveFlowApplyServer: ({ outboxId }) =>
+        withMainDb((db) => {
+          const res = resolveFlowConflictApplyServer(db, { outboxId });
+          return {
+            outboxId: res.outboxId,
+            resolved: true,
+            strategy: 'apply_server',
+            bumpedClientUpdatedAtMs: null,
+            copiedEntityId: null,
+          };
+        }),
+      resolveFlowKeepLocalCopy: ({ outboxId }) =>
+        withMainDb((db) => {
+          const res = resolveFlowConflictKeepLocalCopy(db, { outboxId });
+          return {
+            outboxId: res.outboxId,
+            resolved: true,
+            strategy: 'keep_local_copy',
+            bumpedClientUpdatedAtMs: null,
+            copiedEntityId: res.newEntityId,
+          };
+        }),
+      resolveFlowForceOverwrite: ({ outboxId }) =>
+        withMainDb((db) => {
+          const res = resolveFlowConflictForceOverride(db, { outboxId });
+          return {
+            outboxId: res.outboxId,
+            resolved: true,
+            strategy: 'force_overwrite',
+            bumpedClientUpdatedAtMs: res.nextClientUpdatedAtMs,
+            copiedEntityId: null,
+          };
+        }),
     },
     pathGate,
     fileAccess: {

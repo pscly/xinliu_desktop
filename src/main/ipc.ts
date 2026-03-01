@@ -17,10 +17,14 @@ import type {
   FileAccessShowSaveDialogResult,
   FileAccessWriteTextFilePayload,
   FileDialogFilter,
+  FlowConflictListResult,
+  FlowConflictResolvePayload,
+  FlowConflictResolveResult,
   IpcChannel,
   IpcErrorCode,
   IpcResult,
   IpcVoid,
+  NotesConflictListResult,
   NotesCreateDraftPayload,
   NotesCreateDraftResult,
   NotesDeleteResult,
@@ -125,6 +129,19 @@ export interface RegisterIpcHandlersDeps {
     delete: (payload: NotesIdPayload) => NotesDeleteResult | Promise<NotesDeleteResult>;
     restore: (payload: NotesIdPayload) => NotesRestoreResult | Promise<NotesRestoreResult>;
     hardDelete: (payload: NotesIdPayload) => NotesHardDeleteResult | Promise<NotesHardDeleteResult>;
+  };
+  conflicts: {
+    listFlow: () => FlowConflictListResult | Promise<FlowConflictListResult>;
+    listNotes: () => NotesConflictListResult | Promise<NotesConflictListResult>;
+    resolveFlowApplyServer: (
+      payload: FlowConflictResolvePayload
+    ) => FlowConflictResolveResult | Promise<FlowConflictResolveResult>;
+    resolveFlowKeepLocalCopy: (
+      payload: FlowConflictResolvePayload
+    ) => FlowConflictResolveResult | Promise<FlowConflictResolveResult>;
+    resolveFlowForceOverwrite: (
+      payload: FlowConflictResolvePayload
+    ) => FlowConflictResolveResult | Promise<FlowConflictResolveResult>;
   };
   contextMenu: {
     popupMiddleItem: (options: { win: BrowserWindowLike; itemId: string }) => void | Promise<void>;
@@ -572,6 +589,23 @@ function validateNotesGetDraftPayload(payload: unknown): IpcResult<NotesGetDraft
   }
 
   return ok({ localUuid: localUuidTrimmed });
+}
+
+function validateFlowConflictResolvePayload(
+  payload: unknown
+): IpcResult<FlowConflictResolvePayload> {
+  if (!isPlainObject(payload)) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const outboxId = payload['outboxId'];
+  if (typeof outboxId !== 'string') {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  const trimmed = outboxId.trim();
+  if (trimmed.length === 0) {
+    return err('VALIDATION_ERROR', '参数不合法');
+  }
+  return ok({ outboxId: trimmed });
 }
 
 function createRateLimiter(options: { windowMs: number; max: number; now: () => number }) {
@@ -1180,6 +1214,64 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, deps: RegisterIpcHandl
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.conflicts.listFlow,
+    makeHandlerWithErrorMessage<FlowConflictListResult>({
+      channel: IPC_CHANNELS.conflicts.listFlow,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => deps.conflicts.listFlow(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.conflicts.listNotes,
+    makeHandlerWithErrorMessage<NotesConflictListResult>({
+      channel: IPC_CHANNELS.conflicts.listNotes,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => deps.conflicts.listNotes(),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.conflicts.resolveFlowApplyServer,
+    makeHandlerWithErrorMessage<FlowConflictResolveResult>({
+      channel: IPC_CHANNELS.conflicts.resolveFlowApplyServer,
+      deps,
+      rateLimiter,
+      validate: validateFlowConflictResolvePayload,
+      run: async (validatedPayload) =>
+        deps.conflicts.resolveFlowApplyServer(validatedPayload as FlowConflictResolvePayload),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.conflicts.resolveFlowKeepLocalCopy,
+    makeHandlerWithErrorMessage<FlowConflictResolveResult>({
+      channel: IPC_CHANNELS.conflicts.resolveFlowKeepLocalCopy,
+      deps,
+      rateLimiter,
+      validate: validateFlowConflictResolvePayload,
+      run: async (validatedPayload) =>
+        deps.conflicts.resolveFlowKeepLocalCopy(validatedPayload as FlowConflictResolvePayload),
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.conflicts.resolveFlowForceOverwrite,
+    makeHandlerWithErrorMessage<FlowConflictResolveResult>({
+      channel: IPC_CHANNELS.conflicts.resolveFlowForceOverwrite,
+      deps,
+      rateLimiter,
+      validate: validateFlowConflictResolvePayload,
+      run: async (validatedPayload) =>
+        deps.conflicts.resolveFlowForceOverwrite(validatedPayload as FlowConflictResolvePayload),
+    })
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.contextMenu.popupMiddleItem,
     makeWindowHandlerWithPayload<IpcVoid>({
       channel: IPC_CHANNELS.contextMenu.popupMiddleItem,
@@ -1431,4 +1523,5 @@ export const __test__ = {
   validateNotesCreateDraftPayload,
   validateNotesUpsertDraftPayload,
   validateNotesGetDraftPayload,
+  validateFlowConflictResolvePayload,
 };

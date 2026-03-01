@@ -360,6 +360,10 @@ describe('<App />', () => {
     expect(screen.getByTestId('conflicts-flow-force-overwrite-obx_render_1')).toBeTruthy();
 
     expect(screen.getByTestId('conflicts-notes-item-memo_copy_1')).toBeTruthy();
+    const compareEntry = screen.getByTestId('conflict-compare') as HTMLButtonElement;
+    expect(compareEntry.disabled).toBe(false);
+    fireEvent.click(compareEntry);
+    expect(await screen.findByTestId('conflicts-notes-compare-panel-memo_copy_1')).toBeTruthy();
     expect(screen.getByTestId('conflicts-notes-compare-memo_copy_1')).toBeTruthy();
     expect(screen.getByTestId('conflicts-notes-copy-memo_copy_1')).toBeTruthy();
 
@@ -417,6 +421,9 @@ describe('<App />', () => {
 
     render(<App />);
     fireEvent.click(screen.getByTestId('nav-conflicts'));
+
+    const compareEntry = await screen.findByTestId('conflict-compare');
+    expect((compareEntry as HTMLButtonElement).disabled).toBe(true);
 
     const applyBtn = await screen.findByTestId('conflicts-flow-apply-server-obx_apply_1');
     fireEvent.click(applyBtn);

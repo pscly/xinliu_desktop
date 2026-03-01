@@ -1467,6 +1467,7 @@ function ConflictsCenter(props: {
       return String(ms);
     }
   };
+  const firstNotesConflictLocalUuid = props.notesItems[0]?.localUuid ?? null;
 
   return (
     <div className="contentPlaceholder" data-testid="conflicts-center">
@@ -1611,7 +1612,31 @@ function ConflictsCenter(props: {
         </div>
 
         <div className="contentCard" data-testid="conflicts-notes-list">
-          <div className="contentCardTitle">Notes 冲突副本（copy vs original）</div>
+          <div
+            className="contentCardTitle"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+            }}
+          >
+            <span>Notes 冲突副本（copy vs original）</span>
+            <button
+              type="button"
+              className="btnSmall"
+              data-testid="conflict-compare"
+              disabled={!firstNotesConflictLocalUuid}
+              onClick={() => {
+                if (!firstNotesConflictLocalUuid) {
+                  return;
+                }
+                props.onToggleNotesCompare(firstNotesConflictLocalUuid);
+              }}
+            >
+              对比首条
+            </button>
+          </div>
           <div className="contentCardBody">
             {props.notesItems.length === 0 ? (
               <div className="fine">暂无 Notes 冲突副本。</div>

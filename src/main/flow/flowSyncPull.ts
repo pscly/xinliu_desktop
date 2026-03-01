@@ -73,20 +73,22 @@ function parsePersistedCursor(valueJson: string): number {
         return Math.floor(c);
       }
     }
-  } catch {
-  }
+  } catch {}
   return 0;
 }
 
 function readCursorFromSyncState(db: Database.Database, key: string): number {
-  const row = db
-    .prepare('SELECT value_json AS v FROM sync_state WHERE key = ?')
-    .get(key) as { v: string } | undefined;
+  const row = db.prepare('SELECT value_json AS v FROM sync_state WHERE key = ?').get(key) as
+    | { v: string }
+    | undefined;
   if (!row) return 0;
   return parsePersistedCursor(String(row.v ?? ''));
 }
 
-function writeCursorToSyncState(db: Database.Database, args: { key: string; cursor: number; nowMs: number }): void {
+function writeCursorToSyncState(
+  db: Database.Database,
+  args: { key: string; cursor: number; nowMs: number }
+): void {
   const cursor = args.cursor;
   if (!Number.isInteger(cursor) || cursor < 0) {
     throw new Error('cursor 必须是非负整数');
@@ -509,6 +511,39 @@ function applyUserSettings(db: Database.Database, rows: unknown[]): void {
   }
 }
 
+export type FlowApplyResource =
+  | 'user_setting'
+  | 'todo_list'
+  | 'todo_item'
+  | 'todo_occurrence'
+  | 'collection_item';
+
+export function applyFlowSnapshotForResource(
+  db: Database.Database,
+  args: {
+    resource: FlowApplyResource;
+    snapshot: unknown;
+  }
+): void {
+  if (args.resource === 'user_setting') {
+    applyUserSettings(db, [args.snapshot]);
+    return;
+  }
+  if (args.resource === 'todo_list') {
+    applyTodoLists(db, [args.snapshot]);
+    return;
+  }
+  if (args.resource === 'todo_item') {
+    applyTodoItems(db, [args.snapshot]);
+    return;
+  }
+  if (args.resource === 'todo_occurrence') {
+    applyTodoOccurrences(db, [args.snapshot]);
+    return;
+  }
+  applyCollectionItems(db, [args.snapshot]);
+}
+
 function applyChanges(db: Database.Database, changes: unknown): void {
   const obj = requireRowObject(changes, 'changes');
   const entries = Object.entries(obj);
@@ -538,7 +573,10 @@ function applyChanges(db: Database.Database, changes: unknown): void {
   }
 }
 
-function getHttpErrorCode(res: HttpResult<unknown>): { status: number | null; errorCode: string | null } {
+function getHttpErrorCode(res: HttpResult<unknown>): {
+  status: number | null;
+  errorCode: string | null;
+} {
   if (res.ok) return { status: null, errorCode: null };
   const status = typeof res.error.status === 'number' ? res.error.status : null;
   const errorCode =
@@ -553,7 +591,9 @@ function isUnauthorized(res: HttpResult<unknown>): boolean {
   return status === 401 || errorCode === 'unauthorized';
 }
 
-export async function runFlowSyncPull(options: FlowSyncPullEngineOptions): Promise<FlowSyncPullOutcome> {
+export async function runFlowSyncPull(
+  options: FlowSyncPullEngineOptions
+): Promise<FlowSyncPullOutcome> {
   const limit = options.limit ?? DEFAULT_LIMIT;
   const syncStateKey = options.syncStateKey ?? DEFAULT_SYNC_STATE_KEY;
 

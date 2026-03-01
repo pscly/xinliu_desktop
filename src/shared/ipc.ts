@@ -45,6 +45,13 @@ export const IPC_CHANNELS = {
     restore: `${IPC_NAMESPACE}:notes:restore`,
     hardDelete: `${IPC_NAMESPACE}:notes:hardDelete`,
   },
+  conflicts: {
+    listFlow: `${IPC_NAMESPACE}:conflicts:listFlow`,
+    listNotes: `${IPC_NAMESPACE}:conflicts:listNotes`,
+    resolveFlowApplyServer: `${IPC_NAMESPACE}:conflicts:resolveFlowApplyServer`,
+    resolveFlowKeepLocalCopy: `${IPC_NAMESPACE}:conflicts:resolveFlowKeepLocalCopy`,
+    resolveFlowForceOverwrite: `${IPC_NAMESPACE}:conflicts:resolveFlowForceOverwrite`,
+  },
   search: {
     query: `${IPC_NAMESPACE}:search:query`,
     rebuildIndex: `${IPC_NAMESPACE}:search:rebuildIndex`,
@@ -97,6 +104,9 @@ export type IpcChannelContextMenu =
 
 export type IpcChannelNotes = (typeof IPC_CHANNELS.notes)[keyof typeof IPC_CHANNELS.notes];
 
+export type IpcChannelConflicts =
+  (typeof IPC_CHANNELS.conflicts)[keyof typeof IPC_CHANNELS.conflicts];
+
 export type IpcChannelSearch = (typeof IPC_CHANNELS.search)[keyof typeof IPC_CHANNELS.search];
 
 export type IpcChannelFileAccess =
@@ -113,6 +123,7 @@ export type IpcChannel =
   | IpcChannelDiagnostics
   | IpcChannelContextMenu
   | IpcChannelNotes
+  | IpcChannelConflicts
   | IpcChannelSearch
   | IpcChannelFileAccess
   | IpcChannelUpdater;
@@ -431,6 +442,59 @@ export interface NotesListItem {
 export interface NotesListItemsResult {
   items: NotesListItem[];
   hasMore: boolean;
+}
+
+export type FlowConflictResource =
+  | 'note'
+  | 'user_setting'
+  | 'todo_list'
+  | 'todo_item'
+  | 'todo_occurrence'
+  | 'collection_item';
+
+export type FlowConflictOp = 'upsert' | 'delete';
+
+export interface FlowConflictItem {
+  outboxId: string;
+  resource: FlowConflictResource;
+  op: FlowConflictOp;
+  entityId: string;
+  clientUpdatedAtMs: number;
+  updatedAtMs: number;
+  requestId: string | null;
+  localData: Record<string, unknown>;
+  serverSnapshot: Record<string, unknown> | null;
+}
+
+export interface FlowConflictListResult {
+  items: FlowConflictItem[];
+}
+
+export interface NotesConflictItem {
+  localUuid: string;
+  originalLocalUuid: string;
+  conflictRequestId: string | null;
+  updatedAtMs: number;
+  copyContent: string;
+  originalContent: string | null;
+}
+
+export interface NotesConflictListResult {
+  items: NotesConflictItem[];
+}
+
+export interface FlowConflictResolvePayload {
+  outboxId: string;
+}
+
+export type FlowConflictResolveStrategy = 'apply_server' | 'keep_local_copy' | 'force_overwrite';
+
+export interface FlowConflictResolveResult {
+  outboxId: string;
+  resolved: boolean;
+  strategy: FlowConflictResolveStrategy;
+  bumpedClientUpdatedAtMs: number | null;
+  copiedEntityId: string | null;
 }
 
 export type NotesDeleteResult = IpcVoid;
