@@ -49,6 +49,8 @@ import type {
   TodoListItemsPayload,
   TodoListItemsResult,
   TodoToggleCompleteResult,
+  SyncNowResult,
+  SyncStatus,
   UpdaterStatus,
 } from '../shared/ipc';
 
@@ -165,6 +167,11 @@ declare global {
         installNow: () => Promise<IpcResult<IpcVoid>>;
         deferInstall: () => Promise<IpcResult<IpcVoid>>;
         onStatusChanged: (listener: (status: UpdaterStatus) => void) => () => void;
+      };
+      sync?: {
+        getStatus: () => Promise<IpcResult<SyncStatus>>;
+        syncNowFlow: () => Promise<IpcResult<SyncNowResult>>;
+        syncNowMemos: () => Promise<IpcResult<SyncNowResult>>;
       };
     };
   }

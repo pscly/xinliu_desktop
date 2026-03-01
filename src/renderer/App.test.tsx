@@ -19,6 +19,8 @@ import type {
   SearchRebuildIndexResult,
   ShortcutsStatus,
   StorageRootChooseAndMigrateResult,
+  SyncNowResult,
+  SyncStatus,
   UpdaterStatus,
 } from '../shared/ipc';
 
@@ -40,6 +42,8 @@ function buildXinliuStub(overrides: {
   deleteItem?: XinliuNotesApi['delete'];
   restoreItem?: XinliuNotesApi['restore'];
   hardDeleteItem?: XinliuNotesApi['hardDelete'];
+  syncNowFlow?: NonNullable<NonNullable<Window['xinliu']>['sync']>['syncNowFlow'];
+  syncNowMemos?: NonNullable<NonNullable<Window['xinliu']>['sync']>['syncNowMemos'];
   listFlowConflicts?: NonNullable<NonNullable<Window['xinliu']>['conflicts']>['listFlow'];
   listNotesConflicts?: NonNullable<NonNullable<Window['xinliu']>['conflicts']>['listNotes'];
   resolveFlowApplyServer?: NonNullable<
@@ -273,6 +277,67 @@ function buildXinliuStub(overrides: {
       deferInstall: async () => ({ ok: true, value: null }) satisfies IpcResult<IpcVoid>,
       onStatusChanged: () => () => {},
     },
+    sync: {
+      getStatus: async () =>
+        ({
+          ok: true,
+          value: {
+            updatedAtMs: Date.now(),
+            flow: {
+              running: false,
+              lastRunAtMs: null,
+              nextRunAtMs: null,
+              consecutiveFailures: 0,
+              lastErrorMessage: null,
+            },
+            memos: {
+              running: false,
+              lastRunAtMs: null,
+              nextRunAtMs: null,
+              consecutiveFailures: 0,
+              lastErrorMessage: null,
+            },
+          },
+        }) satisfies IpcResult<SyncStatus>,
+      syncNowFlow:
+        overrides.syncNowFlow ??
+        (async () =>
+          ({
+            ok: true,
+            value: {
+              lane: 'flow' as const,
+              accepted: true,
+              runOk: true,
+              message: null,
+              status: {
+                running: false,
+                lastRunAtMs: null,
+                nextRunAtMs: null,
+                consecutiveFailures: 0,
+                lastErrorMessage: null,
+              },
+            },
+          }) satisfies IpcResult<SyncNowResult>),
+      syncNowMemos:
+        overrides.syncNowMemos ??
+        (async () =>
+          ({
+            ok: true,
+            value: {
+              lane: 'memos' as const,
+              accepted: true,
+              runOk: true,
+              message: null,
+              status: {
+                running: false,
+                lastRunAtMs: null,
+                nextRunAtMs: null,
+                consecutiveFailures: 0,
+                lastErrorMessage: null,
+              },
+            },
+          }) satisfies IpcResult<SyncNowResult>),
+    },
   };
 }
 
@@ -308,6 +373,8 @@ describe('<App />', () => {
     expect(screen.getByTestId('close-to-tray-hint-reset')).toBeTruthy();
     expect(screen.getByTestId('settings-updater')).toBeTruthy();
     expect(screen.getByTestId('check-updates')).toBeTruthy();
+    expect(screen.getByTestId('sync-now-flow')).toBeTruthy();
+    expect(screen.getByTestId('sync-now-memos')).toBeTruthy();
     expect(screen.getByTestId('settings-shortcuts')).toBeTruthy();
     expect(screen.getByTestId('settings-backend')).toBeTruthy();
     expect(screen.getByTestId('diagnostics-copy-flow-request-id')).toBeTruthy();
@@ -973,6 +1040,67 @@ describe('<App />', () => {
     expect(await screen.findByTestId('update-downloaded')).toBeTruthy();
     expect(screen.getByTestId('update-install-now')).toBeTruthy();
     expect(screen.getByTestId('update-defer')).toBeTruthy();
+
+    delete window.xinliu;
+  });
+
+  it('设置页：立即同步按钮会调用对应 sync API', async () => {
+    const syncNowFlow = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: {
+            lane: 'flow' as const,
+            accepted: true,
+            runOk: true,
+            message: null,
+            status: {
+              running: false,
+              lastRunAtMs: null,
+              nextRunAtMs: null,
+              consecutiveFailures: 0,
+              lastErrorMessage: null,
+            },
+          },
+        }) satisfies IpcResult<SyncNowResult>
+    );
+    const syncNowMemos = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          value: {
+            lane: 'memos' as const,
+            accepted: true,
+            runOk: true,
+            message: null,
+            status: {
+              running: false,
+              lastRunAtMs: null,
+              nextRunAtMs: null,
+              consecutiveFailures: 0,
+              lastErrorMessage: null,
+            },
+          },
+        }) satisfies IpcResult<SyncNowResult>
+    );
+
+    window.xinliu = buildXinliuStub({ syncNowFlow, syncNowMemos });
+    render(<App />);
+    fireEvent.click(screen.getByTestId('nav-settings'));
+
+    const flowBtn = (await screen.findByTestId('sync-now-flow')) as HTMLButtonElement;
+    expect(flowBtn.disabled).toBe(false);
+    fireEvent.click(flowBtn);
+    await waitFor(() => {
+      expect(syncNowFlow).toHaveBeenCalledTimes(1);
+    });
+
+    const memosBtn = screen.getByTestId('sync-now-memos') as HTMLButtonElement;
+    expect(memosBtn.disabled).toBe(false);
+    fireEvent.click(memosBtn);
+    await waitFor(() => {
+      expect(syncNowMemos).toHaveBeenCalledTimes(1);
+    });
 
     delete window.xinliu;
   });

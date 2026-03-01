@@ -157,6 +157,7 @@ describe('src/main/ipc', () => {
       ...Object.values(IPC_CHANNELS.conflicts),
       ...Object.values(IPC_CHANNELS.search),
       ...Object.values(IPC_CHANNELS.fileAccess),
+      ...Object.values(IPC_CHANNELS.sync),
       ...Object.values(IPC_CHANNELS.updater),
     ].sort();
     expect(registered).toEqual(expected);

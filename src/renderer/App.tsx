@@ -74,6 +74,7 @@ type XinliuCollectionsApi = NonNullable<Window['xinliu']>['collections'];
 type XinliuSearchApi = NonNullable<Window['xinliu']>['search'];
 type XinliuFileAccessApi = NonNullable<Window['xinliu']>['fileAccess'];
 type XinliuUpdaterApi = NonNullable<Window['xinliu']>['updater'];
+type XinliuSyncApi = NonNullable<Window['xinliu']>['sync'];
 type XinliuNotesApi = NonNullable<Window['xinliu']>['notes'];
 type XinliuConflictsApi = NonNullable<Window['xinliu']>['conflicts'];
 type XinliuTodoApi = NonNullable<Window['xinliu']>['todo'];
@@ -116,6 +117,10 @@ function getXinliuFileAccessApi(): XinliuFileAccessApi | undefined {
 
 function getXinliuUpdaterApi(): XinliuUpdaterApi | undefined {
   return window.xinliu?.updater;
+}
+
+function getXinliuSyncApi(): XinliuSyncApi | undefined {
+  return window.xinliu?.sync;
 }
 
 function getXinliuNotesApi(): XinliuNotesApi | undefined {
@@ -508,6 +513,9 @@ function SettingsContent(props: {
   updaterStatus: UpdaterStatus | null;
   updaterError: string | null;
   updaterApiAvailable: boolean;
+  syncApiAvailable: boolean;
+  syncError: string | null;
+  syncBusyLane: 'flow' | 'memos' | null;
   storageRootRestartRequired: boolean;
   storageRootLastMigration: (StorageRootChooseAndMigrateResult & { kind: 'migrated' }) | null;
   onUpdateDraft: (
@@ -523,6 +531,8 @@ function SettingsContent(props: {
   onResetCloseToTrayHint: () => void;
   onSaveFlowBaseUrl: (baseUrl: string) => Promise<void>;
   onSaveMemosBaseUrl: (baseUrl: string) => Promise<void>;
+  onSyncNowFlow: () => void;
+  onSyncNowMemos: () => void;
   onCheckUpdates: () => void;
   onInstallUpdateNow: () => void;
   onDeferInstall: () => void;
@@ -558,6 +568,13 @@ function SettingsContent(props: {
           onCheckUpdates={props.onCheckUpdates}
           onInstallUpdateNow={props.onInstallUpdateNow}
           onDeferInstall={props.onDeferInstall}
+        />
+        <SettingsSyncSection
+          apiAvailable={props.syncApiAvailable}
+          error={props.syncError}
+          busyLane={props.syncBusyLane}
+          onSyncNowFlow={props.onSyncNowFlow}
+          onSyncNowMemos={props.onSyncNowMemos}
         />
         <SettingsDiagnosticsSection
           status={props.diagnosticsStatus}
@@ -815,6 +832,52 @@ function SettingsUpdaterSection(props: {
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function SettingsSyncSection(props: {
+  apiAvailable: boolean;
+  error: string | null;
+  busyLane: 'flow' | 'memos' | null;
+  onSyncNowFlow: () => void;
+  onSyncNowMemos: () => void;
+}) {
+  return (
+    <section className="settingsSection" data-testid="settings-sync-now">
+      <div className="settingsSectionHeader">
+        <div>
+          <div className="settingsSectionTitle">立即同步</div>
+          <div className="settingsSectionSub">手动触发一次 Flow / Memos 同步调度</div>
+        </div>
+      </div>
+
+      <div className="btnRow">
+        <button
+          type="button"
+          className="btn"
+          data-testid="sync-now-memos"
+          disabled={!props.apiAvailable || props.busyLane !== null}
+          onClick={() => props.onSyncNowMemos()}
+        >
+          {props.busyLane === 'memos' ? '同步中…' : '立即同步（Memos）'}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          data-testid="sync-now-flow"
+          disabled={!props.apiAvailable || props.busyLane !== null}
+          onClick={() => props.onSyncNowFlow()}
+        >
+          {props.busyLane === 'flow' ? '同步中…' : '立即同步（Flow）'}
+        </button>
+      </div>
+
+      {!props.apiAvailable ? (
+        <div className="callout calloutWarn">同步 API 不可用（preload 未注入）</div>
+      ) : null}
+
+      {props.error ? <div className="callout calloutWarn">{props.error}</div> : null}
     </section>
   );
 }
@@ -2835,6 +2898,8 @@ function MainWindowApp() {
 
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus | null>(null);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncBusyLane, setSyncBusyLane] = useState<'flow' | 'memos' | null>(null);
 
   const [notesScope, setNotesScope] = useState<NotesScope>('timeline');
   const [notesItems, setNotesItems] = useState<NotesListItem[]>([]);
@@ -3958,6 +4023,39 @@ function MainWindowApp() {
     void refreshShortcuts();
   };
 
+  const triggerSyncNow = async (lane: 'flow' | 'memos') => {
+    const api = getXinliuSyncApi();
+    if (!api) {
+      setSyncError('同步 API 不可用（preload 未注入）');
+      return;
+    }
+
+    const fn = lane === 'flow' ? api.syncNowFlow : api.syncNowMemos;
+    if (typeof fn !== 'function') {
+      setSyncError('同步 API 不可用（preload 未注入）');
+      return;
+    }
+
+    setSyncBusyLane(lane);
+    setSyncError(null);
+    try {
+      const res = await fn();
+      if (!res.ok) {
+        setSyncError(`${res.error.message}（${res.error.code}）`);
+        return;
+      }
+      if (!res.value.runOk) {
+        setSyncError(res.value.message ?? '同步未执行');
+        return;
+      }
+      setSyncError(null);
+    } catch (error) {
+      setSyncError(`手动同步异常：${String(error)}`);
+    } finally {
+      setSyncBusyLane(null);
+    }
+  };
+
   const openSettingsRoute = () => {
     setRoute('settings');
     void Promise.all([
@@ -4248,6 +4346,9 @@ function MainWindowApp() {
                 updaterStatus={updaterStatus}
                 updaterError={updaterError}
                 updaterApiAvailable={Boolean(getXinliuUpdaterApi())}
+                syncApiAvailable={Boolean(getXinliuSyncApi())}
+                syncError={syncError}
+                syncBusyLane={syncBusyLane}
                 storageRootRestartRequired={storageRootRestartRequired}
                 storageRootLastMigration={storageRootLastMigration}
                 onUpdateDraft={updateDraft}
@@ -4260,6 +4361,8 @@ function MainWindowApp() {
                 onResetCloseToTrayHint={() => void resetCloseToTrayHint()}
                 onSaveFlowBaseUrl={saveFlowBaseUrl}
                 onSaveMemosBaseUrl={saveMemosBaseUrl}
+                onSyncNowFlow={() => void triggerSyncNow('flow')}
+                onSyncNowMemos={() => void triggerSyncNow('memos')}
                 onCheckUpdates={() => void checkUpdates()}
                 onInstallUpdateNow={() => void installUpdateNow()}
                 onDeferInstall={() => void deferInstall()}

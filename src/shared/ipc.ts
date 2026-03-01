@@ -78,6 +78,11 @@ export const IPC_CHANNELS = {
     readTextFile: `${IPC_NAMESPACE}:fileAccess:readTextFile`,
     writeTextFile: `${IPC_NAMESPACE}:fileAccess:writeTextFile`,
   },
+  sync: {
+    syncNowFlow: `${IPC_NAMESPACE}:sync:syncNowFlow`,
+    syncNowMemos: `${IPC_NAMESPACE}:sync:syncNowMemos`,
+    getStatus: `${IPC_NAMESPACE}:sync:getStatus`,
+  },
   updater: {
     getStatus: `${IPC_NAMESPACE}:updater:getStatus`,
     checkForUpdates: `${IPC_NAMESPACE}:updater:checkForUpdates`,
@@ -133,6 +138,8 @@ export type IpcChannelSearch = (typeof IPC_CHANNELS.search)[keyof typeof IPC_CHA
 export type IpcChannelFileAccess =
   (typeof IPC_CHANNELS.fileAccess)[keyof typeof IPC_CHANNELS.fileAccess];
 
+export type IpcChannelSync = (typeof IPC_CHANNELS.sync)[keyof typeof IPC_CHANNELS.sync];
+
 export type IpcChannelUpdater = (typeof IPC_CHANNELS.updater)[keyof typeof IPC_CHANNELS.updater];
 
 export type IpcChannel =
@@ -149,7 +156,38 @@ export type IpcChannel =
   | IpcChannelConflicts
   | IpcChannelSearch
   | IpcChannelFileAccess
+  | IpcChannelSync
   | IpcChannelUpdater;
+
+export type SyncLane = 'flow' | 'memos';
+
+export interface SyncLaneStatus {
+  running: boolean;
+  lastRunAtMs: number | null;
+  nextRunAtMs: number | null;
+  consecutiveFailures: number;
+  lastErrorMessage: string | null;
+}
+
+export interface SyncStatus {
+  updatedAtMs: number;
+  flow: SyncLaneStatus;
+  memos: SyncLaneStatus;
+}
+
+export type SyncNowFlowPayload = EmptyPayload;
+
+export type SyncNowMemosPayload = EmptyPayload;
+
+export type SyncGetStatusPayload = EmptyPayload;
+
+export interface SyncNowResult {
+  lane: SyncLane;
+  accepted: boolean;
+  runOk: boolean;
+  message: string | null;
+  status: SyncLaneStatus;
+}
 
 export type UpdaterState =
   | 'disabled'

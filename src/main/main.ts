@@ -69,6 +69,9 @@ import {
   writeFlowBaseUrlRaw,
   writeMemosBaseUrlRaw,
 } from './userSettings/backendSettings';
+import { createTokenStore } from './auth/tokenStore';
+import { getOrCreateDeviceIdentityFromConfig } from './device/deviceIdentityConfig';
+import { createSyncController } from './sync/syncController';
 
 const closeToTray = createCloseToTrayController();
 
@@ -1031,6 +1034,50 @@ app.whenReady().then(async () => {
   closeToTray.setCloseBehavior(initialCloseBehaviorStatus.behavior);
   closeToTray.setCloseToTrayHintShown(initialCloseBehaviorStatus.closeToTrayHintShown);
 
+  const tokenStore = createTokenStore({
+    service: 'cc.pscly.xinliu.desktop',
+    account: 'flow_token',
+  });
+
+  const deviceIdentity = await getOrCreateDeviceIdentityFromConfig({
+    userDataDirAbsPath,
+    fs: storageRootConfigFs,
+    hostname: os.hostname(),
+    randomUUID: () => crypto.randomUUID(),
+  });
+
+  const sleepMs = async (ms: number) => {
+    await new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, Math.floor(ms))));
+  };
+
+  const withMainDbAsync = async <T>(run: (db: Database.Database) => Promise<T>): Promise<T> => {
+    const dbFileAbsPath = resolveMainDbFileAbsPath(storageRootStatus.storageRootAbsPath);
+    const { db } = openSqliteDatabase({
+      dbFileAbsPath,
+      busyTimeoutMs: 2000,
+    });
+    try {
+      applyMigrations(db);
+      seedE2eCollectionsTreeIfNeeded(db);
+      seedE2eTodoIfNeeded(db);
+      return await run(db);
+    } finally {
+      closeSqliteDatabase(db);
+    }
+  };
+
+  const syncController = createSyncController({
+    getFlowBaseUrl: () => diagnostics.getStatus().flowBaseUrl,
+    getMemosBaseUrl: () => diagnostics.getStatus().memosBaseUrl,
+    getToken: () => tokenStore.getToken(),
+    getDeviceIdentity: () => deviceIdentity,
+    getStorageRootAbsPath: () => storageRootStatus.storageRootAbsPath,
+    withMainDbAsync,
+    sleepMs,
+  });
+
+  syncController.start();
+
   registerIpcHandlers(ipcMain, {
     getWindowForSender: (sender) => BrowserWindow.fromWebContents(sender as WebContents),
     quickCapture: {
@@ -1155,6 +1202,11 @@ app.whenReady().then(async () => {
         }
         diagnostics.setMemosBaseUrlRaw(normalized);
       },
+    },
+    sync: {
+      getStatus: () => syncController.getStatus(),
+      syncNowFlow: async () => syncController.syncNowFlow(),
+      syncNowMemos: async () => syncController.syncNowMemos(),
     },
     collections: {
       listRoots: ({ limit, offset }) =>
@@ -1514,10 +1566,15 @@ app.whenReady().then(async () => {
   const exitCleanupHooks: CleanupHook[] = [
     () => quickCaptureWindowManager.destroy(),
     () => updater.dispose(),
+    () => syncController.stop(),
   ];
 
-  const onSyncNowMemos = async () => undefined;
-  const onSyncNowFlow = async () => undefined;
+  const onSyncNowMemos = async () => {
+    await syncController.syncNowMemos();
+  };
+  const onSyncNowFlow = async () => {
+    await syncController.syncNowFlow();
+  };
 
   const trayIconPath = path.join(app.getAppPath(), 'assets', 'tray.ico');
   trayManager = installTrayManager({

@@ -55,6 +55,8 @@ import type {
   TodoListItemsPayload,
   TodoListItemsResult,
   TodoToggleCompleteResult,
+  SyncNowResult,
+  SyncStatus,
   UpdaterStatus,
   UpdaterStatusChangedPayload,
 } from '../shared/ipc';
@@ -297,5 +299,10 @@ contextBridge.exposeInMainWorld('xinliu', {
         ipcRenderer.removeListener(IPC_EVENTS.updater.statusChanged, wrapped);
       };
     },
+  },
+  sync: {
+    getStatus: () => invokeIpc<SyncStatus>(IPC_CHANNELS.sync.getStatus, EMPTY_PAYLOAD),
+    syncNowFlow: () => invokeIpc<SyncNowResult>(IPC_CHANNELS.sync.syncNowFlow, EMPTY_PAYLOAD),
+    syncNowMemos: () => invokeIpc<SyncNowResult>(IPC_CHANNELS.sync.syncNowMemos, EMPTY_PAYLOAD),
   },
 });

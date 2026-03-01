@@ -380,3 +380,16 @@
 
 - Task 47 的 testid `<id>` 必须与后端/本地数据的 todo_item_id 保持同一标识，不做 UI 层二次映射，避免 E2E 选择器与真实数据脱节。
 - 硬删二次确认在 UI 层必须走 `todo-item-hard-delete-panel-<id>` 的确认面板与 confirm/cancel 按钮，禁止 `window.confirm`，否则 Playwright 无头环境易出现不可控弹窗与用例不稳定。
+
+## [2026-03-02] - Task 48 同步调度器收尾经验（Flow/Memos 分离 + 手动触发）
+
+- 设置页“立即同步”按钮的交互测试要按状态机写：点击某一 lane 后 UI 会进入短暂 busy 态并禁用两按钮，测试必须等待第一次调用完成再触发第二次，否则会出现“第二个 spy 没被调用”的假失败。
+- sync 手动触发返回结构建议统一为 `{ lane, accepted, runOk, message, status }`，这样 renderer 只需按 `runOk` 与 `message` 处理错误展示，不需要关心 main 侧 `SyncLoopOutcome` 的内部细节。
+- IPC 契约继续保持 empty payload（`getStatus/syncNowFlow/syncNowMemos`），可减少校验分支并与 window/updater 等已有通道风格一致。
+- Task 48 验收时要同时核对“通道名 + testid + 三连命令（test/typecheck/build）”，否则容易只改通路不改用例，最终在 CI 才暴露时序问题。
+
+## [2026-03-02] - Task 48 二次收口补充（syncController 抽离）
+
+- 当 `main.ts` 中调度编排逻辑变长时，抽离 `syncController` 比继续堆在 `app.whenReady()` 内更稳：托盘入口、IPC 入口、后台循环都复用同一控制器接口，避免多处逻辑漂移。
+- Flow/Memos 分离的落地关键不是“两个按钮”，而是“两个独立 runOnce”：Flow lane 只关心 `runFlowSyncPush/runFlowSyncPull` 结果，Memos lane 只关心 `runMemosSyncOneMemoJob` 执行结果，失败计数和错误文案不能共享状态。
+- sync 控制器单测适合注入简化 scheduler（内联 fake），只断言 lane 调用边界与引擎调用次数，不绑定真实定时器；这样可以稳定覆盖“互不串扰”与“缺配置可解释失败”这两类关键约束。

@@ -1,0 +1,67 @@
+
+> xinliu-desktop@0.0.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /root/1codes/xinliu_desktop
+
+ ✓ src/main/sync/syncController.test.ts (3 tests) 9ms
+ ✓ src/main/sync/syncScheduler.test.ts (4 tests) 9ms
+ ✓ src/shared/url.test.ts (3 tests) 8ms
+ ✓ src/shared/memoNameCodec.test.ts (2 tests) 7ms
+ ✓ src/shared/number.test.ts (2 tests) 5ms
+ ✓ src/main/storageLayout.test.ts (5 tests) 9ms
+ ✓ src/shared/redaction.test.ts (3 tests) 5ms
+ ✓ src/main/ipc.test.ts (4 tests) 10ms
+ ✓ src/main/notes/notesRouter.test.ts (6 tests) 11ms
+ ✓ src/main/protocol/memoResProtocol.test.ts (6 tests) 34ms
+ ✓ src/main/storageRoot/migrateStorageRoot.test.ts (3 tests) 47ms
+ ✓ src/main/flow/flowSyncPull.test.ts (4 tests) 1009ms
+ ✓ src/main/flow/flowConflicts.test.ts (4 tests) 1007ms
+ ✓ src/main/flow/flowSyncPush.test.ts (4 tests) 1010ms
+ ✓ src/main/notes/notesListRepo.test.ts (2 tests) 543ms
+ ✓ src/main/updater/updaterController.test.ts (4 tests) 12ms
+ ✓ src/main/net/httpClient.test.ts (5 tests) 12ms
+ ✓ src/main/notes/flowNotesClient.test.ts (2 tests) 35ms
+ ✓ src/main/sync/outbox.test.ts (3 tests) 496ms
+ ✓ src/main/tray/trayManager.test.ts (5 tests) 9ms
+ ✓ src/main/notes/noAutoBackwriteGuard.test.ts (1 test) 263ms
+ ✓ src/main/security.test.ts (4 tests) 9ms
+ ✓ src/main/auth/authService.test.ts (3 tests) 9ms
+ ✓ src/main/flow/flowClient.test.ts (2 tests) 13ms
+ ✓ src/main/attachments/attachmentCache.test.ts (3 tests) 1693ms
+   ✓ src/main/attachments/attachmentCache > LRU：超限时按 last_access_at_ms 从旧到新驱逐 cache_relpath（不影响 local_relpath） 829ms
+   ✓ src/main/attachments/attachmentCache > 不阻断编辑：rm 失败时不得 throw，且继续尝试驱逐其他条目 854ms
+ ✓ src/main/shortcuts/shortcutManager.test.ts (3 tests) 10ms
+ ✓ src/main/todo/todoRepo.test.ts (3 tests) 834ms
+ ✓ src/main/db/flowNotesDegradedNotes.test.ts (3 tests) 811ms
+ ✓ src/main/pathGate/pathGate.test.ts (4 tests) 8ms
+ ✓ src/main/memos/memosClient.test.ts (2 tests) 10ms
+ ✓ src/main/search/globalSearch.test.ts (2 tests) 566ms
+   ✓ src/main/search/globalSearch > FTS：单次查询返回一页结果，并可翻页 313ms
+ ✓ src/main/notes/notesConflicts.test.ts (1 test) 263ms
+ ✓ src/main/memos/memosSyncJob.test.ts (8 tests) 1962ms
+ ✓ src/main/menu/contextMenuTemplates.test.ts (2 tests) 6ms
+ ✓ src/main/quickCapture/quickCaptureController.test.ts (3 tests) 7ms
+ ✓ src/main/auth/tokenStore.test.ts (2 tests) 8ms
+ ✓ src/main/collections/collectionsRepo.test.ts (3 tests) 745ms
+ ✓ src/main/device/deviceIdentity.test.ts (1 test) 5ms
+ ✓ src/main/notes/notesDraftRepo.test.ts (2 tests) 444ms
+ ✓ src/main/logging/fileLogs.test.ts (1 test) 9ms
+ ✓ src/main/db/metaSchema.test.ts (1 test) 226ms
+ ✓ src/main/db/flowSchema.test.ts (2 tests) 2607ms
+   ✓ src/main/db/flow schema > tombstone：4 张表都必须包含 deleted_at 列 2401ms
+ ✓ src/main/db/memosSchema.test.ts (2 tests) 2635ms
+   ✓ src/main/db/memos schema > sync_status 必须受控（插入非法值必须失败） 2414ms
+ ✓ src/main/db/sqlite.test.ts (3 tests) 2674ms
+   ✓ src/main/db/sqlite > applyMigrations: 当数据库版本高于客户端可识别版本时必须失败 2343ms
+ ✓ src/renderer/App.test.tsx (20 tests) 5242ms
+   ✓ <App /> > Notes 编辑器：输入后会 debounce 调用 autosave（避免每次按键都 IPC） 1643ms
+   ✓ <App /> > Notes 编辑器：sync 状态文案会按 getDraft 返回值更新 834ms
+   ✓ <App /> > 设置页：迁移成功后必须提示重启且可立即重启 1013ms
+
+ Test Files  45 passed (45)
+      Tests  155 passed (155)
+   Start at  01:31:39
+   Duration  6.98s (transform 2.46s, setup 0ms, collect 5.46s, tests 25.35s, environment 6.21s, prepare 4.40s)
+

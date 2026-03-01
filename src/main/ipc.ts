@@ -58,6 +58,11 @@ import type {
   TodoListItemsPayload,
   TodoListItemsResult,
   TodoToggleCompleteResult,
+  SyncGetStatusPayload,
+  SyncNowFlowPayload,
+  SyncNowMemosPayload,
+  SyncNowResult,
+  SyncStatus,
   UpdaterStatus,
 } from '../shared/ipc';
 
@@ -194,6 +199,11 @@ export interface RegisterIpcHandlersDeps {
     checkForUpdates: () => void | Promise<void>;
     installNow: () => void | Promise<void>;
     deferInstall: () => void | Promise<void>;
+  };
+  sync?: {
+    getStatus: (payload: SyncGetStatusPayload) => SyncStatus | Promise<SyncStatus>;
+    syncNowFlow: (payload: SyncNowFlowPayload) => SyncNowResult | Promise<SyncNowResult>;
+    syncNowMemos: (payload: SyncNowMemosPayload) => SyncNowResult | Promise<SyncNowResult>;
   };
   now?: () => number;
 }
@@ -1748,6 +1758,54 @@ export function registerIpcHandlers(ipcMain: IpcMainLike, deps: RegisterIpcHandl
       run: async () => {
         await deps.updater.deferInstall();
         return null;
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sync.getStatus,
+    makeHandlerWithErrorMessage<SyncStatus>({
+      channel: IPC_CHANNELS.sync.getStatus,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        if (!deps.sync) {
+          throw new Error('同步调度器未实现');
+        }
+        return deps.sync.getStatus(EMPTY_PAYLOAD);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sync.syncNowFlow,
+    makeHandlerWithErrorMessage<SyncNowResult>({
+      channel: IPC_CHANNELS.sync.syncNowFlow,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        if (!deps.sync) {
+          throw new Error('同步调度器未实现');
+        }
+        return deps.sync.syncNowFlow(EMPTY_PAYLOAD);
+      },
+    })
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sync.syncNowMemos,
+    makeHandlerWithErrorMessage<SyncNowResult>({
+      channel: IPC_CHANNELS.sync.syncNowMemos,
+      deps,
+      rateLimiter,
+      validate: validateEmptyPayload,
+      run: async () => {
+        if (!deps.sync) {
+          throw new Error('同步调度器未实现');
+        }
+        return deps.sync.syncNowMemos(EMPTY_PAYLOAD);
       },
     })
   );
