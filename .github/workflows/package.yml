@@ -27,14 +27,25 @@ jobs:
         run: npm ci
 
       - name: 预留：导入代码签名证书（可选，不提交证书/密钥）
-        if: ${{ secrets.WINDOWS_PFX_BASE64 != '' }}
         shell: pwsh
+        env:
+          WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+          WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
         run: |
           $ErrorActionPreference = 'Stop'
+
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_BASE64)) {
+            Write-Host '未配置 WINDOWS_PFX_BASE64，跳过代码签名证书导入'
+            exit 0
+          }
+
           $pfxPath = Join-Path $env:RUNNER_TEMP 'xinliu-codesign.pfx'
-          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String('${{ secrets.WINDOWS_PFX_BASE64 }}'))
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
           "CSC_LINK=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CSC_KEY_PASSWORD=${{ secrets.WINDOWS_PFX_PASSWORD }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          if (-not [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_PASSWORD)) {
+            "CSC_KEY_PASSWORD=$env:WINDOWS_PFX_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
 
       - name: 打包（NSIS installer）
         run: npm run dist:win
