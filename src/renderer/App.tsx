@@ -1457,6 +1457,8 @@ function CollectionsMiddleDraggableItem(props: {
   onPopupMiddleItemMenu: (itemId: string) => void;
   onMouseDragStart: (args: { itemId: string; clientX: number; clientY: number }) => void;
 }) {
+  const itemId = props.item.id;
+  const onMouseDragStart = props.onMouseDragStart;
   const dragId = `${MIDDLE_LIST_ITEM_TEST_ID_PREFIX}${props.item.id}`;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: dragId,
@@ -1470,15 +1472,15 @@ function CollectionsMiddleDraggableItem(props: {
   const mergedOnMouseDown = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
       if (event.button === 0) {
-        props.onMouseDragStart({
-          itemId: props.item.id,
+        onMouseDragStart({
+          itemId,
           clientX: event.clientX,
           clientY: event.clientY,
         });
       }
       listeners?.onMouseDown?.(event);
     },
-    [listeners, props.item.id, props.onMouseDragStart]
+    [itemId, listeners, onMouseDragStart]
   );
 
   const mergedListeners = useMemo(() => {
@@ -1874,6 +1876,7 @@ function NotesEditorCard() {
   const [syncStatus, setSyncStatus] = useState<NotesSyncStatus>(null);
   const [phase, setPhase] = useState<'idle' | 'dirty' | 'saving' | 'failed'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [lastSavedContent, setLastSavedContent] = useState('');
 
   const debounceMs = 800;
   const timerRef = useRef<number | null>(null);
@@ -1901,6 +1904,13 @@ function NotesEditorCard() {
       return;
     }
     setSyncStatus(next);
+  }, []);
+
+  const safeSetLastSavedContent = useCallback((next: string) => {
+    if (!mountedRef.current) {
+      return;
+    }
+    setLastSavedContent(next);
   }, []);
 
   useEffect(() => {
@@ -1970,6 +1980,7 @@ function NotesEditorCard() {
         }
 
         lastSavedContentRef.current = latest;
+        safeSetLastSavedContent(latest);
 
         const meta = await getDraft({ localUuid: uuid });
         if (meta.ok && meta.value.draft) {
@@ -1983,7 +1994,7 @@ function NotesEditorCard() {
         safeSetError(`保存异常：${String(e)}`);
       }
     },
-    [safeSetError, safeSetPhase, safeSetSyncStatus]
+    [safeSetError, safeSetLastSavedContent, safeSetPhase, safeSetSyncStatus]
   );
 
   useEffect(() => {
@@ -2003,12 +2014,9 @@ function NotesEditorCard() {
       return;
     }
 
-    if (content === lastSavedContentRef.current) {
+    if (content === lastSavedContent) {
       return;
     }
-
-    safeSetPhase('dirty');
-    safeSetError(null);
 
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
@@ -2025,7 +2033,7 @@ function NotesEditorCard() {
         timerRef.current = null;
       }
     };
-  }, [content, localUuid, saveNow, safeSetError, safeSetPhase]);
+  }, [content, lastSavedContent, localUuid, saveNow]);
 
   const onNewDraft = async () => {
     if (timerRef.current !== null) {
@@ -2055,6 +2063,7 @@ function NotesEditorCard() {
       setLocalUuid(res.value.localUuid);
       setContent(initial);
       lastSavedContentRef.current = initial;
+      safeSetLastSavedContent(initial);
       safeSetPhase('idle');
       void refreshDraftMeta(res.value.localUuid);
     } catch (e) {
@@ -2064,6 +2073,7 @@ function NotesEditorCard() {
   };
 
   const apiAvailable = Boolean(getXinliuNotesApi());
+  const isDirty = Boolean(localUuid) && content !== lastSavedContent;
 
   const statusText = (() => {
     if (!apiAvailable) {
@@ -2075,7 +2085,7 @@ function NotesEditorCard() {
     if (phase === 'saving') {
       return '正在保存到本地…';
     }
-    if (phase === 'dirty') {
+    if (isDirty) {
       return '本地修改待保存…';
     }
     if (phase === 'failed') {
@@ -2107,7 +2117,10 @@ function NotesEditorCard() {
           className="textInput"
           data-testid="notes-editor-input"
           value={content}
-          onChange={(e) => setContent(e.currentTarget.value)}
+          onChange={(e) => {
+            safeSetError(null);
+            setContent(e.currentTarget.value);
+          }}
           placeholder={localUuid ? '在此输入 Markdown…' : '点击「新建」创建草稿后开始编辑'}
           disabled={!localUuid}
           style={{ minHeight: 260, resize: 'vertical' }}

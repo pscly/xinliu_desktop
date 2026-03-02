@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 import type Database from 'better-sqlite3';
 
-import type { FlowConflictItem, FlowConflictOp, FlowConflictResource } from '../../shared/ipc';
+import type { FlowConflictItem, FlowConflictOp } from '../../shared/ipc';
 import { applyFlowSnapshotForResource, type FlowApplyResource } from './flowSyncPull';
 import {
   FLOW_OP,
